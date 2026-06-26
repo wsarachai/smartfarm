@@ -1,18 +1,13 @@
 services:
-  pytorch:
-    image: dustynv/pytorch:2.7-r36.4.0-cu128-24.04
-    container_name: jetson_pytorch
-    restart: unless-stopped
-    runtime: nvidia
+  l4t-pytorch:
+    image: dustynv/l4t-pytorch:2.2-r35.4.1
+    container_name: l4t-pytorch-container
     network_mode: host
-    ipc: host
-    volumes:
-      - /home/watcharin:/workspace
-      - /usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/tegra # <-- Map host drivers
+    runtime: nvidia
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
-      - LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra:$LD_LIBRARY_PATH # <-- Force library link path
-    stdin_open: true 
-    tty: true 
-    command: bash
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    stdin_open: true # Equivalent to -i
+    tty: true        # Equivalent to -t
+    #command: jupyter lab --ip=0.0.0.0 --port=8888 --allow-root --NotebookApp.token='' --NotebookApp.password=''
