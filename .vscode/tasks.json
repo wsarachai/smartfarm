@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run jetson-io with sudo",
+      "type": "shell",
+      "command": "sudo",
+      "args": [
+        "python",
+        "${workspaceFolder}/jetson-io.py"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "isBackground": false
+    }
+  ]
+}

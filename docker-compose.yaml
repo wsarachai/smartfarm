@@ -1,0 +1,18 @@
+services:
+  pytorch:
+    image: dustynv/pytorch:2.7-r36.4.0-cu128-24.04
+    container_name: jetson_pytorch
+    restart: unless-stopped
+    runtime: nvidia
+    network_mode: host
+    ipc: host
+    volumes:
+      - /home/watcharin:/workspace
+      - /usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/tegra # <-- Map host drivers
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra:$LD_LIBRARY_PATH # <-- Force library link path
+    stdin_open: true 
+    tty: true 
+    command: bash
