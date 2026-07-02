@@ -51,3 +51,71 @@ header {
   padding: 0.4rem 0.75rem;
   cursor: pointer;
 }
+
+.camera-section {
+  padding: 1.5rem 1.5rem 0;
+}
+
+.camera-card {
+  max-width: 480px;
+}
+
+.camera-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.camera-header h3 {
+  margin: 0;
+}
+
+.camera-frame {
+  background: #0f172a;
+  border-radius: 6px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.camera-placeholder {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.camera-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.camera-badge--live {
+  background: #14532d;
+  color: #4ade80;
+}
+
+.camera-badge--stale {
+  background: #713f12;
+  color: #fbbf24;
+}
+
+.camera-badge--offline {
+  background: #450a0a;
+  color: #f87171;
+}
+
+.camera-card .metrics-list {
+  margin-top: 0.75rem;
+}

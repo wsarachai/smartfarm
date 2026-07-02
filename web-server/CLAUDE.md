@@ -53,20 +53,27 @@ web-server/
 │   │   ├── control.js      # POST /api/v1/control
 │   │   ├── devices.js      # GET  /api/v1/devices (added so the
 │   │   │                   #   dashboard has something to poll)
-│   │   └── health.js       # GET  /api/v1/health (liveness for
-│   │                       #   Docker healthcheck)
+│   │   ├── health.js       # GET  /api/v1/health (liveness for
+│   │   │                   #   Docker healthcheck)
+│   │   └── camera.js       # ESP32-CAM: POST /frame ingest, GET
+│   │                       #   /frame.jpg, /stream (MJPEG), /status
 │   └── store/
-│       └── deviceStore.js  # in-memory Map keyed by device_id
+│       ├── deviceStore.js  # in-memory Map keyed by device_id
+│       └── frameStore.js   # in-memory single-slot latest JPEG frame
 └── client/                 # Vite + React + Redux Toolkit frontend
     ├── package.json
     ├── vite.config.js
     └── src/
         ├── app/store.js
-        └── features/devices/
-            ├── devicesApi.js     # RTK Query: getDevices (polled), sendCommand
-            ├── devicesSlice.js   # normalized dict keyed by device_id
-            ├── Dashboard.jsx     # grid of DeviceCards, polls every 5s
-            └── DeviceCard.jsx    # renders sensor readout vs actuator controls
+        ├── features/devices/
+        │   ├── devicesApi.js     # RTK Query: getDevices (polled), sendCommand
+        │   ├── devicesSlice.js   # normalized dict keyed by device_id
+        │   ├── Dashboard.jsx     # grid of DeviceCards, polls every 5s
+        │   └── DeviceCard.jsx    # renders sensor readout vs actuator controls
+        └── features/camera/
+            ├── cameraApi.js      # RTK Query: getCameraStatus (polled)
+            ├── cameraSlice.js    # camera online/stale + last-frame meta
+            └── CameraCard.jsx    # MJPEG <img> + live/stale/offline badge
 ```
 
 ## Commands
@@ -80,5 +87,6 @@ web-server/
 
 - `GET /api/v1/devices` was added beyond the original two endpoints since the dashboard needs a way to fetch current state to poll.
 - `GET /api/v1/health` returns `{ status, uptime, deviceCount, timestamp }` and backs the `docker-compose.yaml` healthcheck. The healthcheck probes it with `node -e` (via `http.get`) rather than `curl`/`wget`, keeping the `node:18-alpine` image dependency-free.
+- **ESP32-CAM camera feed** (`src/routes/camera.js` + `src/store/frameStore.js`): the camera firmware's PUSH mode POSTs raw `image/jpeg` to `POST /api/v1/camera/frame`; the server keeps only the **latest** frame in a single-slot in-memory buffer (no SD writes) and exposes `GET /frame.jpg` (snapshot), `GET /stream` (multipart/x-mixed-replace MJPEG relay — all viewers share the one buffer), and `GET /status`. Uses the built-in `express.raw()` — no new npm deps. Tunables: `CAMERA_MAX_FRAME_BYTES`, `CAMERA_STALE_MS`. On the camera side set `PUSH_ENABLED 1` and `PUSH_URL "http://<jetson-ip>:3000/api/v1/camera/frame"` in `include/secrets.h`.
 - Device state is in-memory only (a `Map` in `deviceStore.js`) — it resets on restart, by design, to avoid SD card wear on the Jetson.
 - Not yet verified end-to-end (no `node`/`npm`/network access in the sandbox this was built in) — run the commands above on the target machine before trusting it.
