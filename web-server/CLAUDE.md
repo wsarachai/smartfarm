@@ -51,8 +51,10 @@ web-server/
 │   ├── routes/
 │   │   ├── telemetry.js    # POST /api/v1/telemetry
 │   │   ├── control.js      # POST /api/v1/control
-│   │   └── devices.js      # GET  /api/v1/devices (added so the
-│   │                       #   dashboard has something to poll)
+│   │   ├── devices.js      # GET  /api/v1/devices (added so the
+│   │   │                   #   dashboard has something to poll)
+│   │   └── health.js       # GET  /api/v1/health (liveness for
+│   │                       #   Docker healthcheck)
 │   └── store/
 │       └── deviceStore.js  # in-memory Map keyed by device_id
 └── client/                 # Vite + React + Redux Toolkit frontend
@@ -77,5 +79,6 @@ web-server/
 ## Notes
 
 - `GET /api/v1/devices` was added beyond the original two endpoints since the dashboard needs a way to fetch current state to poll.
+- `GET /api/v1/health` returns `{ status, uptime, deviceCount, timestamp }` and backs the `docker-compose.yaml` healthcheck. The healthcheck probes it with `node -e` (via `http.get`) rather than `curl`/`wget`, keeping the `node:18-alpine` image dependency-free.
 - Device state is in-memory only (a `Map` in `deviceStore.js`) — it resets on restart, by design, to avoid SD card wear on the Jetson.
 - Not yet verified end-to-end (no `node`/`npm`/network access in the sandbox this was built in) — run the commands above on the target machine before trusting it.

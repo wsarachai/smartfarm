@@ -4,6 +4,7 @@ const express = require('express');
 const telemetryRouter = require('./src/routes/telemetry');
 const controlRouter = require('./src/routes/control');
 const devicesRouter = require('./src/routes/devices');
+const healthRouter = require('./src/routes/health');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,7 @@ app.use(express.json());
 app.use('/api/v1/telemetry', telemetryRouter);
 app.use('/api/v1/control', controlRouter);
 app.use('/api/v1/devices', devicesRouter);
+app.use('/api/v1/health', healthRouter);
 
 app.use(express.static(CLIENT_BUILD_DIR));
 
