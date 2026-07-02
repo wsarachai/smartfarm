@@ -4,18 +4,24 @@ services:
     image: smartfarm/web-server:latest
     container_name: smartfarm-web-server
     restart: unless-stopped
+
     ports:
       - "3000:3000"
+
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      # ESP32-CAM push ingest: reject frames larger than this (bytes) and treat
-      # the feed as "stale" if no frame arrives within CAMERA_STALE_MS.
-      - CAMERA_MAX_FRAME_BYTES=2097152
-      - CAMERA_STALE_MS=15000
+      NODE_ENV: production
+      PORT: 3000
+      CAMERA_MAX_FRAME_BYTES: 2097152
+      CAMERA_STALE_MS: 15000
+
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:3000/api/v1/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
