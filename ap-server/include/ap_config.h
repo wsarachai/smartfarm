@@ -20,11 +20,18 @@
 #define AP_MAX_CONNECTIONS 5                      // max simultaneous stations (1..10)
 
 // --- Addressing (comma-separated octets, consumed by IPAddress(...)) ---
-// Gateway is intentionally the same as the AP IP; the DHCP lease pool is
-// derived automatically starting at AP_IP + 1 (192.168.1.2 onward).
+// Gateway is intentionally the same as the AP IP.
 #define AP_IP      192, 168, 1, 1
 #define AP_GATEWAY 192, 168, 1, 1
 #define AP_NETMASK 255, 255, 255, 0
+
+// --- DHCP lease pool ---
+// Addresses 192.168.1.1 .. .99 are RESERVED for static servers (the AP itself
+// sits at .1). The DHCP server leases to clients starting at the host octet
+// below; the pool END is computed as (first host + AP_MAX_CONNECTIONS - 1), so
+// with 5 max clients the pool is 192.168.1.100 .. .104. The pool always sits on
+// the same /24 as AP_IP. (Note: the ESP DHCP server tracks at most ~8 leases.)
+#define DHCP_POOL_FIRST_HOST 100  // last octet of the first leasable address
 
 // --- HTTP status page ---
 #define HTTP_PORT           80  // browse to http://192.168.1.1/

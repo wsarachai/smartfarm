@@ -12,9 +12,11 @@ this repo, [`../esp32cam`](../esp32cam).
 ## What it does
 
 1. Brings up a WPA2 SoftAP — **AP-only**, no station/router uplink.
-2. `WiFi.softAPConfig()` pins the AP IP to `192.168.1.1/24`. The Arduino-ESP32
-   core then **auto-starts a DHCP server** on the AP interface and hands out
-   `192.168.1.2`, `.3`, … to clients as they associate.
+2. `WiFi.softAPConfig()` pins the AP IP to `192.168.1.1/24`, then the firmware
+   **reconfigures the DHCP server's address pool** (via `esp_netif_dhcps_option`)
+   to lease from **`192.168.1.100`** upward — **reserving `192.168.1.1`–`.99` for
+   static servers** (the AP itself lives at `.1`). The pool end is derived from
+   the max-client count, so with 5 clients the pool is `192.168.1.100`–`.104`.
 3. A synchronous `WebServer` serves one auto-refreshing status page at
    **http://192.168.1.1/** listing each connected station's **MAC** and
    **leased IP** (joined from the Wi-Fi driver's station list and the netif DHCP
@@ -42,7 +44,8 @@ own network** — distinct from the ESP-IDF reference (`MJU-SmartFarm-AP` @
 | Password | `password` (WPA2-PSK — **change before real use**) |
 | AP IP / gateway | `192.168.1.1` |
 | Netmask | `255.255.255.0` |
-| DHCP pool | auto, `192.168.1.2`+ |
+| Reserved (static) | `192.168.1.1`–`.99` (`DHCP_POOL_FIRST_HOST`) |
+| DHCP pool | `192.168.1.100`–`.104` (`.100` + max clients − 1) |
 | Channel | 1 |
 | Max clients | 5 |
 

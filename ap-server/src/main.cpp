@@ -4,8 +4,8 @@
 // Re-implements the AP + DHCP behavior of ../esp-idf-iot/web-server on the
 // Arduino framework:
 //   * Brings up a WPA2 SoftAP (AP-only, no station uplink).
-//   * softAPConfig() sets the static AP IP; the Arduino-ESP32 core auto-starts
-//     a DHCP server on the AP interface, handing out 192.168.1.2+ to clients.
+//   * softAPConfig() sets the static AP IP; we then reconfigure the core's DHCP
+//     server to lease from 192.168.1.100+, reserving .1-.99 for static servers.
 //   * A tiny synchronous WebServer serves one auto-refreshing status page at
 //     http://192.168.1.1/ listing every connected station's MAC and leased IP.
 //
@@ -16,16 +16,72 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-#include "esp_wifi.h"    // esp_wifi_ap_get_sta_list()
-#include "esp_netif.h"   // esp_netif_get_sta_list()
+#include "esp_wifi.h"                 // esp_wifi_ap_get_sta_list()
+#include "esp_netif.h"                // esp_netif_get_sta_list(), dhcps options
+#include "dhcpserver/dhcpserver.h"    // dhcps_lease_t (uses lwip ip4_addr_t)
+#include "lwip/ip4_addr.h"            // IP4_ADDR()
 
 #include "ap_config.h"
+
+// The DHCP pool must fit within the AP's /24, below the broadcast address.
+static_assert(DHCP_POOL_FIRST_HOST >= 2 &&
+                  DHCP_POOL_FIRST_HOST + AP_MAX_CONNECTIONS - 1 <= 254,
+              "DHCP pool (DHCP_POOL_FIRST_HOST .. +AP_MAX_CONNECTIONS-1) "
+              "must stay within .2-.254 of the AP subnet");
 
 static const IPAddress kApIp(AP_IP);
 static const IPAddress kApGateway(AP_GATEWAY);
 static const IPAddress kApNetmask(AP_NETMASK);
 
+// Derived from the AP subnet so the pool always tracks AP_IP's /24.
+static const IPAddress kDhcpPoolStart(kApIp[0], kApIp[1], kApIp[2],
+                                      DHCP_POOL_FIRST_HOST);
+static const IPAddress kDhcpPoolEnd(kApIp[0], kApIp[1], kApIp[2],
+                                    DHCP_POOL_FIRST_HOST + AP_MAX_CONNECTIONS - 1);
+// Reserved static band is .1 .. (first pool host - 1).
+static const IPAddress kReservedEnd(kApIp[0], kApIp[1], kApIp[2],
+                                    DHCP_POOL_FIRST_HOST - 1);
+
 static WebServer server(HTTP_PORT);
+
+// Overrides the SoftAP DHCP server's address pool so leases start at
+// kDhcpPoolStart instead of the default AP_IP+1. Must run after softAP() (which
+// starts the DHCP server); the pool option can only be set while it is stopped.
+static bool configureDhcpPool() {
+  esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+  if (ap == nullptr) {
+    Serial.println("[ap-server] AP netif not found; DHCP pool left at default");
+    return false;
+  }
+
+  // dhcps_lease_t holds lwip ip4_addr_t; IP4_ADDR sets .addr in network order.
+  dhcps_lease_t lease = {};
+  lease.enable = true;
+  IP4_ADDR(&lease.start_ip, kApIp[0], kApIp[1], kApIp[2], DHCP_POOL_FIRST_HOST);
+  IP4_ADDR(&lease.end_ip, kApIp[0], kApIp[1], kApIp[2],
+           DHCP_POOL_FIRST_HOST + AP_MAX_CONNECTIONS - 1);
+
+  esp_err_t err = esp_netif_dhcps_stop(ap);
+  if (err != ESP_OK && err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
+    Serial.printf("[ap-server] dhcps_stop failed: %s\n", esp_err_to_name(err));
+  }
+
+  err = esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET,
+                               ESP_NETIF_REQUESTED_IP_ADDRESS,
+                               &lease, sizeof(lease));
+  if (err != ESP_OK) {
+    Serial.printf("[ap-server] set DHCP pool failed: %s\n", esp_err_to_name(err));
+    esp_netif_dhcps_start(ap);  // restart with whatever pool it had
+    return false;
+  }
+
+  err = esp_netif_dhcps_start(ap);
+  if (err != ESP_OK) {
+    Serial.printf("[ap-server] dhcps_start failed: %s\n", esp_err_to_name(err));
+    return false;
+  }
+  return true;
+}
 
 // Formats a 6-byte MAC as AA:BB:CC:DD:EE:FF.
 static String macToString(const uint8_t mac[6]) {
@@ -67,7 +123,7 @@ static String buildClientRows() {
 
 static void handleStatus() {
   String html;
-  html.reserve(1600);
+  html.reserve(2000);
   html += "<!doctype html><html><head><meta charset=\"utf-8\">";
   html += "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
   html += "<meta http-equiv=\"refresh\" content=\"" + String(STATUS_REFRESH_SECS) + "\">";
@@ -83,6 +139,11 @@ static void handleStatus() {
   html += " &nbsp; <span class=\"k\">Channel:</span> " + String(AP_CHANNEL);
   html += " &nbsp; <span class=\"k\">Clients:</span> " + String(WiFi.softAPgetStationNum());
   html += " / " + String(AP_MAX_CONNECTIONS) + "</p>";
+
+  html += "<p><span class=\"k\">Reserved (static):</span> <code>" + kApIp.toString() +
+          "&ndash;" + kReservedEnd.toString() + "</code>";
+  html += " &nbsp; <span class=\"k\">DHCP pool:</span> <code>" + kDhcpPoolStart.toString() +
+          "&ndash;" + kDhcpPoolEnd.toString() + "</code></p>";
 
   html += "<table><thead><tr><th>#</th><th>MAC</th><th>Leased IP</th></tr></thead><tbody>";
   html += buildClientRows();
@@ -102,8 +163,8 @@ void setup() {
 
   WiFi.mode(WIFI_AP);
 
-  // Set the static AP IP BEFORE softAP() so the core's DHCP server derives its
-  // lease pool from this gateway (clients get 192.168.1.2+).
+  // Set the static AP IP BEFORE softAP(). The DHCP pool is then overridden
+  // below (configureDhcpPool) to start at kDhcpPoolStart, not the default .2.
   if (!WiFi.softAPConfig(kApIp, kApGateway, kApNetmask)) {
     Serial.println("[ap-server] softAPConfig() FAILED");
   }
@@ -120,6 +181,12 @@ void setup() {
   Serial.printf("[ap-server] AP up: SSID=\"%s\"  IP=%s  channel=%d  max=%d\n",
                 AP_SSID, WiFi.softAPIP().toString().c_str(),
                 AP_CHANNEL, AP_MAX_CONNECTIONS);
+
+  if (configureDhcpPool()) {
+    Serial.printf("[ap-server] Reserved (static): %s-%s   DHCP pool: %s-%s\n",
+                  kApIp.toString().c_str(), kReservedEnd.toString().c_str(),
+                  kDhcpPoolStart.toString().c_str(), kDhcpPoolEnd.toString().c_str());
+  }
 
   server.on("/", handleStatus);
   server.onNotFound(handleStatus);  // any path shows the status page
