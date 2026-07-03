@@ -1,4 +1,5 @@
 import { useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import { Video } from 'lucide-react';
 import { useGetCameraStatusQuery } from './cameraApi';
 import { selectCameraStatus } from './cameraSlice';
@@ -33,13 +34,13 @@ export default function CameraStatusCard() {
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        title="Full feed on the Cameras page (coming soon)"
+      <Link
+        to="/cameras"
+        title="Open the live camera feed"
         className="border border-secondary text-secondary px-4 py-2 font-label-caps text-label-caps font-bold hover:bg-secondary/10 transition-colors active:scale-95"
       >
         VIEW
-      </button>
+      </Link>
     </div>
   );
 }

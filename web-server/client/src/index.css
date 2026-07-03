@@ -36,3 +36,13 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/* Camera page: faint dotted "console" backdrop + CRT scanline over the feed. */
+.grid-bg {
+  background-image: radial-gradient(circle, #2d323b 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.scanline {
+  background: linear-gradient(to bottom, transparent 50%, rgba(74, 225, 131, 0.05) 51%);
+  background-size: 100% 4px;
+}
