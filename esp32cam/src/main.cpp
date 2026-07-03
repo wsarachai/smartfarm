@@ -20,8 +20,8 @@
 #endif
 
 // Defined in app_httpd.cpp — starts the control server (port 80) and stream
-// server (port 81).
-void startCameraServer();
+// server (port 81). Returns true if the control UI (:80) started.
+bool startCameraServer();
 // Defined in app_httpd.cpp — grab a validated (complete) JPEG frame.
 camera_fb_t *grab_validated_frame(int max_tries);
 
@@ -113,13 +113,28 @@ static void connectWiFi() {
   // Safe here — signal is strong. Raise if the link ever drops.
   WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
+  // Associated. Confirm DHCP actually handed us an address — WiFi can report
+  // WL_CONNECTED before (or without) an IP if the DHCP server is slow/broken.
+  IPAddress ip = WiFi.localIP();
+  if (ip == IPAddress(0, 0, 0, 0)) {
+    Serial.println("\n[wifi] associated, waiting for DHCP IP from ap-server...");
+    uint32_t t = millis();
+    while ((ip = WiFi.localIP()) == IPAddress(0, 0, 0, 0)) {
+      delay(200);
+      if (millis() - t > 8000) {
+        Serial.println("[wifi] DHCP FAILED — no IP from ap-server; restarting");
+        ESP.restart();
+      }
+    }
+  }
+
   String mac = WiFi.macAddress();
   Serial.println();
-  Serial.println("[wifi] connected — address obtained via DHCP from ap-server:");
+  Serial.println("[wifi] DHCP OK — IP obtained from ap-server:");
   Serial.printf("[wifi]   SSID   : %s  (RSSI %d dBm, TX power reduced)\n",
                 WIFI_SSID, WiFi.RSSI());
   Serial.printf("[wifi]   MAC    : %s\n", mac.c_str());
-  Serial.printf("[wifi]   IP     : %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("[wifi]   IP     : %s\n", ip.toString().c_str());
   Serial.printf("[wifi]   Gateway: %s\n", WiFi.gatewayIP().toString().c_str());
   Serial.printf("[wifi]   Subnet : %s\n", WiFi.subnetMask().toString().c_str());
   Serial.printf("[wifi]   DNS    : %s\n", WiFi.dnsIP().toString().c_str());
@@ -262,9 +277,12 @@ void setup() {
 
   setupOTA();
 
-  startCameraServer();
-  Serial.printf("[http] ready:  http://%s/    stream on :81\n",
-                WiFi.localIP().toString().c_str());
+  if (startCameraServer()) {
+    Serial.printf("[http] web UI ready: http://%s/   (stream on :81)\n",
+                  WiFi.localIP().toString().c_str());
+  } else {
+    Serial.println("[http] WARNING: web UI did not start (control server failed to bind)");
+  }
 }
 
 void loop() {
@@ -277,6 +295,22 @@ void loop() {
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println("[wifi] link lost — reconnecting");
       WiFi.reconnect();
+    }
+  }
+
+  // Periodic status heartbeat so the serial monitor always shows proof-of-life
+  // and the current IP, even if you attach it long after boot.
+  static uint32_t lastStatus = 0;
+  if (millis() - lastStatus > 15000) {
+    lastStatus = millis();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("[status] up %lus  IP %s  RSSI %d dBm  heap %u\n",
+                    (unsigned long)(millis() / 1000),
+                    WiFi.localIP().toString().c_str(), WiFi.RSSI(),
+                    (unsigned)ESP.getFreeHeap());
+    } else {
+      Serial.printf("[status] up %lus  WiFi DISCONNECTED\n",
+                    (unsigned long)(millis() / 1000));
     }
   }
 

@@ -259,7 +259,10 @@ static esp_err_t status_handler(httpd_req_t *req) {
   return httpd_resp_send(req, json, strlen(json));
 }
 
-void startCameraServer() {
+// Returns true if the control UI (port 80) started. Logs the outcome of both
+// the control server and the stream server so the serial monitor shows whether
+// the web UI came up.
+bool startCameraServer() {
   setupLedFlash();  // init the flash LED (starts off)
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -271,18 +274,28 @@ void startCameraServer() {
   httpd_uri_t status_uri  = { .uri = "/status",  .method = HTTP_GET, .handler = status_handler,  .user_ctx = NULL };
   httpd_uri_t stream_uri  = { .uri = "/stream",  .method = HTTP_GET, .handler = stream_handler,  .user_ctx = NULL };
 
-  if (httpd_start(&camera_httpd, &config) == ESP_OK) {
+  bool controlOk = (httpd_start(&camera_httpd, &config) == ESP_OK);
+  if (controlOk) {
     httpd_register_uri_handler(camera_httpd, &index_uri);
     httpd_register_uri_handler(camera_httpd, &capture_uri);
     httpd_register_uri_handler(camera_httpd, &control_uri);
     httpd_register_uri_handler(camera_httpd, &status_uri);
+    Serial.printf("[http] control UI started on port %d\n", config.server_port);
+  } else {
+    Serial.printf("[http] ERROR: control UI failed to start on port %d\n", config.server_port);
   }
 
   // Stream lives on its own port so a long-running MJPEG connection never
   // blocks the control UI.
   config.server_port += 1;   // 81
   config.ctrl_port   += 1;
-  if (httpd_start(&stream_httpd, &config) == ESP_OK) {
+  bool streamOk = (httpd_start(&stream_httpd, &config) == ESP_OK);
+  if (streamOk) {
     httpd_register_uri_handler(stream_httpd, &stream_uri);
+    Serial.printf("[http] MJPEG stream started on port %d\n", config.server_port);
+  } else {
+    Serial.printf("[http] ERROR: stream server failed to start on port %d\n", config.server_port);
   }
+
+  return controlOk;
 }
