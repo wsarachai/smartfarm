@@ -7,6 +7,8 @@ import {
   Wind,
   Sun,
   Waves,
+  Activity,
+  Zap,
 } from 'lucide-react';
 
 // Known metric keys get a friendly label, unit, and icon (matching the
@@ -23,6 +25,8 @@ const META = {
   co2: { label: 'CO₂', unit: 'ppm', Icon: Wind },
   light: { label: 'Light', unit: 'lux', Icon: Sun },
   water_level: { label: 'Water Level', unit: '%', Icon: Waves },
+  flow_rate: { label: 'Flow Rate', unit: 'L/min', Icon: Activity },
+  voltage: { label: 'Voltage', unit: 'V', Icon: Zap },
 };
 
 function humanize(key) {

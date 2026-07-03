@@ -1,0 +1,328 @@
+import { useSelector } from 'react-redux';
+import { Fan, Clock, Activity } from 'lucide-react';
+import { useGetDevicesQuery, useSendCommandMutation } from '../devices/devicesApi';
+import { selectAllDevices } from '../devices/devicesSlice';
+import { selectHistory } from '../history/historySlice';
+import { freshness } from '../../lib/freshness';
+import { metricMeta, formatMetricValue } from '../../lib/metricMeta';
+import Led from '../../components/Led';
+
+const POLL_INTERVAL_MS = 5000;
+const PUMP_ID = 'main-pump';
+const PUMP_NODE_ID = 'main-pump-node';
+const NODE_SENSOR_KEYS = ['pressure', 'flow_rate', 'temperature', 'voltage'];
+const STREAM_URL = '/api/v1/camera/stream';
+
+// Static preview — no scheduling engine exists yet (see CLAUDE.md notes).
+const UPCOMING_SCHEDULE = [
+  { label: 'Morning Soak', time: '05:00 AM' },
+  { label: 'Evening Mist', time: '07:30 PM' },
+];
+
+function EmptyPanel({ children }) {
+  return (
+    <div className="panel p-5 flex items-center justify-center text-on-surface-variant font-data-mono text-xs min-h-[120px]">
+      {children}
+    </div>
+  );
+}
+
+function avgMetric(devices, key) {
+  const values = devices.map((d) => d.metrics?.[key]).filter((v) => typeof v === 'number');
+  if (values.length === 0) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function HeaderChip({ label, value, unit, colorClass }) {
+  return (
+    <div className="bg-surface-container-low px-4 py-2 border border-outline-variant flex items-center gap-3">
+      <div>
+        <p className="font-label-caps text-[10px] text-on-surface-variant leading-none mb-1">{label}</p>
+        <p className={`font-data-mono text-headline-sm leading-none ${colorClass}`}>
+          {value == null ? '—' : `${formatMetricValue(value)}${unit ? ` ${unit}` : ''}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PumpVisual({ mode, running }) {
+  const spinning = mode === 'manual' && running;
+  const state =
+    mode === 'auto'
+      ? { label: 'Standby', sub: 'System controlling…', color: 'text-outline-variant', hw: 'IDLE', hwClass: 'bg-outline' }
+      : running
+        ? { label: 'Running', sub: 'Fluid transport active', color: 'text-primary', hw: 'RUN', hwClass: 'bg-primary' }
+        : { label: 'Stopped', sub: 'Manual hold engaged', color: 'text-error', hw: 'IDLE', hwClass: 'bg-error' };
+
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant p-6 flex flex-col items-center justify-center relative overflow-hidden">
+      <div
+        className={`w-24 h-24 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${
+          spinning ? 'border-primary' : 'border-outline-variant'
+        }`}
+      >
+        <Fan size={40} className={`${state.color} ${spinning ? 'animate-spin' : ''}`} />
+      </div>
+      <div className="mt-6 text-center z-10">
+        <p className={`font-headline-md text-headline-md uppercase tracking-tighter ${state.color}`}>{state.label}</p>
+        <p className="font-data-mono text-[12px] text-outline mt-1 italic">{state.sub}</p>
+      </div>
+      <div className="absolute bottom-4 right-4 flex items-center bg-surface-container-high border border-outline-variant rounded overflow-hidden">
+        <div className={`w-1 self-stretch ${state.hwClass}`} />
+        <span className="px-2 py-1 font-data-mono text-[10px] text-on-surface-variant">HW_ST: {state.hw}</span>
+      </div>
+    </div>
+  );
+}
+
+function PumpControlPanel({ pump }) {
+  const [sendCommand, { isLoading }] = useSendCommandMutation();
+
+  if (!pump) {
+    return <EmptyPanel>NO PUMP REPORTING (device_id: {PUMP_ID})</EmptyPanel>;
+  }
+
+  const mode = pump.metrics?.mode === 'manual' ? 'manual' : 'auto';
+  const running = Boolean(pump.metrics?.running);
+  const status = freshness(pump.lastSeen);
+
+  const setMode = (next) => sendCommand({ device_id: PUMP_ID, action: { mode: next } });
+  const togglePump = (next) => sendCommand({ device_id: PUMP_ID, action: { running: next } });
+
+  return (
+    <div className="bg-surface-container p-5 border border-outline-variant relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-[2px] bg-secondary opacity-50" />
+      <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-surface-container-high rounded-lg">
+            <Fan size={28} className="text-primary" />
+          </div>
+          <div>
+            <h3 className="font-headline-md text-headline-md text-on-surface">Pump Control</h3>
+            <div className="flex items-center gap-2">
+              <Led status={status} size="w-2 h-2" />
+              <p className="font-body-md text-on-surface-variant text-sm">{pump.device_id}</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex p-1 bg-surface-container-lowest border border-outline-variant rounded-lg">
+          <button
+            type="button"
+            onClick={() => setMode('auto')}
+            disabled={isLoading}
+            className={`px-6 py-2 font-label-caps text-label-caps rounded-md transition-all duration-200 ${
+              mode === 'auto' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            AUTO
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('manual')}
+            disabled={isLoading}
+            className={`px-6 py-2 font-label-caps text-label-caps rounded-md transition-all duration-200 ${
+              mode === 'manual' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            MANUAL
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className={`transition-opacity duration-300 ${mode === 'auto' ? 'opacity-50 pointer-events-none' : ''}`}>
+          <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">MANUAL OVERRIDE</p>
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => togglePump(true)}
+              disabled={mode === 'auto' || isLoading}
+              className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-primary/10 hover:border-primary transition-all active:scale-95"
+            >
+              <span className="font-headline-sm text-on-surface">Pump ON</span>
+              <span className="font-data-mono text-[10px] text-outline">CMD: 0x01</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => togglePump(false)}
+              disabled={mode === 'auto' || isLoading}
+              className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-error/10 hover:border-error transition-all active:scale-95"
+            >
+              <span className="font-headline-sm text-on-surface">Pump OFF</span>
+              <span className="font-data-mono text-[10px] text-outline">CMD: 0x00</span>
+            </button>
+          </div>
+        </div>
+        <PumpVisual mode={mode} running={running} />
+      </div>
+    </div>
+  );
+}
+
+function ScheduleCard() {
+  return (
+    <div className="bg-surface-container p-5 border border-outline-variant">
+      <h4 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
+        <Clock size={14} />
+        Upcoming Schedule
+        <span className="ml-auto bg-surface-container-high px-2 py-0.5 text-[9px] text-on-surface-variant/70">PREVIEW</span>
+      </h4>
+      <div className="space-y-3">
+        {UPCOMING_SCHEDULE.map((s, i) => (
+          <div
+            key={s.label}
+            className={`flex justify-between items-center py-2 ${i < UPCOMING_SCHEDULE.length - 1 ? 'border-b border-outline-variant/30' : ''}`}
+          >
+            <span className="font-body-md text-on-surface">{s.label}</span>
+            <span className="font-data-mono text-on-surface-variant">{s.time}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FlowSparkline({ points }) {
+  if (points.length < 2) {
+    return <div className="w-24 h-12 flex items-center justify-center font-data-mono text-[9px] text-on-surface-variant">…</div>;
+  }
+  const recent = points.slice(-8);
+  const values = recent.map((p) => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return (
+    <div className="w-24 h-12 flex items-end gap-1">
+      {recent.map((p, i) => {
+        const h = Math.max(4, Math.round(((p.value - min) / range) * 48));
+        return <div key={p.t} className="flex-1 bg-secondary" style={{ height: `${h}px`, opacity: 0.3 + (i / recent.length) * 0.7 }} />;
+      })}
+    </div>
+  );
+}
+
+function FlowMetricsCard({ node, flowPoints }) {
+  const flowRate = node?.metrics?.flow_rate;
+  return (
+    <div className="bg-surface-container p-5 border border-outline-variant">
+      <h4 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
+        <Activity size={14} />
+        Flow Metrics
+      </h4>
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="font-display-lg text-[32px] leading-none text-secondary">
+            {flowRate == null ? '—' : formatMetricValue(flowRate)} <span className="text-sm font-label-caps">L/min</span>
+          </p>
+          <p className="font-body-md text-outline mt-2">Current Throughput</p>
+        </div>
+        <FlowSparkline points={flowPoints} />
+      </div>
+    </div>
+  );
+}
+
+function NodeCameraPreview() {
+  return (
+    <div className="aspect-video bg-surface-container border border-outline-variant relative overflow-hidden group">
+      <img
+        src={STREAM_URL}
+        alt="Live feed near the irrigation node"
+        className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+      <div className="absolute bottom-4 left-4">
+        <span className="bg-primary/20 text-primary px-2 py-1 font-data-mono text-[10px] border border-primary/30">CAM_LIVE</span>
+      </div>
+    </div>
+  );
+}
+
+function NodeSensorsTable({ node }) {
+  const rows = NODE_SENSOR_KEYS.filter((k) => node?.metrics?.[k] != null).map((k) => ({
+    key: k,
+    ...metricMeta(k),
+    value: node.metrics[k],
+  }));
+
+  return (
+    <div className="bg-surface-container border border-outline-variant">
+      <div className="px-5 py-4 border-b border-outline-variant bg-surface-container-high">
+        <h3 className="font-label-caps text-label-caps text-on-surface">Node Sensors</h3>
+      </div>
+      {rows.length === 0 ? (
+        <div className="p-5 font-data-mono text-xs text-on-surface-variant">NO TELEMETRY (device_id: {PUMP_NODE_ID})</div>
+      ) : (
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-surface-container-lowest">
+              <th className="px-5 py-3 font-label-caps text-[10px] text-outline">SENSOR</th>
+              <th className="px-5 py-3 font-label-caps text-[10px] text-outline text-right">VALUE</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-outline-variant/20">
+            {rows.map((r) => (
+              <tr key={r.key} className="hover:bg-surface-container-high transition-colors">
+                <td className="px-5 py-3 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <span className="font-data-mono text-on-surface">{r.label}</span>
+                </td>
+                <td className="px-5 py-3 text-right font-data-mono text-secondary">
+                  {formatMetricValue(r.value)}
+                  {r.unit ? ` ${r.unit}` : ''}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+export default function IrrigationPage() {
+  useGetDevicesQuery(undefined, { pollingInterval: POLL_INTERVAL_MS });
+  const devices = useSelector(selectAllDevices);
+  const historyPoints = useSelector(selectHistory);
+
+  const pump = devices.find((d) => d.device_id === PUMP_ID);
+  const node = devices.find((d) => d.device_id === PUMP_NODE_ID);
+  const sensors = devices.filter((d) => d.type !== 'actuator');
+
+  const avgSoilMoisture = avgMetric(sensors, 'soil_moisture');
+  const avgTemp = avgMetric(sensors, 'temperature');
+
+  const flowKey = `${PUMP_NODE_ID}::flow_rate`;
+  const flowPoints = historyPoints.filter((p) => flowKey in p.values).map((p) => ({ t: p.t, value: p.values[flowKey] }));
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+      <section className="md:col-span-12 flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Led status="online" size="w-2.5 h-2.5" />
+            <span className="font-data-mono text-primary text-[12px] uppercase tracking-widest">System Live</span>
+          </div>
+          <h2 className="font-display-lg text-display-lg text-on-background">Irrigation Control</h2>
+        </div>
+        <div className="flex gap-2">
+          <HeaderChip label="SOIL MOISTURE" value={avgSoilMoisture} unit="%" colorClass="text-secondary" />
+          <HeaderChip label="AMBIENT TEMP" value={avgTemp} unit="°C" colorClass="text-tertiary" />
+        </div>
+      </section>
+
+      <div className="md:col-span-8 space-y-gutter">
+        <PumpControlPanel pump={pump} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+          <ScheduleCard />
+          <FlowMetricsCard node={node} flowPoints={flowPoints} />
+        </div>
+      </div>
+
+      <div className="md:col-span-4 space-y-gutter">
+        <NodeCameraPreview />
+        <NodeSensorsTable node={node} />
+      </div>
+    </div>
+  );
+}

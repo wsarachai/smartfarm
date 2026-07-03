@@ -2,11 +2,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { Cpu, SlidersHorizontal, LayoutDashboard, Video, Droplet, BrainCircuit } from 'lucide-react';
 
 // Routable pages have a `to`; the rest are visible-but-inert chrome until their
-// wireframes (Irrigation / AI Analytics) are implemented.
+// wireframes (AI Analytics) are implemented.
 const NAV = [
   { label: 'DASHBOARD', Icon: LayoutDashboard, to: '/' },
   { label: 'CAMERAS', Icon: Video, to: '/cameras' },
-  { label: 'IRRIGATION', Icon: Droplet },
+  { label: 'IRRIGATION', Icon: Droplet, to: '/irrigation' },
   { label: 'AI ANALYTICS', Icon: BrainCircuit },
 ];
 
