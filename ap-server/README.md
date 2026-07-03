@@ -12,11 +12,11 @@ this repo, [`../esp32cam`](../esp32cam).
 ## What it does
 
 1. Brings up a WPA2 SoftAP — **AP-only**, no station/router uplink.
-2. `WiFi.softAPConfig()` pins the AP IP to `192.168.0.1/24`. The Arduino-ESP32
+2. `WiFi.softAPConfig()` pins the AP IP to `192.168.1.1/24`. The Arduino-ESP32
    core then **auto-starts a DHCP server** on the AP interface and hands out
-   `192.168.0.2`, `.3`, … to clients as they associate.
+   `192.168.1.2`, `.3`, … to clients as they associate.
 3. A synchronous `WebServer` serves one auto-refreshing status page at
-   **http://192.168.0.1/** listing each connected station's **MAC** and
+   **http://192.168.1.1/** listing each connected station's **MAC** and
    **leased IP** (joined from the Wi-Fi driver's station list and the netif DHCP
    lease table).
 
@@ -31,18 +31,18 @@ Any path (not just `/`) returns the status page.
 ## Configuration
 
 All tunables live in [`include/ap_config.h`](include/ap_config.h) — a **committed**
-header (mirroring the reference's `wifi_app.h`). Nothing here is truly secret: a
-WPA2 pre-shared key is shared with every client that joins, so there is no
-`secrets.h`. Defaults mirror the reference AP so existing `sensor-node` firmware
-expecting `MJU-SmartFarm-AP` at `192.168.0.1` can associate unchanged:
+header. Nothing here is truly secret: a WPA2 pre-shared key is shared with every
+client that joins, so there is no `secrets.h`. This is a **standalone AP on its
+own network** — distinct from the ESP-IDF reference (`MJU-SmartFarm-AP` @
+`192.168.0.1`); clients must join *this* SSID to reach it:
 
 | Setting | Value |
 |---|---|
-| SSID | `MJU-SmartFarm-AP` |
+| SSID | `MJU-SmartFarm-AP-II` |
 | Password | `password` (WPA2-PSK — **change before real use**) |
-| AP IP / gateway | `192.168.0.1` |
+| AP IP / gateway | `192.168.1.1` |
 | Netmask | `255.255.255.0` |
-| DHCP pool | auto, `192.168.0.2`+ |
+| DHCP pool | auto, `192.168.1.2`+ |
 | Channel | 1 |
 | Max clients | 5 |
 
@@ -62,8 +62,8 @@ and uncomment/set `upload_port` / `monitor_port` in `platformio.ini`.
 
 1. Flash and open the serial monitor — you'll see the AP come up and the status
    URL printed.
-2. On a phone/laptop, join Wi-Fi **`MJU-SmartFarm-AP`** (password `password`).
-3. Browse to **http://192.168.0.1/** — your device appears in the table with the
+2. On a phone/laptop, join Wi-Fi **`MJU-SmartFarm-AP-II`** (password `password`).
+3. Browse to **http://192.168.1.1/** — your device appears in the table with the
    IP the DHCP server leased it. The page refreshes every few seconds, so more
    clients pop in live as they join.
 

@@ -5,9 +5,9 @@
 // Arduino framework:
 //   * Brings up a WPA2 SoftAP (AP-only, no station uplink).
 //   * softAPConfig() sets the static AP IP; the Arduino-ESP32 core auto-starts
-//     a DHCP server on the AP interface, handing out 192.168.0.2+ to clients.
+//     a DHCP server on the AP interface, handing out 192.168.1.2+ to clients.
 //   * A tiny synchronous WebServer serves one auto-refreshing status page at
-//     http://192.168.0.1/ listing every connected station's MAC and leased IP.
+//     http://192.168.1.1/ listing every connected station's MAC and leased IP.
 //
 // All tunables live in include/ap_config.h.
 // -----------------------------------------------------------------------------
@@ -103,7 +103,7 @@ void setup() {
   WiFi.mode(WIFI_AP);
 
   // Set the static AP IP BEFORE softAP() so the core's DHCP server derives its
-  // lease pool from this gateway (clients get 192.168.0.2+).
+  // lease pool from this gateway (clients get 192.168.1.2+).
   if (!WiFi.softAPConfig(kApIp, kApGateway, kApNetmask)) {
     Serial.println("[ap-server] softAPConfig() FAILED");
   }
