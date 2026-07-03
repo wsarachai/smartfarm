@@ -1,0 +1,33 @@
+{
+  // Multi-root workspace for the Smart Farm monorepo.
+  // Each PlatformIO firmware project is added as its own root so the
+  // PlatformIO IDE extension detects it (it looks for platformio.ini at the
+  // root of each workspace folder). The repo root is included for browsing
+  // the Node web-server, the ESP-IDF reference, docs, and CLAUDE.md.
+  //
+  // Open via:  File -> Open Workspace from File... -> smartfarm.code-workspace
+  "folders": [
+    { "name": "smartfarm (repo root)", "path": "." },
+    { "name": "sensor-zone (ESP-IDF)", "path": "sensor-zone" },
+    { "name": "pump-zone (ESP-IDF)", "path": "pump-zone" },
+    { "name": "ap-server (Arduino)", "path": "ap-server" },
+    { "name": "esp32cam (Arduino)", "path": "esp32cam" }
+  ],
+  "settings": {
+    // Keep build output out of search/explorer noise.
+    "files.exclude": {
+      "**/.pio": true
+    },
+    "search.exclude": {
+      "**/.pio": true
+    },
+    // Don't let the repo-root folder try to act as a PlatformIO project
+    // (it has no platformio.ini); the per-project folders handle that.
+    "platformio-ide.activateOnlyOnPlatformIOProject": true
+  },
+  "extensions": {
+    "recommendations": [
+      "platformio.platformio-ide"
+    ]
+  }
+}
