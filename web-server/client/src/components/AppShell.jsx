@@ -1,18 +1,27 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Cpu, SlidersHorizontal, LayoutDashboard, Video, Droplet, BrainCircuit } from 'lucide-react';
+import { Link, useLocation } from "react-router-dom";
+import {
+  Cpu,
+  SlidersHorizontal,
+  LayoutDashboard,
+  Video,
+  Droplet,
+  BrainCircuit,
+} from "lucide-react";
 
 // Routable pages have a `to`; any entry without one renders as visible-but-inert
 // chrome until its page is implemented.
 const NAV = [
-  { label: 'DASHBOARD', Icon: LayoutDashboard, to: '/' },
-  { label: 'CAMERAS', Icon: Video, to: '/cameras' },
-  { label: 'IRRIGATION', Icon: Droplet, to: '/irrigation' },
-  { label: 'AI ANALYTICS', Icon: BrainCircuit, to: '/analytics' },
+  { label: "DASHBOARD", Icon: LayoutDashboard, to: "/" },
+  { label: "CAMERAS", Icon: Video, to: "/cameras" },
+  { label: "IRRIGATION", Icon: Droplet, to: "/irrigation" },
+  { label: "AI ANALYTICS", Icon: BrainCircuit, to: "/analytics" },
 ];
 
 export default function AppShell({ children }) {
   const { pathname } = useLocation();
-  const isActive = (to) => (to === '/' ? pathname === '/' : pathname.startsWith(to));
+  const isActive = (to) =>
+    to === "/" ? pathname === "/" : pathname.startsWith(to);
+  const settingsActive = pathname.startsWith("/settings");
 
   return (
     <div className="min-h-screen">
@@ -45,7 +54,9 @@ export default function AppShell({ children }) {
                 key={label}
                 to={to}
                 className={`font-label-caps text-label-caps px-3 py-2 transition-colors ${
-                  active ? 'text-primary font-bold' : 'text-on-surface-variant hover:text-primary'
+                  active
+                    ? "text-primary font-bold"
+                    : "text-on-surface-variant hover:text-primary"
                 }`}
               >
                 {label}
@@ -54,13 +65,17 @@ export default function AppShell({ children }) {
           })}
         </nav>
 
-        <button
-          type="button"
-          title="Settings (coming soon)"
-          className="text-on-surface-variant hover:bg-surface-container-high p-2 rounded-full transition-transform active:scale-95"
+        <Link
+          to="/settings"
+          title="Settings"
+          className={`p-2 rounded-full transition-transform active:scale-95 ${
+            settingsActive
+              ? "text-primary bg-primary/10"
+              : "text-on-surface-variant hover:bg-surface-container-high"
+          }`}
         >
           <SlidersHorizontal size={20} />
-        </button>
+        </Link>
       </header>
 
       <main className="max-w-container-max mx-auto p-margin-mobile md:p-margin-desktop pb-24 md:pb-8">
@@ -78,14 +93,20 @@ export default function AppShell({ children }) {
             </>
           );
           const cls = `flex flex-col items-center justify-center ${
-            active ? 'text-primary font-bold' : 'text-on-surface-variant/60'
+            active ? "text-primary font-bold" : "text-on-surface-variant/60"
           }`;
           return to ? (
             <Link key={label} to={to} className={cls}>
               {content}
             </Link>
           ) : (
-            <button key={label} type="button" disabled title="Coming soon" className={`${cls} cursor-not-allowed`}>
+            <button
+              key={label}
+              type="button"
+              disabled
+              title="Coming soon"
+              className={`${cls} cursor-not-allowed`}
+            >
               {content}
             </button>
           );
