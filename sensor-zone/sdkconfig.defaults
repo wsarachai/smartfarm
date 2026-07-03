@@ -1,0 +1,23 @@
+# sensor-zone — reproducible ESP-IDF build defaults (parity with the legacy
+# esp-idf-iot/sensor-node sdkconfig, which was essentially stock IDF-5.3 esp32).
+# Only the settings that matter for parity are pinned here; everything else is
+# left to IDF defaults. Do NOT paste the full generated sdkconfig into this file.
+
+# Target SoC: ESP-WROOM-32 (Xtensa dual-core).
+CONFIG_IDF_TARGET="esp32"
+
+# Single-app partition layout (no OTA slots); partition auto-sizes to flash.
+CONFIG_PARTITION_TABLE_SINGLE_APP=y
+
+# 4MB flash to match real ESP-WROOM-32 devkits. Legacy used 2MB; behaviorally
+# identical here since the single-app partition auto-sizes.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# 160 MHz CPU — matches legacy.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_160=y
+
+# 100 Hz FreeRTOS tick — matches legacy.
+CONFIG_FREERTOS_HZ=100
+
+# INFO-level logging — matches legacy.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
