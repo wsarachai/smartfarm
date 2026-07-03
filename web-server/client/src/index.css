@@ -1,121 +1,38 @@
-body {
-  font-family: system-ui, sans-serif;
-  margin: 0;
-  background: #0f172a;
-  color: #e2e8f0;
+/* Self-hosted fonts (bundled — no CDN, works offline on the Jetson). */
+@import '@fontsource/hanken-grotesk/400.css';
+@import '@fontsource/hanken-grotesk/600.css';
+@import '@fontsource/hanken-grotesk/700.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-on-background font-body-md;
+    margin: 0;
+  }
 }
 
-header {
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #1e293b;
+@layer components {
+  /* Level-1 panel: tonal fill + 1px outline (no drop shadows — see DESIGN.md). */
+  .panel {
+    @apply bg-surface-container border border-outline-variant;
+  }
+  /* 1px secondary top border marking panels with interactive data viz. */
+  .industrial-top {
+    border-top: 1px solid theme('colors.secondary-container');
+  }
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 1rem;
-  padding: 1.5rem;
+/* Status LEDs "emit" light via a same-hue glow + slow pulse. */
+.led-pulse {
+  box-shadow: 0 0 8px currentColor;
+  animation: led-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
-
-.device-card {
-  background: #1e293b;
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.metrics-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.metrics-list li {
-  display: flex;
-  justify-content: space-between;
-}
-
-.actuator-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.actuator-controls button {
-  background: #334155;
-  color: #e2e8f0;
-  border: none;
-  border-radius: 6px;
-  padding: 0.4rem 0.75rem;
-  cursor: pointer;
-}
-
-.camera-section {
-  padding: 1.5rem 1.5rem 0;
-}
-
-.camera-card {
-  max-width: 480px;
-}
-
-.camera-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-
-.camera-header h3 {
-  margin: 0;
-}
-
-.camera-frame {
-  background: #0f172a;
-  border-radius: 6px;
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.camera-frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-.camera-placeholder {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.camera-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-}
-
-.camera-badge--live {
-  background: #14532d;
-  color: #4ade80;
-}
-
-.camera-badge--stale {
-  background: #713f12;
-  color: #fbbf24;
-}
-
-.camera-badge--offline {
-  background: #450a0a;
-  color: #f87171;
-}
-
-.camera-card .metrics-list {
-  margin-top: 0.75rem;
+@keyframes led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }

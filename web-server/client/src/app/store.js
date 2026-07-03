@@ -3,14 +3,18 @@ import devicesReducer from '../features/devices/devicesSlice';
 import { devicesApi } from '../features/devices/devicesApi';
 import cameraReducer from '../features/camera/cameraSlice';
 import { cameraApi } from '../features/camera/cameraApi';
+import historyReducer from '../features/history/historySlice';
+import { healthApi } from '../features/health/healthApi';
 
 export const store = configureStore({
   reducer: {
     devices: devicesReducer,
     camera: cameraReducer,
+    history: historyReducer,
     [devicesApi.reducerPath]: devicesApi.reducer,
     [cameraApi.reducerPath]: cameraApi.reducer,
+    [healthApi.reducerPath]: healthApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat(devicesApi.middleware, cameraApi.middleware),
+    getDefaultMiddleware().concat(devicesApi.middleware, cameraApi.middleware, healthApi.middleware),
 });
