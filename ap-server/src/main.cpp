@@ -298,7 +298,8 @@ void setup() {
   // Stop the built-in DHCP server; our custom server takes over port 67.
   esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
   if (ap != nullptr) {
-    esp_netif_dhcps_stop(ap);
+    esp_err_t st = esp_netif_dhcps_stop(ap);
+    Serial.printf("[ap-server] built-in DHCP stop: %s\n", esp_err_to_name(st));
   } else {
     Serial.println("[ap-server] WARNING: AP netif not found; built-in DHCP may clash");
   }
@@ -325,4 +326,13 @@ void setup() {
 void loop() {
   server.handleClient();
   dhcp::loop();
+
+  // Heartbeat: how many stations are associated at the Wi-Fi layer (independent
+  // of DHCP). Non-zero here + no DHCP RX means the client can't reach us on :67.
+  static uint32_t lastBeat = 0;
+  if (millis() - lastBeat > 10000) {
+    lastBeat = millis();
+    Serial.printf("[ap-server] stations associated: %d\n",
+                  WiFi.softAPgetStationNum());
+  }
 }

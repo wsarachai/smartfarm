@@ -35,6 +35,20 @@ static const int OFS_OPTIONS = 240;
 
 static const uint8_t kMagic[4] = {0x63, 0x82, 0x53, 0x63};
 
+static const char *msgName(uint8_t t) {
+  switch (t) {
+    case DHCP_DISCOVER: return "DISCOVER";
+    case DHCP_OFFER: return "OFFER";
+    case DHCP_REQUEST: return "REQUEST";
+    case DHCP_DECLINE: return "DECLINE";
+    case DHCP_ACK: return "ACK";
+    case DHCP_NAK: return "NAK";
+    case DHCP_RELEASE: return "RELEASE";
+    case DHCP_INFORM: return "INFORM";
+    default: return "?";
+  }
+}
+
 // --- Module state -----------------------------------------------------------
 struct DynLease {
   bool used;
@@ -44,10 +58,15 @@ struct DynLease {
   char hostname[RESERVATION_LABEL_MAXLEN + 1];
 };
 
+// How long a tentatively-offered (pre-ACK) lease holds its slot, so two clients
+// mid-handshake don't get offered the same address.
+static const uint32_t kTentativeMs = 15000;
+
 static WiFiUDP s_udp;
 static uint8_t s_apBase[3];   // first three octets of the AP IP
 static IPAddress s_apIp;
 static IPAddress s_netmask;
+static IPAddress s_broadcast;  // subnet-directed broadcast (apIp | ~netmask)
 static uint8_t s_poolFirst;
 static uint8_t s_poolLast;
 static uint32_t s_leaseSecs;
@@ -91,6 +110,7 @@ static int allocDyn(const uint8_t mac[6], uint32_t now) {
       s_leases[i].used = true;
       memcpy(s_leases[i].mac, mac, 6);
       s_leases[i].octet = (uint8_t)(s_poolFirst + i);
+      s_leases[i].expiryMs = now + kTentativeMs;  // hold the slot until ACK
       return i;
     }
   }
@@ -206,10 +226,14 @@ static void sendReply(uint8_t msgType, const uint8_t *chaddr, uint32_t xidNet,
   }
   out[pos++] = 255;                          // end
 
-  // Broadcast keeps pre-IP clients simple (no ARP for an unbound address).
-  s_udp.beginPacket(IPAddress(255, 255, 255, 255), kClientPort);
+  // Subnet-directed broadcast (e.g. 192.168.1.255): reaches every associated
+  // station at L2 with no ARP, and — unlike 255.255.255.255 — has a route via
+  // the AP netif, so lwIP actually sends it.
+  s_udp.beginPacket(s_broadcast, kClientPort);
   s_udp.write(out, pos);
-  s_udp.endPacket();
+  int sent = s_udp.endPacket();
+  Serial.printf("[dhcp] TX %s yiaddr=%s (%d bytes, endPacket=%d)\n",
+                msgName(msgType), yiaddr.toString().c_str(), pos, sent);
 }
 
 // --- Packet handling --------------------------------------------------------
@@ -233,6 +257,8 @@ static void handlePacket(int len) {
     return;  // no message type
   }
   uint8_t msgType = typeBuf[0];
+  Serial.printf("[dhcp] RX %s from %s (len=%d)\n", msgName(msgType),
+                macToStr(mac).c_str(), len);
 
   uint32_t xidNet;
   memcpy(&xidNet, &s_buf[OFS_XID], 4);
@@ -282,10 +308,13 @@ static void handlePacket(int len) {
   bool reserved;
   int dynIndex;
   if (!octetForMac(mac, now, octet, reserved, dynIndex)) {
-    // No address available (dynamic pool full). Silently drop.
+    Serial.printf("[dhcp] no address available for %s (pool full?) — dropped\n",
+                  macToStr(mac).c_str());
     return;
   }
   IPAddress offer = ipFromOctet(octet);
+  Serial.printf("[dhcp] %s -> %s (%s)\n", macToStr(mac).c_str(),
+                offer.toString().c_str(), reserved ? "reserved" : "dynamic");
 
   if (msgType == DHCP_DISCOVER) {
     sendReply(DHCP_OFFER, mac, xidNet, flagsNet, ciaddr, offer);
@@ -325,6 +354,8 @@ void begin(const IPAddress &apIp, const IPAddress &netmask,
            uint8_t poolFirstOctet, uint8_t poolLastOctet, uint32_t leaseSecs) {
   s_apIp = apIp;
   s_netmask = netmask;
+  s_broadcast = IPAddress(apIp[0] | (uint8_t)~netmask[0], apIp[1] | (uint8_t)~netmask[1],
+                          apIp[2] | (uint8_t)~netmask[2], apIp[3] | (uint8_t)~netmask[3]);
   s_apBase[0] = apIp[0];
   s_apBase[1] = apIp[1];
   s_apBase[2] = apIp[2];
@@ -338,7 +369,10 @@ void begin(const IPAddress &apIp, const IPAddress &netmask,
   }
   memset(s_leases, 0, sizeof(s_leases));
 
-  s_udp.begin(kServerPort);
+  uint8_t ok = s_udp.begin(kServerPort);
+  Serial.printf("[dhcp] %s UDP:%u  dynamic pool .%u-.%u  lease %us\n",
+                ok ? "listening on" : "FAILED to bind", kServerPort,
+                poolFirstOctet, poolLastOctet, (unsigned)leaseSecs);
 }
 
 void loop() {
