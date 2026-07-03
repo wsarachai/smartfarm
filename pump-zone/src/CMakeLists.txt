@@ -1,0 +1,27 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "actuators/relay.c"
+        "actuators/rgb_led.c"
+        "network/wifi_sta.c"
+        "http/http_server.c"
+        "http/http_server_relay.c"
+    INCLUDE_DIRS
+        "."
+        "actuators"
+        "network"
+        "http"
+        "../include"
+    REQUIRES
+        driver
+        esp_driver_gpio
+        esp_driver_ledc
+        esp_event
+        esp_http_server
+        esp_netif
+        esp_timer
+        esp_wifi
+        json
+        lwip
+        nvs_flash
+)
