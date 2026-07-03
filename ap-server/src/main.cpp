@@ -1,13 +1,12 @@
 // -----------------------------------------------------------------------------
-// ap-server — ESP-WROOM-32 SoftAP + DHCP + live status page
+// ap-server — ESP-WROOM-32 SoftAP + custom DHCP (with MAC reservations) + web UI
 //
-// Re-implements the AP + DHCP behavior of ../esp-idf-iot/web-server on the
-// Arduino framework:
 //   * Brings up a WPA2 SoftAP (AP-only, no station uplink).
-//   * softAPConfig() sets the static AP IP; we then reconfigure the core's DHCP
-//     server to lease from 192.168.1.100+, reserving .1-.99 for static servers.
-//   * A tiny synchronous WebServer serves one auto-refreshing status page at
-//     http://192.168.1.1/ listing every connected station's MAC and leased IP.
+//   * Stops the built-in DHCP server and runs our own (dhcp_server.*), which
+//     honours MAC->IP reservations in the .2-.99 band and hands dynamic leases
+//     from .100+ to everyone else.
+//   * Serves a web UI: a live dashboard (connected clients + reservations) and
+//     an /edit form to add/update reservations, persisted in NVS.
 //
 // All tunables live in include/ap_config.h.
 // -----------------------------------------------------------------------------
@@ -16,144 +15,262 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-#include "esp_wifi.h"                 // esp_wifi_ap_get_sta_list()
-#include "esp_netif.h"                // esp_netif_get_sta_list(), dhcps options
-#include "dhcpserver/dhcpserver.h"    // dhcps_lease_t (uses lwip ip4_addr_t)
-#include "lwip/ip4_addr.h"            // IP4_ADDR()
+#include "esp_wifi.h"     // esp_wifi_ap_get_sta_list()
+#include "esp_netif.h"    // esp_netif_dhcps_stop()
 
 #include "ap_config.h"
+#include "dhcp_server.h"
+#include "reservations.h"
 
-// The DHCP pool must fit within the AP's /24, below the broadcast address.
-static_assert(DHCP_POOL_FIRST_HOST >= 2 &&
-                  DHCP_POOL_FIRST_HOST + AP_MAX_CONNECTIONS - 1 <= 254,
-              "DHCP pool (DHCP_POOL_FIRST_HOST .. +AP_MAX_CONNECTIONS-1) "
-              "must stay within .2-.254 of the AP subnet");
+// Dynamic pool bounds (host octets) and the reserved band just below it.
+static const uint8_t kPoolFirst = DHCP_POOL_FIRST_HOST;
+static const uint8_t kPoolLast = DHCP_POOL_FIRST_HOST + AP_MAX_CONNECTIONS - 1;
+
+// The pool must fit within the AP's /24, below the broadcast address.
+static_assert(kPoolFirst >= 3 && kPoolLast <= 254,
+              "Dynamic DHCP pool must stay within .3-.254 (leave .2+ reserved)");
 
 static const IPAddress kApIp(AP_IP);
 static const IPAddress kApGateway(AP_GATEWAY);
 static const IPAddress kApNetmask(AP_NETMASK);
 
-// Derived from the AP subnet so the pool always tracks AP_IP's /24.
-static const IPAddress kDhcpPoolStart(kApIp[0], kApIp[1], kApIp[2],
-                                      DHCP_POOL_FIRST_HOST);
-static const IPAddress kDhcpPoolEnd(kApIp[0], kApIp[1], kApIp[2],
-                                    DHCP_POOL_FIRST_HOST + AP_MAX_CONNECTIONS - 1);
-// Reserved static band is .1 .. (first pool host - 1).
-static const IPAddress kReservedEnd(kApIp[0], kApIp[1], kApIp[2],
-                                    DHCP_POOL_FIRST_HOST - 1);
+static const IPAddress kReservedLow(kApIp[0], kApIp[1], kApIp[2], 2);
+static const IPAddress kReservedHigh(kApIp[0], kApIp[1], kApIp[2], kPoolFirst - 1);
+static const IPAddress kDynLow(kApIp[0], kApIp[1], kApIp[2], kPoolFirst);
+static const IPAddress kDynHigh(kApIp[0], kApIp[1], kApIp[2], kPoolLast);
 
 static WebServer server(HTTP_PORT);
 
-// Overrides the SoftAP DHCP server's address pool so leases start at
-// kDhcpPoolStart instead of the default AP_IP+1. Must run after softAP() (which
-// starts the DHCP server); the pool option can only be set while it is stopped.
-static bool configureDhcpPool() {
-  esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-  if (ap == nullptr) {
-    Serial.println("[ap-server] AP netif not found; DHCP pool left at default");
-    return false;
-  }
+// --- HTML helpers -----------------------------------------------------------
 
-  // dhcps_lease_t holds lwip ip4_addr_t; IP4_ADDR sets .addr in network order.
-  dhcps_lease_t lease = {};
-  lease.enable = true;
-  IP4_ADDR(&lease.start_ip, kApIp[0], kApIp[1], kApIp[2], DHCP_POOL_FIRST_HOST);
-  IP4_ADDR(&lease.end_ip, kApIp[0], kApIp[1], kApIp[2],
-           DHCP_POOL_FIRST_HOST + AP_MAX_CONNECTIONS - 1);
-
-  esp_err_t err = esp_netif_dhcps_stop(ap);
-  if (err != ESP_OK && err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
-    Serial.printf("[ap-server] dhcps_stop failed: %s\n", esp_err_to_name(err));
+static String esc(const String &s) {
+  String o;
+  o.reserve(s.length() + 8);
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    switch (c) {
+      case '&': o += "&amp;"; break;
+      case '<': o += "&lt;"; break;
+      case '>': o += "&gt;"; break;
+      case '"': o += "&quot;"; break;
+      case '\'': o += "&#39;"; break;
+      default: o += c;
+    }
   }
-
-  err = esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET,
-                               ESP_NETIF_REQUESTED_IP_ADDRESS,
-                               &lease, sizeof(lease));
-  if (err != ESP_OK) {
-    Serial.printf("[ap-server] set DHCP pool failed: %s\n", esp_err_to_name(err));
-    esp_netif_dhcps_start(ap);  // restart with whatever pool it had
-    return false;
-  }
-
-  err = esp_netif_dhcps_start(ap);
-  if (err != ESP_OK) {
-    Serial.printf("[ap-server] dhcps_start failed: %s\n", esp_err_to_name(err));
-    return false;
-  }
-  return true;
+  return o;
 }
 
-// Formats a 6-byte MAC as AA:BB:CC:DD:EE:FF.
-static String macToString(const uint8_t mac[6]) {
-  char buf[18];
-  snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
-           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  return String(buf);
-}
+static const char *kStyle =
+    "<style>body{font-family:system-ui,sans-serif;margin:1.5rem;color:#1a1a1a}"
+    "h1{font-size:1.3rem}h2{font-size:1.05rem;margin-top:1.5rem}"
+    "table{border-collapse:collapse;margin-top:.4rem;width:100%;max-width:640px}"
+    "th,td{border:1px solid #ccc;padding:.35rem .55rem;text-align:left;font-size:.9rem}"
+    "th{background:#f2f2f2}.k{color:#666}code{background:#f2f2f2;padding:.1rem .3rem;border-radius:3px}"
+    "a.btn,button{font-size:.85rem;padding:.2rem .5rem;border:1px solid #888;border-radius:4px;"
+    "background:#fafafa;cursor:pointer;text-decoration:none;color:#1a1a1a}"
+    "form.inline{display:inline;margin:0}label{display:block;margin:.6rem 0 .15rem}"
+    "input{font-size:.95rem;padding:.3rem;width:16rem;max-width:100%}"
+    ".err{background:#fde8e8;border:1px solid #f5a5a5;padding:.5rem .7rem;border-radius:4px;max-width:640px}"
+    ".ok{color:#2a7}</style>";
 
-// Builds the rows of the connected-client table by joining the WiFi driver's
-// station list (MACs) against the netif DHCP lease table (assigned IPs).
-static String buildClientRows() {
-  wifi_sta_list_t wifi_list = {};
-  esp_netif_sta_list_t netif_list = {};
+// --- Dashboard --------------------------------------------------------------
 
-  if (esp_wifi_ap_get_sta_list(&wifi_list) != ESP_OK ||
-      esp_netif_get_sta_list(&wifi_list, &netif_list) != ESP_OK) {
-    return "<tr><td colspan=\"3\">(failed to read station list)</td></tr>";
-  }
-
-  if (netif_list.num == 0) {
-    return "<tr><td colspan=\"3\">No clients connected yet</td></tr>";
+static String connectedRows() {
+  wifi_sta_list_t stas = {};
+  if (esp_wifi_ap_get_sta_list(&stas) != ESP_OK || stas.num == 0) {
+    return "<tr><td colspan=\"5\">No clients connected</td></tr>";
   }
 
   String rows;
-  for (int i = 0; i < netif_list.num; i++) {
-    const esp_netif_sta_info_t &sta = netif_list.sta[i];
-    IPAddress ip(sta.ip.addr);  // esp_ip4_addr_t is little-endian, IPAddress matches
-    rows += "<tr><td>";
-    rows += String(i + 1);
-    rows += "</td><td>";
-    rows += macToString(sta.mac);
-    rows += "</td><td>";
-    rows += ip.toString();
+  for (int i = 0; i < stas.num; i++) {
+    const uint8_t *mac = stas.sta[i].mac;
+    String macStr = macToStr(mac);
+
+    IPAddress ip;
+    String ipStr = dhcp::ipForMac(mac, ip) ? ip.toString() : "(pending)";
+
+    const Reservation *r = reservations::findByMac(mac);
+    String name;
+    String kind;
+    String action;
+    if (r != nullptr) {
+      name = r->label[0] ? esc(String(r->label)) : String("<span class=\"k\">(reserved)</span>");
+      kind = "<span class=\"ok\">reserved</span>";
+      action = "<a class=\"btn\" href=\"/edit?mac=" + macStr + "\">Edit</a>";
+    } else {
+      String host = dhcp::hostnameForMac(mac);
+      name = host.length() ? esc(host) : String("<span class=\"k\">-</span>");
+      kind = "dynamic";
+      action = "<a class=\"btn\" href=\"/edit?mac=" + macStr + "\">Reserve</a>";
+    }
+
+    rows += "<tr><td>" + String(i + 1) + "</td><td>" + name + "</td><td>" + kind +
+            "</td><td><code>" + ipStr + "</code> " + macStr + "</td><td>" + action +
+            "</td></tr>";
+  }
+  return rows;
+}
+
+static String reservationRows() {
+  int n = reservations::count();
+  if (n == 0) {
+    return "<tr><td colspan=\"4\">No reservations yet</td></tr>";
+  }
+  const Reservation *list = reservations::all();
+  String rows;
+  for (int i = 0; i < n; i++) {
+    String macStr = macToStr(list[i].mac);
+    IPAddress ip(kApIp[0], kApIp[1], kApIp[2], list[i].octet);
+    String label = list[i].label[0] ? esc(String(list[i].label))
+                                     : String("<span class=\"k\">-</span>");
+    rows += "<tr><td>" + label + "</td><td>" + macStr + "</td><td><code>" +
+            ip.toString() + "</code></td><td>";
+    rows += "<a class=\"btn\" href=\"/edit?mac=" + macStr + "\">Edit</a> ";
+    rows += "<form class=\"inline\" method=\"POST\" action=\"/api/reservations/delete\" "
+            "onsubmit=\"return confirm('Delete this reservation?')\">"
+            "<input type=\"hidden\" name=\"mac\" value=\"" + macStr + "\">"
+            "<button>Delete</button></form>";
     rows += "</td></tr>";
   }
   return rows;
 }
 
-static void handleStatus() {
+static void handleDashboard() {
   String html;
-  html.reserve(2000);
+  html.reserve(4096);
   html += "<!doctype html><html><head><meta charset=\"utf-8\">";
   html += "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
   html += "<meta http-equiv=\"refresh\" content=\"" + String(STATUS_REFRESH_SECS) + "\">";
-  html += "<title>" AP_SSID " — AP Status</title>";
-  html += "<style>body{font-family:system-ui,sans-serif;margin:2rem;color:#1a1a1a}"
-          "h1{font-size:1.3rem}table{border-collapse:collapse;margin-top:.5rem;width:100%;max-width:520px}"
-          "th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left;font-size:.9rem}"
-          "th{background:#f2f2f2}.k{color:#666}code{background:#f2f2f2;padding:.1rem .3rem;border-radius:3px}</style>";
+  html += "<title>" AP_SSID " — AP</title>";
+  html += kStyle;
   html += "</head><body>";
   html += "<h1>" AP_SSID " — Access Point</h1>";
 
   html += "<p><span class=\"k\">AP IP:</span> <code>" + kApIp.toString() + "</code>";
   html += " &nbsp; <span class=\"k\">Channel:</span> " + String(AP_CHANNEL);
-  html += " &nbsp; <span class=\"k\">Clients:</span> " + String(WiFi.softAPgetStationNum());
-  html += " / " + String(AP_MAX_CONNECTIONS) + "</p>";
+  html += " &nbsp; <span class=\"k\">Clients:</span> " + String(WiFi.softAPgetStationNum()) +
+          " / " + String(AP_MAX_CONNECTIONS) + "</p>";
+  html += "<p><span class=\"k\">Reserved (static):</span> <code>" + kReservedLow.toString() +
+          "&ndash;" + kReservedHigh.toString() + "</code>";
+  html += " &nbsp; <span class=\"k\">DHCP pool:</span> <code>" + kDynLow.toString() +
+          "&ndash;" + kDynHigh.toString() + "</code></p>";
 
-  html += "<p><span class=\"k\">Reserved (static):</span> <code>" + kApIp.toString() +
-          "&ndash;" + kReservedEnd.toString() + "</code>";
-  html += " &nbsp; <span class=\"k\">DHCP pool:</span> <code>" + kDhcpPoolStart.toString() +
-          "&ndash;" + kDhcpPoolEnd.toString() + "</code></p>";
-
-  html += "<table><thead><tr><th>#</th><th>MAC</th><th>Leased IP</th></tr></thead><tbody>";
-  html += buildClientRows();
+  html += "<h2>Connected clients</h2>";
+  html += "<table><thead><tr><th>#</th><th>Name</th><th>Type</th>"
+          "<th>IP / MAC</th><th></th></tr></thead><tbody>";
+  html += connectedRows();
   html += "</tbody></table>";
 
-  html += "<p class=\"k\">Auto-refreshing every " + String(STATUS_REFRESH_SECS) + "s.</p>";
+  html += "<h2>Reservations (" + String(reservations::count()) + "/" +
+          String(MAX_RESERVATIONS) + ") &nbsp; <a class=\"btn\" href=\"/edit\">+ Add</a></h2>";
+  html += "<table><thead><tr><th>Label</th><th>MAC</th><th>IP</th><th></th></tr></thead><tbody>";
+  html += reservationRows();
+  html += "</tbody></table>";
+
+  html += "<p class=\"k\">Dashboard auto-refreshes every " + String(STATUS_REFRESH_SECS) +
+          "s. Reservation changes apply on the device's next reconnect/renewal.</p>";
   html += "</body></html>";
 
   server.send(200, "text/html; charset=utf-8", html);
 }
+
+// --- Edit form (add / update reservation) -----------------------------------
+
+static String defaultIpString() {
+  uint8_t o = reservations::nextFreeOctet();
+  if (o == 0) {
+    o = 2;  // band full; show the low end so the field isn't empty
+  }
+  return IPAddress(kApIp[0], kApIp[1], kApIp[2], o).toString();
+}
+
+static void renderEditPage(const String &errMsg, const String &macVal,
+                           const String &ipVal, const String &labelVal) {
+  String html;
+  html.reserve(2048);
+  html += "<!doctype html><html><head><meta charset=\"utf-8\">";
+  html += "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
+  html += "<title>Reservation — " AP_SSID "</title>";
+  html += kStyle;
+  html += "</head><body>";
+  html += "<h1>Add / update reservation</h1>";
+  if (errMsg.length()) {
+    html += "<p class=\"err\">" + esc(errMsg) + "</p>";
+  }
+  html += "<form method=\"POST\" action=\"/api/reservations\">";
+  html += "<label>Label (optional)</label>";
+  html += "<input name=\"label\" maxlength=\"" + String(RESERVATION_LABEL_MAXLEN) +
+          "\" value=\"" + esc(labelVal) + "\" placeholder=\"e.g. Water Pump\">";
+  html += "<label>MAC address</label>";
+  html += "<input name=\"mac\" required value=\"" + esc(macVal) +
+          "\" placeholder=\"AA:BB:CC:DD:EE:FF\">";
+  html += "<label>Assigned IP (must be " + kReservedLow.toString() + "&ndash;" +
+          kReservedHigh.toString() + ")</label>";
+  html += "<input name=\"ip\" required value=\"" + esc(ipVal) + "\">";
+  html += "<p><button type=\"submit\">Save</button> &nbsp; "
+          "<a class=\"btn\" href=\"/\">Cancel</a></p>";
+  html += "</form></body></html>";
+  server.send(200, "text/html; charset=utf-8", html);
+}
+
+static void handleEditForm() {
+  String macVal = server.hasArg("mac") ? server.arg("mac") : "";
+  String ipVal;
+  String labelVal;
+
+  uint8_t mac[6];
+  if (macVal.length() && parseMac(macVal.c_str(), mac)) {
+    const Reservation *r = reservations::findByMac(mac);
+    if (r != nullptr) {
+      ipVal = IPAddress(kApIp[0], kApIp[1], kApIp[2], r->octet).toString();
+      labelVal = String(r->label);
+    }
+  }
+  if (ipVal.length() == 0) {
+    ipVal = defaultIpString();
+  }
+  renderEditPage("", macVal, ipVal, labelVal);
+}
+
+static void handlePostReservation() {
+  String macVal = server.arg("mac");
+  String ipVal = server.arg("ip");
+  String labelVal = server.arg("label");
+
+  uint8_t mac[6];
+  if (!parseMac(macVal.c_str(), mac)) {
+    renderEditPage("Invalid MAC address.", macVal, ipVal, labelVal);
+    return;
+  }
+
+  IPAddress ip;
+  if (!ip.fromString(ipVal) || ip[0] != kApIp[0] || ip[1] != kApIp[1] ||
+      ip[2] != kApIp[2]) {
+    renderEditPage("IP must be on the " + kApIp.toString() + "/24 network.", macVal,
+                   ipVal, labelVal);
+    return;
+  }
+
+  ResvResult r = reservations::upsert(mac, ip[3], labelVal.c_str());
+  if (r != RESV_OK) {
+    renderEditPage(reservations::resultMessage(r), macVal, ipVal, labelVal);
+    return;
+  }
+
+  server.sendHeader("Location", "/");
+  server.send(303, "text/plain", "");
+}
+
+static void handlePostDelete() {
+  uint8_t mac[6];
+  if (parseMac(server.arg("mac").c_str(), mac)) {
+    reservations::removeByMac(mac);
+  }
+  server.sendHeader("Location", "/");
+  server.send(303, "text/plain", "");
+}
+
+// --- Setup / loop -----------------------------------------------------------
 
 void setup() {
   Serial.begin(115200);
@@ -161,16 +278,16 @@ void setup() {
   Serial.println();
   Serial.println("[ap-server] starting SoftAP...");
 
-  WiFi.mode(WIFI_AP);
+  reservations::begin();
+  Serial.printf("[ap-server] loaded %d reservation(s) from NVS\n",
+                reservations::count());
 
-  // Set the static AP IP BEFORE softAP(). The DHCP pool is then overridden
-  // below (configureDhcpPool) to start at kDhcpPoolStart, not the default .2.
+  WiFi.mode(WIFI_AP);
   if (!WiFi.softAPConfig(kApIp, kApGateway, kApNetmask)) {
     Serial.println("[ap-server] softAPConfig() FAILED");
   }
-
-  bool ok = WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL,
-                        AP_SSID_HIDDEN, AP_MAX_CONNECTIONS);
+  bool ok = WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, AP_SSID_HIDDEN,
+                        AP_MAX_CONNECTIONS);
   if (!ok) {
     Serial.println("[ap-server] softAP() FAILED — halting");
     while (true) {
@@ -178,23 +295,34 @@ void setup() {
     }
   }
 
-  Serial.printf("[ap-server] AP up: SSID=\"%s\"  IP=%s  channel=%d  max=%d\n",
-                AP_SSID, WiFi.softAPIP().toString().c_str(),
-                AP_CHANNEL, AP_MAX_CONNECTIONS);
-
-  if (configureDhcpPool()) {
-    Serial.printf("[ap-server] Reserved (static): %s-%s   DHCP pool: %s-%s\n",
-                  kApIp.toString().c_str(), kReservedEnd.toString().c_str(),
-                  kDhcpPoolStart.toString().c_str(), kDhcpPoolEnd.toString().c_str());
+  // Stop the built-in DHCP server; our custom server takes over port 67.
+  esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+  if (ap != nullptr) {
+    esp_netif_dhcps_stop(ap);
+  } else {
+    Serial.println("[ap-server] WARNING: AP netif not found; built-in DHCP may clash");
   }
 
-  server.on("/", handleStatus);
-  server.onNotFound(handleStatus);  // any path shows the status page
+  dhcp::begin(kApIp, kApNetmask, kPoolFirst, kPoolLast, DHCP_LEASE_SECS);
+
+  Serial.printf("[ap-server] AP up: SSID=\"%s\"  IP=%s  channel=%d  max=%d\n",
+                AP_SSID, WiFi.softAPIP().toString().c_str(), AP_CHANNEL,
+                AP_MAX_CONNECTIONS);
+  Serial.printf("[ap-server] Reserved (static): %s-%s   DHCP pool: %s-%s\n",
+                kReservedLow.toString().c_str(), kReservedHigh.toString().c_str(),
+                kDynLow.toString().c_str(), kDynHigh.toString().c_str());
+
+  server.on("/", HTTP_GET, handleDashboard);
+  server.on("/edit", HTTP_GET, handleEditForm);
+  server.on("/api/reservations", HTTP_POST, handlePostReservation);
+  server.on("/api/reservations/delete", HTTP_POST, handlePostDelete);
+  server.onNotFound(handleDashboard);
   server.begin();
-  Serial.printf("[ap-server] HTTP status page at http://%s/\n",
+  Serial.printf("[ap-server] Web UI at http://%s/\n",
                 WiFi.softAPIP().toString().c_str());
 }
 
 void loop() {
   server.handleClient();
+  dhcp::loop();
 }

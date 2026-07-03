@@ -97,7 +97,7 @@ The repo also contains firmware for the field devices that talk to the web-serve
 
 - `esp-idf-iot/` — the reference **ESP-IDF** workspace (`web-server/` SoftAP+HTTP+OTA control server, `sensor-node/`, and `examples/`). GPL-3.0. The canonical smart-farm firmware; the projects below borrow its conventions.
 - `esp32cam/` — **PlatformIO / Arduino** firmware for the AI-Thinker ESP32-CAM that pushes JPEG frames to the web-server's `/api/v1/camera/frame` (see the camera notes above). Uses a gitignored `include/secrets.h` (+ `secrets.example.h`) for WiFi/OTA creds.
-- `ap-server/` — **PlatformIO / Arduino** firmware for an **ESP-WROOM-32** (`board = esp32dev`) that runs a Wi-Fi **SoftAP + DHCP server** with a live status page. It re-implements the AP + DHCP behavior of `esp-idf-iot/web-server` (which is ESP-IDF) on the Arduino framework, to match `esp32cam`'s conventions.
+- `ap-server/` — **PlatformIO / Arduino** firmware for an **ESP-WROOM-32** (`board = esp32dev`) that runs a Wi-Fi **SoftAP with a custom DHCP server** supporting **MAC→IP reservations** managed from a **web UI** and persisted in NVS. Grew out of the AP behavior of `esp-idf-iot/web-server` (ESP-IDF), re-implemented on Arduino to match `esp32cam`'s conventions.
 
 ## ap-server/
 
@@ -107,13 +107,17 @@ ap-server/
 ├── README.md           # design decisions + try-it steps
 ├── .gitignore
 ├── include/
-│   └── ap_config.h     # AP SSID/pass/IP/channel/max clients (committed, not secret)
+│   ├── ap_config.h     # AP + addressing + reservation tunables (committed, not secret)
+│   ├── reservations.h  # NVS-backed MAC→IP store (API)
+│   └── dhcp_server.h   # custom DHCP server (API)
 └── src/
-    └── main.cpp        # WiFi.softAPConfig + WiFi.softAP + WebServer status page
+    ├── main.cpp        # SoftAP bring-up + web UI (dashboard, /edit, CRUD endpoints)
+    ├── reservations.cpp# reservation store (Preferences/NVS) + parseMac/macToStr
+    └── dhcp_server.cpp # DISCOVER/OFFER/REQUEST/ACK/NAK/RELEASE on UDP/67
 ```
 
-- **AP-only** mode (no STA uplink), WPA2. `WiFi.softAPConfig()` pins the AP IP to `192.168.1.1/24`. The firmware then **overrides the SoftAP DHCP address pool** (`esp_netif_dhcps_stop` → `esp_netif_dhcps_option(ESP_NETIF_REQUESTED_IP_ADDRESS, dhcps_lease_t)` → `esp_netif_dhcps_start`, in `configureDhcpPool()`) so leases start at **`192.168.1.100`**, **reserving `.1`–`.99` for static servers**. Pool end = `DHCP_POOL_FIRST_HOST + AP_MAX_CONNECTIONS - 1` (→ `.100`–`.104`), guarded by a `static_assert` on subnet bounds. Only `DHCP_POOL_FIRST_HOST` is configurable in `ap_config.h`; start/end IPs are derived onto AP_IP's /24.
-- This is a **standalone AP on its own network** (SSID `MJU-SmartFarm-AP-II`, password `password`, `192.168.1.1`, channel 1, max 5 clients) — deliberately **distinct** from the ESP-IDF reference AP (`MJU-SmartFarm-AP` @ `192.168.0.1` in `esp-idf-iot/web-server/main/network/wifi_app.h`); clients must join this SSID to reach it. It borrows the reference's AP+DHCP *technique*, not its network identity. **The password is `password` — change `AP_PASSWORD` before real deployment.** All tunables live in the committed `include/ap_config.h` (no `secrets.h`) because a WPA2 PSK is shared with every client anyway.
-- The status page at `http://192.168.1.1/` (built-in `WebServer.h`, zero extra `lib_deps`) joins the WiFi driver's station list (`esp_wifi_ap_get_sta_list`) with the netif DHCP lease table (`esp_netif_get_sta_list`) to show each client's **MAC + leased IP**, meta-refreshing every 3s. Any path returns the status page.
-- Scope is deliberately just AP + DHCP + status page — no HTTP control UI, STA config, relay, OTA, or NVS (unlike the ESP-IDF reference).
-- Commands: `cd ap-server && pio run` (build), `pio run -t upload` (flash via USB), `pio device monitor` (serial @ 115200). Not yet compiled/flashed — no `pio` in the sandbox this was built in; build on the target machine before trusting it.
+- **AP-only** mode (no STA uplink), WPA2, standalone network (SSID `MJU-SmartFarm-AP-II`, password `password` — **change `AP_PASSWORD`**, `192.168.1.1`, ch 1, **max 10 clients**), deliberately distinct from the ESP-IDF reference AP (`MJU-SmartFarm-AP` @ `192.168.0.1`). All tunables in committed `include/ap_config.h`; no `secrets.h`.
+- **Why a custom DHCP server:** the built-in ESP DHCP server (`dhcpserver.h`) exposes only a pool *range* (`dhcps_lease_t`) — **no MAC-based reservation API**, and its source is precompiled into the framework's lwIP lib so it can't be patched from PlatformIO. So `main.cpp` calls `esp_netif_dhcps_stop("WIFI_AP_DEF")` and `dhcp_server.cpp` runs our own on UDP/67, **polled from `loop()`** (single-threaded with `WebServer`, so the reservation table needs no locking).
+- **Addressing:** `.1` = AP; **`.2`–`.99` reserved** (MAC→IP, the "server group"); **`.100`–`.109` dynamic** (`DHCP_POOL_FIRST_HOST` .. `+AP_MAX_CONNECTIONS-1`, guarded by `static_assert`). Reserved MAC → fixed IP; unknown MAC → dynamic lease (RAM table, reused per MAC, 2 h lease `DHCP_LEASE_SECS`).
+- **Reservations** persist in NVS via `Preferences` (namespace `apres`, one blob of `{mac[6],octet,label[≤24]}`, cap `MAX_RESERVATIONS`=32); loaded in `reservations::begin()` at boot. Web UI: `/` dashboard (auto-refresh; connected clients w/ one-click **Reserve** prefilling MAC, + reservations table w/ **Delete**), `/edit` form (no refresh, so it isn't wiped mid-typing), `POST /api/reservations` (upsert, validates MAC + IP∈`.2`–`.99` + uniqueness), `POST /api/reservations/delete`. **No auth** — WPA2 is the gate. Changes apply on the device's **next DHCP renewal/reconnect**.
+- Commands: `cd ap-server && pio run` / `pio run -t upload` / `pio device monitor` (115200). **Compiles clean on arduino-esp32 2.0.17 (esp32dev)** but the hand-rolled DHCP server is **not yet hardware-tested** — during first bring-up keep one client on a static `192.168.1.50` as a lifeline in case DHCP misbehaves.

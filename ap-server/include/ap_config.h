@@ -17,7 +17,7 @@
 #define AP_PASSWORD        "password"             // WPA2-PSK, min 8 chars (empty => open)
 #define AP_CHANNEL         1                      // 1..13
 #define AP_SSID_HIDDEN     0                      // 0 = broadcast SSID, 1 = hidden
-#define AP_MAX_CONNECTIONS 5                      // max simultaneous stations (1..10)
+#define AP_MAX_CONNECTIONS 10                     // max simultaneous stations (ESP32 hw max is 10)
 
 // --- Addressing (comma-separated octets, consumed by IPAddress(...)) ---
 // Gateway is intentionally the same as the AP IP.
@@ -25,14 +25,19 @@
 #define AP_GATEWAY 192, 168, 1, 1
 #define AP_NETMASK 255, 255, 255, 0
 
-// --- DHCP lease pool ---
-// Addresses 192.168.1.1 .. .99 are RESERVED for static servers (the AP itself
-// sits at .1). The DHCP server leases to clients starting at the host octet
-// below; the pool END is computed as (first host + AP_MAX_CONNECTIONS - 1), so
-// with 5 max clients the pool is 192.168.1.100 .. .104. The pool always sits on
-// the same /24 as AP_IP. (Note: the ESP DHCP server tracks at most ~8 leases.)
-#define DHCP_POOL_FIRST_HOST 100  // last octet of the first leasable address
+// --- Addressing scheme (served by our custom DHCP server, not the built-in) ---
+//   .1                         : the AP itself
+//   .2 .. (POOL_FIRST_HOST-1)  : RESERVED band — MAC->IP reservations (the
+//                                "server group"), assigned via the web UI
+//   POOL_FIRST_HOST .. +max-1  : DYNAMIC pool for unreserved clients
+// With POOL_FIRST_HOST=100 and 10 max clients: reserved .2-.99, dynamic .100-.109.
+#define DHCP_POOL_FIRST_HOST 100    // last octet of the first DYNAMIC address
+#define DHCP_LEASE_SECS      7200   // lease time handed to clients (2 hours)
+
+// --- MAC->IP reservations (persisted in NVS) ---
+#define MAX_RESERVATIONS        32  // capacity of the reservation table
+#define RESERVATION_LABEL_MAXLEN 24 // friendly-name length (excl. NUL)
 
 // --- HTTP status page ---
 #define HTTP_PORT           80  // browse to http://192.168.1.1/
-#define STATUS_REFRESH_SECS 3   // client-side meta-refresh interval
+#define STATUS_REFRESH_SECS 5   // client-side meta-refresh interval
