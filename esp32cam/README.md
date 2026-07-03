@@ -26,8 +26,11 @@ viewable in any browser.
    ```
    cp include/secrets.example.h include/secrets.h
    ```
-   Edit `include/secrets.h` — set `WIFI_SSID`, `WIFI_PASS`, a `STATIC_IP`
-   **outside your router's DHCP pool**, and an `OTA_PASSWORD`.
+   Edit `include/secrets.h` — set `WIFI_SSID`, `WIFI_PASS`, and an
+   `OTA_PASSWORD`. The camera gets its IP via **DHCP** (assigned by ap-server),
+   so the `STATIC_IP` block is optional/legacy; to pin a fixed address, add a
+   MAC reservation in ap-server instead. The MAC is printed on the serial
+   monitor at boot.
 
 2. First flash over USB (ESP32-CAM-MB plugged in):
    ```
@@ -74,7 +77,8 @@ pio run -e esp32cam_ota --target upload
   current spikes.
 - **`camera init failed`** → reseat the ribbon cable; confirm power.
 - **Can't reach `esp32cam.local`** → mDNS is flaky on some Android/Windows
-  setups; use the static IP directly.
+  setups; use the DHCP-assigned IP directly (printed on the serial monitor at
+  boot, or visible in ap-server's client list).
 - **Stream stutters** → drop resolution to VGA in the UI, or move closer to
   the AP (check the RSSI printed at boot).
 

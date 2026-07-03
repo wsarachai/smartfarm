@@ -2,7 +2,8 @@
 // AI-Thinker board, PlatformIO + Arduino. Live MJPEG stream + snapshot, LAN-only.
 //
 // Boot flow: init camera (SVGA / q12 / fb_count 2 / GRAB_LATEST)
-//            -> connect WiFi with a static IP -> start mDNS -> start HTTP servers.
+//            -> connect WiFi via DHCP (address assigned by ap-server)
+//            -> start mDNS -> start HTTP servers.
 
 #include "esp_camera.h"
 #include <WiFi.h>
@@ -87,18 +88,14 @@ static void initCamera() {
 }
 
 static void connectWiFi() {
-  IPAddress ip(STATIC_IP);
-  IPAddress gw(GATEWAY_IP);
-  IPAddress mask(SUBNET_MASK);
-  IPAddress dns1(PRIMARY_DNS);
-  IPAddress dns2(SECONDARY_DNS);
-
+  // DHCP: let ap-server assign our address (reserved band if the AP has a
+  // MAC reservation for us, otherwise a dynamic .100+ lease).
   WiFi.mode(WIFI_STA);
-  if (!WiFi.config(ip, gw, mask, dns1, dns2)) {
-    Serial.println("[wifi] static IP config failed — will use DHCP instead");
-  }
+  // Advertise our hostname BEFORE begin() so ap-server's DHCP server captures
+  // it (DHCP option 12) and labels us "esp32cam" in its client list.
+  WiFi.setHostname(MDNS_HOSTNAME);
 
-  Serial.printf("[wifi] connecting to \"%s\"", WIFI_SSID);
+  Serial.printf("[wifi] connecting to \"%s\" (DHCP)", WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   WiFi.setSleep(false);  // keep the stream responsive
 
@@ -116,8 +113,18 @@ static void connectWiFi() {
   // Safe here — signal is strong. Raise if the link ever drops.
   WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
-  Serial.printf("\n[wifi] connected, IP: %s  RSSI: %d dBm  (TX power reduced)\n",
-                WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  String mac = WiFi.macAddress();
+  Serial.println();
+  Serial.println("[wifi] connected — address obtained via DHCP from ap-server:");
+  Serial.printf("[wifi]   SSID   : %s  (RSSI %d dBm, TX power reduced)\n",
+                WIFI_SSID, WiFi.RSSI());
+  Serial.printf("[wifi]   MAC    : %s\n", mac.c_str());
+  Serial.printf("[wifi]   IP     : %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("[wifi]   Gateway: %s\n", WiFi.gatewayIP().toString().c_str());
+  Serial.printf("[wifi]   Subnet : %s\n", WiFi.subnetMask().toString().c_str());
+  Serial.printf("[wifi]   DNS    : %s\n", WiFi.dnsIP().toString().c_str());
+  Serial.printf("[wifi]   Tip: reserve MAC %s in ap-server for a fixed IP.\n",
+                mac.c_str());
 }
 
 static void setupOTA() {
@@ -263,7 +270,7 @@ void setup() {
 void loop() {
   ArduinoOTA.handle();  // must be serviced often for wireless updates to work
 
-  // Throttled link check: reconnect if WiFi drops (static IP re-applies on reconnect).
+  // Throttled link check: reconnect if WiFi drops (DHCP re-leases on reconnect).
   static uint32_t lastCheck = 0;
   if (millis() - lastCheck > 5000) {
     lastCheck = millis();

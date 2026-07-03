@@ -11,9 +11,10 @@
 #define WIFI_SSID "YourNetworkName"
 #define WIFI_PASS "YourNetworkPassword"
 
-// --- Static IP ---
-// Pick an address OUTSIDE your router's DHCP pool so nothing else grabs it.
-// Example for a 192.168.1.0/24 network whose router is 192.168.1.1:
+// --- Static IP (OPTIONAL / LEGACY) ---
+// The firmware now uses DHCP (ap-server assigns the address), so these are NOT
+// applied. Kept for reference / if you re-enable a static WiFi.config(). To pin
+// the camera to a fixed address, add a MAC reservation in ap-server instead.
 #define STATIC_IP 192, 168, 1, 50
 #define GATEWAY_IP 192, 168, 1, 1
 #define SUBNET_MASK 255, 255, 255, 0
