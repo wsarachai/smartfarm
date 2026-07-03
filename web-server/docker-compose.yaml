@@ -1,7 +1,7 @@
 services:
   web-server:
     build: .
-    image: smartfarm/web-server:latest
+    image: wsarachai/smartfarm-web-server:latest
     container_name: smartfarm-web-server
     restart: unless-stopped
 
@@ -24,4 +24,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-
