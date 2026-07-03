@@ -12,19 +12,19 @@
 // -----------------------------------------------------------------------------
 
 // --- Identity / security ---
-#define AP_SSID            "MJU-SmartFarm-AP"  // AP name (broadcast SSID)
-#define AP_PASSWORD        "password"          // WPA2-PSK, min 8 chars (empty => open)
-#define AP_CHANNEL         1                   // 1..13
-#define AP_SSID_HIDDEN     0                   // 0 = broadcast SSID, 1 = hidden
-#define AP_MAX_CONNECTIONS 5                   // max simultaneous stations (1..10)
+#define AP_SSID "MJU-SmartFarm-AP-II" // AP name (broadcast SSID)
+#define AP_PASSWORD "password"        // WPA2-PSK, min 8 chars (empty => open)
+#define AP_CHANNEL 1                  // 1..13
+#define AP_SSID_HIDDEN 0              // 0 = broadcast SSID, 1 = hidden
+#define AP_MAX_CONNECTIONS 5          // max simultaneous stations (1..10)
 
 // --- Addressing (comma-separated octets, consumed by IPAddress(...)) ---
 // Gateway is intentionally the same as the AP IP; the DHCP lease pool is
 // derived automatically starting at AP_IP + 1 (192.168.0.2 onward).
-#define AP_IP      192, 168, 0, 1
+#define AP_IP 192, 168, 0, 1
 #define AP_GATEWAY 192, 168, 0, 1
 #define AP_NETMASK 255, 255, 255, 0
 
 // --- HTTP status page ---
-#define HTTP_PORT           80  // browse to http://192.168.0.1/
-#define STATUS_REFRESH_SECS 3   // client-side meta-refresh interval
+#define HTTP_PORT 80          // browse to http://192.168.0.1/
+#define STATUS_REFRESH_SECS 3 // client-side meta-refresh interval
