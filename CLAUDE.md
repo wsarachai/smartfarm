@@ -90,3 +90,30 @@ web-server/
 - **ESP32-CAM camera feed** (`src/routes/camera.js` + `src/store/frameStore.js`): the camera firmware's PUSH mode POSTs raw `image/jpeg` to `POST /api/v1/camera/frame`; the server keeps only the **latest** frame in a single-slot in-memory buffer (no SD writes) and exposes `GET /frame.jpg` (snapshot), `GET /stream` (multipart/x-mixed-replace MJPEG relay — all viewers share the one buffer), and `GET /status`. Uses the built-in `express.raw()` — no new npm deps. Tunables: `CAMERA_MAX_FRAME_BYTES`, `CAMERA_STALE_MS`. On the camera side set `PUSH_ENABLED 1` and `PUSH_URL "http://<jetson-ip>:3000/api/v1/camera/frame"` in `include/secrets.h`.
 - Device state is in-memory only (a `Map` in `deviceStore.js`) — it resets on restart, by design, to avoid SD card wear on the Jetson.
 - Not yet verified end-to-end (no `node`/`npm`/network access in the sandbox this was built in) — run the commands above on the target machine before trusting it.
+
+# ESP32 Firmware Projects
+
+The repo also contains firmware for the field devices that talk to the web-server:
+
+- `esp-idf-iot/` — the reference **ESP-IDF** workspace (`web-server/` SoftAP+HTTP+OTA control server, `sensor-node/`, and `examples/`). GPL-3.0. The canonical smart-farm firmware; the projects below borrow its conventions.
+- `esp32cam/` — **PlatformIO / Arduino** firmware for the AI-Thinker ESP32-CAM that pushes JPEG frames to the web-server's `/api/v1/camera/frame` (see the camera notes above). Uses a gitignored `include/secrets.h` (+ `secrets.example.h`) for WiFi/OTA creds.
+- `ap-server/` — **PlatformIO / Arduino** firmware for an **ESP-WROOM-32** (`board = esp32dev`) that runs a Wi-Fi **SoftAP + DHCP server** with a live status page. It re-implements the AP + DHCP behavior of `esp-idf-iot/web-server` (which is ESP-IDF) on the Arduino framework, to match `esp32cam`'s conventions.
+
+## ap-server/
+
+```
+ap-server/
+├── platformio.ini      # env:esp32dev — espressif32 / arduino, single USB env, port auto-detect
+├── README.md           # design decisions + try-it steps
+├── .gitignore
+├── include/
+│   └── ap_config.h     # AP SSID/pass/IP/channel/max clients (committed, not secret)
+└── src/
+    └── main.cpp        # WiFi.softAPConfig + WiFi.softAP + WebServer status page
+```
+
+- **AP-only** mode (no STA uplink), WPA2. `WiFi.softAPConfig()` pins the AP IP to `192.168.0.1/24`; the Arduino-ESP32 core auto-starts a DHCP server that leases `192.168.0.2`+ to clients.
+- Defaults in `include/ap_config.h` **mirror** `esp-idf-iot/web-server/main/network/wifi_app.h` (SSID `MJU-SmartFarm-AP`, password `password`, `192.168.0.1`, channel 1, max 5 clients) so existing `sensor-node` firmware can associate unchanged. **The password is `password` — change `AP_PASSWORD` before real deployment.** Config lives in a committed header (no `secrets.h`) because a WPA2 PSK is shared with every client anyway.
+- The status page at `http://192.168.0.1/` (built-in `WebServer.h`, zero extra `lib_deps`) joins the WiFi driver's station list (`esp_wifi_ap_get_sta_list`) with the netif DHCP lease table (`esp_netif_get_sta_list`) to show each client's **MAC + leased IP**, meta-refreshing every 3s. Any path returns the status page.
+- Scope is deliberately just AP + DHCP + status page — no HTTP control UI, STA config, relay, OTA, or NVS (unlike the ESP-IDF reference).
+- Commands: `cd ap-server && pio run` (build), `pio run -t upload` (flash via USB), `pio device monitor` (serial @ 115200). Not yet compiled/flashed — no `pio` in the sandbox this was built in; build on the target machine before trusting it.
