@@ -1,0 +1,344 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>SMART FARM CONTROL CENTER</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed-dim": "#eec209",
+                    "primary-fixed-dim": "#4ae183",
+                    "surface-container": "#1e2023",
+                    "error-container": "#93000a",
+                    "on-tertiary": "#3c2f00",
+                    "on-primary": "#003919",
+                    "surface-container-low": "#1a1c1f",
+                    "on-secondary-fixed-variant": "#004b73",
+                    "secondary-fixed-dim": "#92ccff",
+                    "background": "#111316",
+                    "surface-container-highest": "#333538",
+                    "on-tertiary-fixed": "#231b00",
+                    "secondary": "#92ccff",
+                    "tertiary-container": "#d7ae00",
+                    "surface-tint": "#4ae183",
+                    "on-tertiary-container": "#544300",
+                    "outline": "#869486",
+                    "surface": "#111316",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-fixed": "#ffe084",
+                    "primary": "#54e98a",
+                    "secondary-fixed": "#cce5ff",
+                    "secondary-container": "#3398db",
+                    "on-secondary": "#003351",
+                    "inverse-on-surface": "#2f3034",
+                    "inverse-primary": "#006d37",
+                    "surface-bright": "#37393d",
+                    "on-surface-variant": "#bbcbbb",
+                    "on-background": "#e2e2e6",
+                    "on-tertiary-fixed-variant": "#574500",
+                    "on-secondary-container": "#002c47",
+                    "on-primary-container": "#005027",
+                    "primary-fixed": "#6bfe9c",
+                    "on-error": "#690005",
+                    "surface-container-high": "#282a2d",
+                    "on-primary-fixed": "#00210c",
+                    "tertiary": "#f7c919",
+                    "on-secondary-fixed": "#001d31",
+                    "primary-container": "#2ecc71",
+                    "inverse-surface": "#e2e2e6",
+                    "error": "#ffb4ab",
+                    "surface-dim": "#111316",
+                    "surface-container-lowest": "#0c0e11",
+                    "outline-variant": "#3d4a3e",
+                    "surface-variant": "#333538",
+                    "on-surface": "#e2e2e6",
+                    "on-primary-fixed-variant": "#005228"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-desktop": "32px",
+                    "container-max": "1440px",
+                    "unit": "4px",
+                    "margin-mobile": "16px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "data-mono": ["JetBrains Mono"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "display-lg": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "data-mono": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                    "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .led-pulse {
+            box-shadow: 0 0 8px currentColor;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 16px;
+        }
+        .industrial-border {
+            border-top: 1px solid #3398db;
+        }
+        body {
+            background-color: #111316;
+            color: #e2e2e6;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="font-body-md text-body-md selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-50 bg-background border-b border-outline-variant flex items-center justify-between px-margin-mobile py-unit md:px-margin-desktop">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="memory">memory</span>
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">SMART FARM CONTROL CENTER</h1>
+</div>
+<!-- Desktop Nav -->
+<nav class="hidden md:flex items-center gap-6">
+<a class="font-label-caps text-label-caps text-primary font-bold hover:bg-surface-container-high px-3 py-2 transition-transform active:scale-95" href="#">DASHBOARD</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">CAMERAS</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">IRRIGATION</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">AI ANALYTICS</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-high p-2 rounded-full transition-transform active:scale-95" data-icon="settings_input_component">settings_input_component</button>
+</div>
+</header>
+<main class="max-w-container-max mx-auto p-margin-mobile md:p-margin-desktop pb-24 md:pb-8">
+<!-- Dashboard Header -->
+<div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<span class="font-label-caps text-label-caps text-secondary-container tracking-[0.2em] mb-1 block">SYSTEM STATUS: NOMINAL</span>
+<h2 class="font-display-lg text-display-lg text-on-background">Live Operations</h2>
+</div>
+<div class="flex gap-2">
+<div class="bg-surface-container border border-outline-variant px-4 py-2 flex items-center gap-3">
+<span class="w-2.5 h-2.5 rounded-full bg-primary led-pulse"></span>
+<span class="font-data-mono text-data-mono text-on-surface">EDGE_NODE_01: ACTIVE</span>
+</div>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Zone A Telemetry -->
+<div class="md:col-span-6 lg:col-span-4 bg-surface-container border border-outline-variant p-5 industrial-border group hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-6">
+<div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">SENSOR GROUP</span>
+<h3 class="font-headline-md text-headline-md text-primary">Zone A</h3>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="sensors">sensors</span>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="thermostat">thermostat</span>
+<span class="font-body-md text-on-surface">Temperatur&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;e</span>
+</div>
+<span class="font-data-mono text-headline-sm text-on-background">30.8 °C</span>
+</div>
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="humidity_percentage">humidity_percentage</span>
+<span class="font-body-md text-on-surface">Humidity</span>
+</div>
+<span class="font-data-mono text-headline-sm text-on-background">72%</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="potted_plant">potted_plant</span>
+<span class="font-body-md text-on-surface">Soil Moisture</span>
+</div>
+<span class="font-data-mono text-headline-sm text-on-background">45%</span>
+</div>
+</div>
+</div>
+<!-- Zone B Telemetry -->
+<div class="md:col-span-6 lg:col-span-4 bg-surface-container border border-outline-variant p-5 industrial-border group hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-6">
+<div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">SENSOR GROUP</span>
+<h3 class="font-headline-md text-headline-md text-primary">Zone B</h3>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="sensors">sensors</span>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="thermostat">thermostat</span>
+<span class="font-body-md text-on-surface">Temperature</span>
+</div>
+<span class="font-data-mono text-headline-sm text-on-background">30.5 °C</span>
+</div>
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="humidity_percentage">humidity_percentage</span>
+<span class="font-body-md text-on-surface">Humidity</span>
+</div>
+<span class="font-data-mono text-headline-sm text-on-background">70%</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="potted_plant">potted_plant</span>
+<span class="font-body-md text-on-surface">Soil Moisture</span>
+</div>
+<span class="font-data-mono text-headline-sm text-on-background">35%</span>
+</div>
+</div>
+</div>
+<!-- System Hardware Controls -->
+<div class="md:col-span-12 lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+<!-- Pump Card -->
+<div class="bg-surface-container border border-outline-variant p-5 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-primary-container/20 flex items-center justify-center border border-primary/30">
+<span class="material-symbols-outlined text-primary" data-icon="water_pump">water_pump</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Main Pump</h4>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary led-pulse"></span>
+<span class="font-label-caps text-label-caps text-primary">ON</span>
+</div>
+</div>
+</div>
+<button class="bg-primary text-on-primary px-4 py-2 font-label-caps text-label-caps font-bold transition-transform active:scale-95">TOGGLE</button>
+</div>
+<!-- Camera Card -->
+<div class="bg-surface-container border border-outline-variant p-5 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-secondary-container/20 flex items-center justify-center border border-secondary/30">
+<span class="material-symbols-outlined text-secondary" data-icon="videocam">videocam</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Zone Cam 01</h4>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary led-pulse"></span>
+<span class="font-label-caps text-label-caps text-primary">ONLINE</span>
+</div>
+</div>
+</div>
+<button class="border border-secondary text-secondary px-4 py-2 font-label-caps text-label-caps font-bold hover:bg-secondary/10 transition-colors active:scale-95">VIEW</button>
+</div>
+</div>
+<!-- Visual Analytics Section -->
+<div class="md:col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant industrial-border overflow-hidden relative min-h-[300px]">
+<div class="p-5 flex justify-between items-center border-b border-outline-variant/30">
+<h3 class="font-headline-sm text-headline-sm text-on-background">Live Spectral Analysis</h3>
+<div class="flex gap-2">
+<span class="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">REAL_TIME_STREAM</span>
+<span class="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">FPS: 60.4</span>
+</div>
+</div>
+<div class="relative h-64 w-full flex items-center justify-center overflow-hidden">
+<!-- Background Animation Overlay -->
+
+<!-- Placeholder Visual -->
+<div class="relative z-10 w-full h-full p-8 flex items-end">
+<div class="w-full h-32 flex items-end gap-1">
+<div class="flex-1 bg-primary/20 border-t border-primary h-[40%] animate-pulse"></div>
+<div class="flex-1 bg-primary/20 border-t border-primary h-[60%] animate-pulse" style="animation-delay: 0.1s"></div>
+<div class="flex-1 bg-primary/20 border-t border-primary h-[55%] animate-pulse" style="animation-delay: 0.2s"></div>
+<div class="flex-1 bg-primary/20 border-t border-primary h-[80%] animate-pulse" style="animation-delay: 0.3s"></div>
+<div class="flex-1 bg-primary/20 border-t border-primary h-[70%] animate-pulse" style="animation-delay: 0.4s"></div>
+<div class="flex-1 bg-primary/20 border-t border-primary h-[45%] animate-pulse" style="animation-delay: 0.5s"></div>
+<div class="flex-1 bg-primary/20 border-t border-primary h-[90%] animate-pulse" style="animation-delay: 0.6s"></div>
+<div class="flex-1 bg-primary/20 border-t border-primary h-[65%] animate-pulse" style="animation-delay: 0.7s"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- AI Insights Card -->
+<div class="md:col-span-12 lg:col-span-4 bg-tertiary-container text-on-tertiary-container p-6 relative overflow-hidden flex flex-col justify-between">
+<div class="absolute -right-4 -top-4 opacity-10">
+<span class="material-symbols-outlined text-[120px]" data-icon="psychology">psychology</span>
+</div>
+<div>
+<span class="font-label-caps text-label-caps text-on-tertiary-container/70 mb-2 block">AI ANALYTICS ENGINE</span>
+<h3 class="font-headline-md text-headline-md font-bold mb-4">Watering Optimized</h3>
+<p class="font-body-md text-sm mb-6">Soil moisture trends suggest Zone B will require a 4-minute irrigation cycle at 04:00 AM to maintain peak cellular health.</p>
+</div>
+<div class="bg-on-tertiary/10 border border-on-tertiary/20 p-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+<span class="font-data-mono text-xs font-bold">PREDICTION CONFIDENCE: 98.4%</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface-container border-t border-outline-variant flex justify-around items-center h-16 w-full px-2">
+<button class="flex flex-col items-center justify-center text-primary font-bold active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-caps text-label-caps">DASHBOARD</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="videocam">videocam</span>
+<span class="font-label-caps text-label-caps">CAMERAS</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="water_drop">water_drop</span>
+<span class="font-label-caps text-label-caps">IRRIGATION</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span class="font-label-caps text-label-caps">AI ANALYTICS</span>
+</button>
+</nav>
+<script>
+        // Micro-interaction for sensor updates simulation
+        setInterval(() => {
+            const elements = document.querySelectorAll('.font-data-mono.text-headline-sm');
+            elements.forEach(el => {
+                const current = parseFloat(el.textContent);
+                if (!isNaN(current)) {
+                    const fluctuation = (Math.random() - 0.5) * 0.2;
+                    const newValue = (current + fluctuation).toFixed(1);
+                    if (el.textContent.includes('°C')) {
+                        el.textContent = newValue + ' °C';
+                    } else if (el.textContent.includes('%')) {
+                        el.textContent = Math.round(current + fluctuation * 5) + '%';
+                    }
+                }
+            });
+        }, 3000);
+    </script>
+
+
+</body></html>

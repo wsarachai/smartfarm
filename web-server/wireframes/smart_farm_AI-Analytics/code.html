@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Analytics | Smart Farm Control Center</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed-dim": "#eec209",
+                    "primary-fixed-dim": "#4ae183",
+                    "surface-container": "#1e2023",
+                    "error-container": "#93000a",
+                    "on-tertiary": "#3c2f00",
+                    "on-primary": "#003919",
+                    "surface-container-low": "#1a1c1f",
+                    "on-secondary-fixed-variant": "#004b73",
+                    "secondary-fixed-dim": "#92ccff",
+                    "background": "#111316",
+                    "surface-container-highest": "#333538",
+                    "on-tertiary-fixed": "#231b00",
+                    "secondary": "#92ccff",
+                    "tertiary-container": "#d7ae00",
+                    "surface-tint": "#4ae183",
+                    "on-tertiary-container": "#544300",
+                    "outline": "#869486",
+                    "surface": "#111316",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-fixed": "#ffe084",
+                    "primary": "#54e98a",
+                    "secondary-fixed": "#cce5ff",
+                    "secondary-container": "#3398db",
+                    "on-secondary": "#003351",
+                    "inverse-on-surface": "#2f3034",
+                    "inverse-surface": "#e2e2e6",
+                    "surface-bright": "#37393d",
+                    "on-surface-variant": "#bbcbbb",
+                    "on-background": "#e2e2e6",
+                    "on-tertiary-fixed-variant": "#574500",
+                    "on-secondary-container": "#002c47",
+                    "on-primary-container": "#005027",
+                    "primary-fixed": "#6bfe9c",
+                    "on-error": "#690005",
+                    "surface-container-high": "#282a2d",
+                    "on-primary-fixed": "#00210c",
+                    "tertiary": "#f7c919",
+                    "on-secondary-fixed": "#001d31",
+                    "primary-container": "#2ecc71",
+                    "error": "#ffb4ab",
+                    "surface-dim": "#111316",
+                    "surface-container-lowest": "#0c0e11",
+                    "outline-variant": "#3d4a3e",
+                    "surface-variant": "#333538",
+                    "on-surface": "#e2e2e6",
+                    "on-primary-fixed-variant": "#005228"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-desktop": "32px",
+                    "container-max": "1440px",
+                    "unit": "4px",
+                    "margin-mobile": "16px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "data-mono": ["JetBrains Mono"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "display-lg": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "data-mono": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                    "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .scan-line {
+            background: linear-gradient(to bottom, transparent 0%, #54e98a 50%, transparent 100%);
+            height: 2px;
+            width: 100%;
+            position: absolute;
+            animation: scan 3s linear infinite;
+            opacity: 0.5;
+            z-index: 10;
+        }
+        @keyframes scan {
+            0% { top: 0%; }
+            100% { top: 100%; }
+        }
+        .status-pulse {
+            animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.1); }
+        }
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 16px;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1a1d23;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #2d323b;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar -->
+<header class="bg-background dark:bg-background text-primary dark:text-primary w-full top-0 sticky z-50 border-b border-outline-variant dark:border-outline-variant">
+<div class="flex items-center justify-between px-margin-mobile md:px-margin-desktop py-unit w-full max-w-container-max mx-auto">
+<div class="flex items-center gap-3 active:scale-95 transition-transform cursor-pointer">
+<span class="material-symbols-outlined text-primary">memory</span>
+<h1 class="font-headline-sm text-headline-sm font-bold tracking-tight">SMART FARM CONTROL CENTER</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex items-center gap-6 px-4">
+<button class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors">STATUS: OPTIMAL</button>
+<button class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors">CPU: 42%</button>
+<button class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors">TEMP: 38°C</button>
+</div>
+<button class="material-symbols-outlined text-primary p-2 hover:bg-surface-container-high rounded-full transition-colors active:scale-95">settings_input_component</button>
+</div>
+</div>
+</header>
+<main class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-8 pb-24 md:pb-8">
+<!-- Page Header -->
+<div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<div class="flex items-center gap-2 text-primary font-data-mono mb-1">
+<span class="w-2 h-2 bg-primary rounded-full status-pulse"></span>
+                    NEURAL ENGINE ONLINE
+                </div>
+<h2 class="font-display-lg text-display-lg text-on-background uppercase tracking-tight">AI ANALYTICS</h2>
+</div>
+<div class="flex gap-2">
+<button class="bg-primary text-on-primary px-6 py-3 font-label-caps text-label-caps flex items-center gap-2 rounded-sm active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+                    RE-SYNCHRONIZE MODELS
+                </button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="bento-grid">
+<!-- Crop Health Analysis (Major Module) -->
+<section class="col-span-12 lg:col-span-8 bg-[#1A1D23] border border-[#2D323B] p-5 relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-full h-1 bg-secondary opacity-50"></div>
+<div class="flex justify-between items-start mb-6">
+<div>
+<span class="font-label-caps text-label-caps text-secondary block mb-1">MODULE_07</span>
+<h3 class="font-headline-md text-headline-md text-on-background">Crop Health Analysis</h3>
+</div>
+<div class="text-right">
+<span class="font-data-mono text-data-mono text-primary">LIVE_FEED_SEC_A4</span>
+<div class="text-on-surface-variant text-[12px] font-data-mono">LAT: 34.0522 | LONG: -118.2437</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Scan Visualization -->
+<div class="relative aspect-video bg-surface-container-lowest border border-outline-variant overflow-hidden group">
+<div class="scan-line"></div>
+<img class="w-full h-full object-cover grayscale brightness-50 group-hover:grayscale-0 group-hover:brightness-100 transition-all duration-700" data-alt="A high-tech infrared aerial view of a precision agriculture field. Bright neon green and yellow highlights indicate healthy crop clusters against a dark charcoal soil background. Digital data overlays with bounding boxes around specific plants and technical telemetry strings create a futuristic industrial interface aesthetic. The lighting is dark and high-contrast, emphasizing the glowing sensor data." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNapWqDctcYAcMD4dJAgVUO2EbO4WcqoL4JnsAwnYVNU0fqLzrabS1SRi5Ly4NajERzhdarvwbZrrzCtVjJzLcUhA7y1-2-fWGqMbJnaG-0m0bHaFeWNYduSb2CjSK56WFmA9cJS564kMoX7g8OylguZNxWpRz7twPIyuYEj0EfSX0wLhgZaj0Cvu4WRHQjZuMxsq4LIag8vkHdxytRue9xZgeZDLeiFZcMt37N5wah_DWM_bRYX5ZthO-hs9tmWDZzj6Z2alI5g"/>
+<!-- AI Overlays -->
+<div class="absolute inset-0 p-4 flex flex-col justify-between pointer-events-none">
+<div class="flex justify-between">
+<div class="border-l-2 border-t-2 border-primary w-8 h-8"></div>
+<div class="border-r-2 border-t-2 border-primary w-8 h-8"></div>
+</div>
+<div class="flex flex-col gap-1 items-center">
+<div class="bg-primary/20 backdrop-blur-sm border border-primary px-3 py-1 text-primary font-data-mono text-[10px]">
+                                    CHLOROPHYLL INDEX: 0.84 (OPTIMAL)
+                                </div>
+</div>
+<div class="flex justify-between">
+<div class="border-l-2 border-b-2 border-primary w-8 h-8"></div>
+<div class="border-r-2 border-b-2 border-primary w-8 h-8"></div>
+</div>
+</div>
+</div>
+<!-- Health Data -->
+<div class="flex flex-col justify-between">
+<div class="space-y-4">
+<div class="bg-surface-container-low p-4 border-l-2 border-primary">
+<div class="font-label-caps text-label-caps text-on-surface-variant">VEGETATION DENSITY</div>
+<div class="font-display-lg text-display-lg text-on-background flex items-baseline gap-2">
+                                    92<span class="text-headline-sm text-primary">%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest mt-2">
+<div class="h-full bg-primary" style="width: 92%"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 border-l-2 border-secondary">
+<div class="font-label-caps text-label-caps text-on-surface-variant">MOISTURE RETENTION</div>
+<div class="font-display-lg text-display-lg text-on-background flex items-baseline gap-2">
+                                    68<span class="text-headline-sm text-secondary">%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest mt-2">
+<div class="h-full bg-secondary" style="width: 68%"></div>
+</div>
+</div>
+</div>
+<button class="w-full border border-secondary text-secondary py-3 font-label-caps text-label-caps hover:bg-secondary/10 transition-colors mt-4">
+                            GENERATE SPECTRAL REPORT
+                        </button>
+</div>
+</div>
+</section>
+<!-- Pest Detection (Side Module) -->
+<section class="col-span-12 lg:col-span-4 bg-[#1A1D23] border border-[#2D323B] p-5 flex flex-col">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-tertiary">bug_report</span>
+<h3 class="font-headline-md text-headline-md text-on-background uppercase tracking-tight">Pest Detection</h3>
+</div>
+<div class="flex-grow space-y-4 overflow-y-auto custom-scrollbar pr-2">
+<!-- Threat Item -->
+<div class="flex items-center gap-4 p-3 bg-surface-container-highest/30 border border-outline-variant hover:border-tertiary transition-colors">
+<div class="w-16 h-16 bg-surface-container-lowest relative overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A microscopic, high-detail macro photograph of a common agricultural pest like a spider mite, rendered in a scientific scanning electron microscope style. The color palette is muted charcoal and industrial greys with a subtle tech blue highlight on the creature's exoskeleton. The lighting is sharp and clinical, typical of laboratory imaging." src="https://lh3.googleusercontent.com/aida-public/AB6AXuADK50AZ05EX37NGtiZbLDa7VUiehLVCscF5GnRlKq1AotiB-9enjxhBV3u422Dvd6J1Rnvtal7B1SvHTX2juQz0RaS58uzenb3EgGtZPj8F54irCkh2r84Y0phxgJOsQ4gTKjZnyFMbrxtDMv52MCY63abxmuJHQPY_8lUnWZb7uAsvnZQs-9cxPrXa2IT1fmJVVnYXKnD1ls2iGzcbZnrB2pFdhjtMYvqqZmrWRnBprqyDqvolCF4xX2S8mfvmHh3ix6WaYkdjg"/>
+<div class="absolute inset-0 border border-tertiary/40"></div>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between">
+<span class="font-data-mono text-[12px] text-tertiary">#ID_9011</span>
+<span class="bg-error-container text-on-error-container px-1 text-[10px] font-bold">HIGH</span>
+</div>
+<div class="text-on-background font-bold text-sm">Tetranychidae Variant</div>
+<div class="text-[11px] text-on-surface-variant font-data-mono">CONFIDENCE: 98.4%</div>
+</div>
+</div>
+<!-- Threat Item -->
+<div class="flex items-center gap-4 p-3 bg-surface-container-highest/30 border border-outline-variant">
+<div class="w-16 h-16 bg-surface-container-lowest relative overflow-hidden">
+<img class="w-full h-full object-cover grayscale opacity-50" data-alt="A close-up digital image of a leaf affected by fungal spores, shown through a high-definition multispectral camera. The spores appear as small glowing points of interest in an artificial orange color against the dark natural green of the leaf. Scientific annotations and geometric data markers are overlaid to indicate AI-driven identification." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9pt7iFJSJgsDAKKJqVUTGYI4e2hOevQuyllJYe6LlCYcfZt__f-zgLgxsJHEptRGRsEyC9bEmtHT2cHOBWbZPI-Ss0Qe_YwK571oySWfRlGNBSDVlMDECyaGy4zFxWDg9JVTafdq4kcGDL4YamQFQcM98JMTWEJLbyRwtFEuy0oqdKN5G-YjwMwEBCzhu9Wxupt-b5cnstE8vGygGSZpagjlBLBvfEZ2Jty_H6sXZFwIfAcIAHrdjbKbsnfTVBAxiJUAN2z-VjQ"/>
+</div>
+<div class="flex-grow opacity-50">
+<div class="flex justify-between">
+<span class="font-data-mono text-[12px] text-on-surface-variant">#ID_8842</span>
+<span class="bg-surface-container text-on-surface-variant px-1 text-[10px] font-bold">LOW</span>
+</div>
+<div class="text-on-background font-bold text-sm">Fungal Spore Colony</div>
+<div class="text-[11px] text-on-surface-variant font-data-mono">CONFIDENCE: 72.1%</div>
+</div>
+</div>
+<!-- Empty/Scanning State -->
+<div class="border-2 border-dashed border-outline-variant p-6 flex flex-col items-center justify-center text-center opacity-40">
+<span class="material-symbols-outlined text-4xl mb-2 animate-spin duration-[10000ms]">radar</span>
+<div class="font-label-caps text-label-caps">SCANNING QUADRANT B...</div>
+</div>
+</div>
+<div class="mt-6 pt-4 border-t border-outline-variant">
+<div class="flex justify-between mb-2">
+<span class="font-data-mono text-[12px] text-on-surface-variant">AUTO-MITIGATION</span>
+<span class="text-primary font-bold text-[12px]">ACTIVE</span>
+</div>
+<div class="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 45%"></div>
+</div>
+</div>
+</section>
+<!-- AI Engine Stats (Telemetry Chips) -->
+<section class="col-span-12 bg-[#1A1D23] border border-[#2D323B] p-5">
+<div class="flex flex-wrap gap-4 items-center justify-between">
+<div class="flex flex-wrap gap-3">
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-2 border-l-4 border-primary">
+<span class="font-label-caps text-[10px] text-on-surface-variant">GPU_CLOCK</span>
+<span class="font-data-mono text-on-background">1.85 GHz</span>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-2 border-l-4 border-secondary">
+<span class="font-label-caps text-[10px] text-on-surface-variant">MODEL_V</span>
+<span class="font-data-mono text-on-background">AGRI_CORE_4.2</span>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-2 border-l-4 border-tertiary">
+<span class="font-label-caps text-[10px] text-on-surface-variant">INFERENCE</span>
+<span class="font-data-mono text-on-background">12ms</span>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-2 border-l-4 border-error">
+<span class="font-label-caps text-[10px] text-on-surface-variant">LOG_EVENTS</span>
+<span class="font-data-mono text-on-background">4,209</span>
+</div>
+</div>
+<div class="flex items-center gap-2 font-data-mono text-[12px] text-on-surface-variant">
+<span class="w-3 h-3 bg-primary rounded-full animate-pulse"></span>
+                        SYSTEM UPTIME: 428:12:04
+                    </div>
+</div>
+</section>
+<!-- Bottom Row: Historical Insights & Processing Queue -->
+<section class="col-span-12 lg:col-span-6 bg-[#1A1D23] border border-[#2D323B] p-5">
+<h3 class="font-headline-sm text-headline-sm text-on-background mb-4 uppercase flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">trending_up</span>
+                    Historical Yield Prediction
+                </h3>
+<div class="h-48 w-full relative flex items-end justify-between gap-1 mt-6">
+<!-- Faux Bar Chart -->
+<div class="flex-grow bg-secondary/10 hover:bg-secondary/20 transition-all cursor-crosshair group relative" style="height: 40%">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-data-mono text-[10px] text-secondary">4.2t</div>
+</div>
+<div class="flex-grow bg-secondary/10 hover:bg-secondary/20 transition-all cursor-crosshair group relative" style="height: 55%">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-data-mono text-[10px] text-secondary">5.8t</div>
+</div>
+<div class="flex-grow bg-secondary/10 hover:bg-secondary/20 transition-all cursor-crosshair group relative" style="height: 48%"></div>
+<div class="flex-grow bg-secondary/10 hover:bg-secondary/20 transition-all cursor-crosshair group relative" style="height: 72%"></div>
+<div class="flex-grow bg-secondary/10 hover:bg-secondary/20 transition-all cursor-crosshair group relative" style="height: 85%"></div>
+<div class="flex-grow bg-secondary/40 border-t-2 border-secondary relative group" style="height: 94%">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 font-data-mono text-[10px] text-secondary bg-background border border-secondary px-1">PROJECTED</div>
+</div>
+</div>
+<div class="flex justify-between mt-4 font-label-caps text-[10px] text-on-surface-variant">
+<span>JAN</span><span>FEB</span><span>MAR</span><span>APR</span><span>MAY</span><span>JUN</span>
+</div>
+</section>
+<section class="col-span-12 lg:col-span-6 bg-[#1A1D23] border border-[#2D323B] p-5">
+<h3 class="font-headline-sm text-headline-sm text-on-background mb-4 uppercase flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">analytics</span>
+                    Resource Optimization
+                </h3>
+<div class="space-y-6">
+<div>
+<div class="flex justify-between text-sm mb-1">
+<span class="text-on-surface-variant font-label-caps">N-P-K BALANCE</span>
+<span class="text-primary font-data-mono">NOMINAL</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="h-2 bg-primary"></div>
+<div class="h-2 bg-primary/40"></div>
+<div class="h-2 bg-primary/20"></div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="p-3 bg-surface-container-low border border-outline-variant">
+<div class="text-[10px] font-label-caps text-on-surface-variant">WATER SAVED (MTD)</div>
+<div class="text-xl font-bold text-secondary">2.4M Liters</div>
+</div>
+<div class="p-3 bg-surface-container-low border border-outline-variant">
+<div class="text-[10px] font-label-caps text-on-surface-variant">ENERGY OFFSET</div>
+<div class="text-xl font-bold text-primary">+18.5%</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="bg-surface-container dark:bg-surface-container fixed bottom-0 w-full z-50 border-t border-outline-variant dark:border-outline-variant md:hidden">
+<div class="flex justify-around items-center h-16 w-full px-2">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">videocam</span>
+<span class="font-label-caps text-label-caps">Cameras</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">water_drop</span>
+<span class="font-label-caps text-label-caps">Irrigation</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary dark:text-primary font-bold hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">psychology</span>
+<span class="font-label-caps text-label-caps">AI Analytics</span>
+</a>
+</div>
+</nav>
+<!-- Desktop Sidebar/Nav (Hidden on Mobile) -->
+<div class="hidden md:flex fixed right-8 top-1/2 -translate-y-1/2 flex-col gap-6 z-40">
+<div class="bg-surface-container border border-outline-variant p-2 flex flex-col gap-4 rounded-full">
+<button class="p-3 bg-surface-container-highest text-primary rounded-full hover:bg-primary hover:text-on-primary transition-all">
+<span class="material-symbols-outlined">dashboard</span>
+</button>
+<button class="p-3 text-on-surface-variant rounded-full hover:bg-surface-container-highest transition-all">
+<span class="material-symbols-outlined">videocam</span>
+</button>
+<button class="p-3 text-on-surface-variant rounded-full hover:bg-surface-container-highest transition-all">
+<span class="material-symbols-outlined">water_drop</span>
+</button>
+<button class="p-3 bg-primary text-on-primary rounded-full shadow-[0_0_15px_rgba(84,233,138,0.4)]">
+<span class="material-symbols-outlined">psychology</span>
+</button>
+</div>
+</div>
+<script>
+        // Micro-interaction for re-sync simulation
+        document.querySelector('button:has(.material-symbols-outlined:contains("refresh"))')?.addEventListener('click', function() {
+            const btn = this;
+            const icon = btn.querySelector('.material-symbols-outlined');
+            icon.classList.add('animate-spin');
+            btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span> SYNCING...';
+            
+            setTimeout(() => {
+                icon.classList.remove('animate-spin');
+                btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span> SYNC COMPLETE';
+                btn.classList.replace('bg-primary', 'bg-secondary');
+                btn.classList.replace('text-on-primary', 'text-on-secondary');
+                
+                setTimeout(() => {
+                    btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">refresh</span> RE-SYNCHRONIZE MODELS';
+                    btn.classList.replace('bg-secondary', 'bg-primary');
+                    btn.classList.replace('text-on-secondary', 'text-on-primary');
+                }, 2000);
+            }, 1500);
+        });
+
+        // Console log atmospheric effect
+        console.log("%c SMART FARM AI ANALYTICS v4.2.0 ", "background: #54e98a; color: #003919; font-weight: bold; padding: 4px;");
+        console.log("Edge Inference Engine: Connected");
+        console.log("Latency: 12ms");
+    </script>
+</body></html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SMART FARM CONTROL CENTER - Live Stream</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed-dim": "#eec209",
+                    "primary-fixed-dim": "#4ae183",
+                    "surface-container": "#1e2023",
+                    "error-container": "#93000a",
+                    "on-tertiary": "#3c2f00",
+                    "on-primary": "#003919",
+                    "surface-container-low": "#1a1c1f",
+                    "on-secondary-fixed-variant": "#004b73",
+                    "secondary-fixed-dim": "#92ccff",
+                    "background": "#111316",
+                    "surface-container-highest": "#333538",
+                    "on-tertiary-fixed": "#231b00",
+                    "secondary": "#92ccff",
+                    "tertiary-container": "#d7ae00",
+                    "surface-tint": "#4ae183",
+                    "on-tertiary-container": "#544300",
+                    "outline": "#869486",
+                    "surface": "#111316",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-fixed": "#ffe084",
+                    "primary": "#54e98a",
+                    "secondary-fixed": "#cce5ff",
+                    "secondary-container": "#3398db",
+                    "on-secondary": "#003351",
+                    "inverse-on-surface": "#2f3034",
+                    "inverse-primary": "#006d37",
+                    "surface-bright": "#37393d",
+                    "on-surface-variant": "#bbcbbb",
+                    "on-background": "#e2e2e6",
+                    "on-tertiary-fixed-variant": "#574500",
+                    "on-secondary-container": "#002c47",
+                    "on-primary-container": "#005027",
+                    "primary-fixed": "#6bfe9c",
+                    "on-error": "#690005",
+                    "surface-container-high": "#282a2d",
+                    "on-primary-fixed": "#00210c",
+                    "tertiary": "#f7c919",
+                    "on-secondary-fixed": "#001d31",
+                    "primary-container": "#2ecc71",
+                    "inverse-surface": "#e2e2e6",
+                    "error": "#ffb4ab",
+                    "surface-dim": "#111316",
+                    "surface-container-lowest": "#0c0e11",
+                    "outline-variant": "#3d4a3e",
+                    "surface-variant": "#333538",
+                    "on-surface": "#e2e2e6",
+                    "on-primary-fixed-variant": "#005228"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-desktop": "32px",
+                    "container-max": "1440px",
+                    "unit": "4px",
+                    "margin-mobile": "16px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "data-mono": ["JetBrains Mono"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "display-lg": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "data-mono": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                    "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .led-pulse {
+            animation: pulse-glow 2s infinite;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; box-shadow: 0 0 8px #4ae183; }
+            50% { opacity: 0.6; box-shadow: 0 0 2px #4ae183; }
+        }
+        .scanline {
+            background: linear-gradient(to bottom, transparent 50%, rgba(74, 225, 131, 0.05) 51%);
+            background-size: 100% 4px;
+        }
+        .grid-bg {
+            background-image: radial-gradient(circle, #2D323B 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky bg-background dark:bg-background border-b border-outline-variant dark:border-outline-variant z-50">
+<div class="flex items-center justify-between px-margin-mobile py-unit w-full md:px-margin-desktop">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary dark:text-primary">memory</span>
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary dark:text-primary tracking-tight">SMART FARM CONTROL CENTER</h1>
+</div>
+<button class="active:scale-95 transition-transform hover:bg-surface-container-high dark:hover:bg-surface-container-high p-2 rounded-full">
+<span class="material-symbols-outlined text-on-surface-variant dark:text-on-surface-variant">settings_input_component</span>
+</button>
+</div>
+</header>
+<main class="max-w-container-max mx-auto p-margin-mobile md:p-margin-desktop pb-32 grid-bg min-h-screen">
+<div class="grid grid-cols-12 gap-gutter">
+<!-- Breadcrumbs / Status Bar -->
+<div class="col-span-12 flex items-center justify-between mb-4 bg-surface-container-low p-3 border border-outline-variant rounded-lg">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<div class="w-[10px] h-[10px] rounded-full bg-primary led-pulse"></div>
+<span class="font-data-mono text-label-caps text-primary uppercase">System Live</span>
+</div>
+<div class="h-4 w-px bg-outline-variant"></div>
+<div class="flex flex-col">
+<span class="text-label-caps text-on-surface-variant uppercase">Source</span>
+<span class="font-data-mono text-primary">ESP32_CAM_NODE_04</span>
+</div>
+</div>
+<div class="hidden md:flex items-center gap-6">
+<div class="text-right">
+<span class="text-label-caps text-on-surface-variant block uppercase">Latency</span>
+<span class="font-data-mono text-on-surface">42ms</span>
+</div>
+<div class="text-right">
+<span class="text-label-caps text-on-surface-variant block uppercase">Resolution</span>
+<span class="font-data-mono text-on-surface">1280x720</span>
+</div>
+</div>
+</div>
+<!-- Main Viewport Column -->
+<div class="col-span-12 lg:col-span-9 space-y-gutter">
+<!-- Large MJPEG Viewport -->
+<div class="relative bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden aspect-video group">
+<!-- Placeholder for ESP32-CAM Stream -->
+<div class="absolute inset-0 bg-cover bg-center" data-alt="A high-definition wide-angle security camera view of a modern greenhouse interior. Rows of lush green leafy vegetables are illuminated by precise purple and blue LED grow lights. The atmosphere is tech-heavy with visible irrigation pipes and sensor probes. The lighting is crisp and industrial with a professional dark mode interface aesthetic, featuring high contrast and technical precision." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCJrkb-5aT42NKO6XaI0NU5BF1iMAnIbvJpMsv8zoW6hx0EzUQhP2uh_n32TG4wuzP5RFPcKc94t25414z7E-d93XiqiMTmePbaN_p3Hazp-FrI0I3QLiFrfqJNaQ69yaxysXt9zHDlB9Q-9fb7M5MnJ3kZckzjKb79NB2NB9L-8KvxbcabzDfhUrKdV8sGlwFeKJnjOhU0736wT19Y5xdrba-eQkU981P2Y2qOU_bP3sQTXc4lMZBWOQf5gjgf8_Yjq3MMg9xP4A')"></div>
+<!-- Overlay Effects -->
+<div class="absolute inset-0 scanline opacity-30 pointer-events-none"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+<!-- HUD Elements -->
+<div class="absolute top-4 left-4 flex flex-col gap-1">
+<div class="bg-black/40 backdrop-blur-md px-2 py-1 border-l-2 border-primary">
+<span class="font-data-mono text-label-caps text-white">REC 00:24:51</span>
+</div>
+<div class="bg-black/40 backdrop-blur-md px-2 py-1 border-l-2 border-secondary">
+<span class="font-data-mono text-label-caps text-white">CAM_ID: SOUTH_WING_02</span>
+</div>
+</div>
+<div class="absolute bottom-4 right-4 flex gap-2">
+<button class="bg-black/60 hover:bg-black/80 text-white p-2 border border-white/20 rounded backdrop-blur-sm transition-colors">
+<span class="material-symbols-outlined text-[20px]">fullscreen</span>
+</button>
+</div>
+</div>
+<!-- Action Controls -->
+<div class="flex flex-wrap gap-gutter">
+<button class="flex-1 min-w-[200px] flex items-center justify-center gap-3 py-4 px-6 bg-primary text-on-primary font-headline-sm rounded hover:brightness-110 active:scale-95 transition-all">
+<span class="material-symbols-outlined">photo_camera</span>
+<span>Capture Image</span>
+</button>
+<button class="flex-1 min-w-[200px] flex items-center justify-center gap-3 py-4 px-6 border border-secondary text-secondary font-headline-sm rounded hover:bg-secondary/10 active:scale-95 transition-all">
+<span class="material-symbols-outlined">videocam</span>
+<span>Record Snapshot</span>
+</button>
+</div>
+</div>
+<!-- Sidebar Telemetry Column -->
+<div class="col-span-12 lg:col-span-3 space-y-gutter">
+<!-- Camera Stats Card -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-5 border-t-2 border-t-secondary">
+<h3 class="font-headline-sm text-on-surface mb-4">Node Metrics</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-center border-b border-outline-variant pb-2">
+<span class="text-label-caps text-on-surface-variant uppercase">Signal Strength</span>
+<span class="font-data-mono text-primary">-54 dBm</span>
+</div>
+<div class="flex justify-between items-center border-b border-outline-variant pb-2">
+<span class="text-label-caps text-on-surface-variant uppercase">CPU Temp</span>
+<span class="font-data-mono text-tertiary">42.8°C</span>
+</div>
+<div class="flex justify-between items-center border-b border-outline-variant pb-2">
+<span class="text-label-caps text-on-surface-variant uppercase">Frame Rate</span>
+<span class="font-data-mono text-on-surface">24 FPS</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-label-caps text-on-surface-variant uppercase">Power Supply</span>
+<span class="font-data-mono text-primary">3.3V [OK]</span>
+</div>
+</div>
+</div>
+<!-- Recent Captures -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-5">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-headline-sm text-on-surface">Recent Captures</h3>
+<span class="text-label-caps text-on-primary-container bg-primary-container px-2 py-0.5 rounded">NEW</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<div class="aspect-square bg-surface-container-highest border border-outline-variant relative overflow-hidden group cursor-pointer">
+<img class="object-cover w-full h-full grayscale group-hover:grayscale-0 transition-all" data-alt="A macro shot of hydroponic lettuce roots and high-tech irrigation sensors in a professional farming environment, industrial aesthetic, moody lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCgYfM14vHLV6Y4tFzCLCyuWie_b8CSEjK9tt6UTj1NAV3E8SyBMlziMr7H7gtVdoW71ywZz6QoiWJyU18XobZgMdfYbzbIOiibIIBKhCpZ2nBsP3lBWkOLodG3spPluM_JWTEhXYV2NPnF1t82yilpJPUWvFg4gkB2z9dRfwH4RZQngkt2uENnGjdMDNqdE0wSAjUu57n7f27hKRz_D8RlEp7iqv-eMktV5QngL2YJjfd4ibGHYsrzohDyuCwb2LLGW_xnGIdmLw"/>
+<div class="absolute bottom-1 left-1 bg-black/60 px-1">
+<span class="font-data-mono text-[8px] text-white">14:02</span>
+</div>
+</div>
+<div class="aspect-square bg-surface-container-highest border border-outline-variant relative overflow-hidden group cursor-pointer">
+<img class="object-cover w-full h-full grayscale group-hover:grayscale-0 transition-all" data-alt="Technical monitoring view of industrial farm equipment, sensor arrays and cable management, circuit green accents, deep blacks." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJjSqtizyXe56I2Rc4spsPQ44nGtn_NGZwGs1LsOTLhatEd-nXLhYS8bpelWLQY8jbaBC3I0ThSMp8JRom7PDeNZOhRPOCR52Hx-rnznE9fq6nN7VhFWECL4S51nbzsR2TsU40XcIBf-Wt-uAPNcpPDL3Z4NkORvRhUT_04Zm-gVhHAYs6_-jPVvI5M-6fTpzaaRIfIZelPUWbptj1br7--HVbVyQ4MUvZTMQ82rMQ6x770lj_hvfjpxF2H9erC8h2OdlXwpm9ig"/>
+<div class="absolute bottom-1 left-1 bg-black/60 px-1">
+<span class="font-data-mono text-[8px] text-white">13:45</span>
+</div>
+</div>
+</div>
+<button class="w-full mt-4 py-2 text-label-caps text-secondary border border-secondary/20 hover:bg-secondary/5 transition-colors uppercase">View Gallery</button>
+</div>
+<!-- Sensor Chip List -->
+<div class="space-y-2">
+<div class="bg-surface-container-low border border-outline-variant p-3 flex items-center gap-3">
+<div class="w-1 h-8 bg-primary"></div>
+<div>
+<p class="text-label-caps text-on-surface-variant">TEMP_SENS_01</p>
+<p class="font-data-mono text-on-surface">24.5°C</p>
+</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant p-3 flex items-center gap-3">
+<div class="w-1 h-8 bg-tertiary"></div>
+<div>
+<p class="text-label-caps text-on-surface-variant">HUM_SENS_04</p>
+<p class="font-data-mono text-on-surface">62.1%</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 bg-surface-container dark:bg-surface-container border-t border-outline-variant dark:border-outline-variant md:hidden">
+<div class="flex justify-around items-center h-16 w-full px-2">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary dark:text-primary font-bold hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">videocam</span>
+<span class="font-label-caps text-label-caps">Cameras</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">water_drop</span>
+<span class="font-label-caps text-label-caps">Irrigation</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-label-caps text-label-caps">AI Analytics</span>
+</a>
+</div>
+</nav>
+<!-- Desktop Navigation Cluster (Injected for completeness based on design system rules) -->
+<div class="hidden md:flex fixed left-0 top-16 bottom-0 w-20 bg-surface-container-low border-r border-outline-variant flex-col items-center py-8 gap-8">
+<div class="group relative">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary cursor-pointer transition-colors">dashboard</span>
+<div class="absolute left-full ml-4 px-2 py-1 bg-surface-bright text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity">Dashboard</div>
+</div>
+<div class="group relative">
+<span class="material-symbols-outlined text-primary cursor-pointer">videocam</span>
+<div class="absolute left-full ml-4 px-2 py-1 bg-surface-bright text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity">Cameras</div>
+</div>
+<div class="group relative">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary cursor-pointer transition-colors">water_drop</span>
+<div class="absolute left-full ml-4 px-2 py-1 bg-surface-bright text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity">Irrigation</div>
+</div>
+<div class="group relative">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary cursor-pointer transition-colors">psychology</span>
+<div class="absolute left-full ml-4 px-2 py-1 bg-surface-bright text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity">AI Analytics</div>
+</div>
+</div>
+<script>
+        // Micro-interactions for button feedback
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('click', function() {
+                const icon = this.querySelector('.material-symbols-outlined');
+                if(icon) {
+                    icon.classList.add('scale-125');
+                    setTimeout(() => icon.classList.remove('scale-125'), 200);
+                }
+            });
+        });
+
+        // Atmospheric clock update
+        function updateSystemClock() {
+            // Simulated latency fluctuation
+            const latencyElements = document.querySelectorAll('.font-data-mono');
+            latencyElements.forEach(el => {
+                if(el.innerText.includes('ms')) {
+                    const current = parseInt(el.innerText);
+                    const variance = Math.floor(Math.random() * 5) - 2;
+                    el.innerText = `${Math.max(38, Math.min(60, current + variance))}ms`;
+                }
+            });
+        }
+        setInterval(updateSystemClock, 3000);
+    </script>
+</body></html>
