@@ -4,6 +4,7 @@ import StatusHeader from './components/StatusHeader';
 import Dashboard from './features/devices/Dashboard';
 import CamerasPage from './features/camera/CamerasPage';
 import IrrigationPage from './features/irrigation/IrrigationPage';
+import AnalyticsPage from './features/analytics/AnalyticsPage';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         />
         <Route path="/cameras" element={<CamerasPage />} />
         <Route path="/irrigation" element={<IrrigationPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
