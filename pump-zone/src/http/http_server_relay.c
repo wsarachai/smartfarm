@@ -16,12 +16,13 @@ static const char TAG[] = "http_server_relay";
 // Sends {"relay_status":"ON|OFF"} reflecting the current relay state.
 static esp_err_t send_relay_status(httpd_req_t *req)
 {
+  const bool relay_on = relay_get_state();
   char json_response[40];
   int written = snprintf(
       json_response,
       sizeof(json_response),
       "{\"relay_status\":\"%s\"}",
-      relay_get_state() ? "ON" : "OFF");
+      relay_on ? "ON" : "OFF");
 
   if (written < 0 || written >= (int)sizeof(json_response))
   {
@@ -29,6 +30,11 @@ static esp_err_t send_relay_status(httpd_req_t *req)
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "JSON encoding error");
     return ESP_FAIL;
   }
+
+  ESP_LOGI(TAG, "Responding to %s %s with relay_status=%s",
+           req->method == HTTP_GET ? "GET" : (req->method == HTTP_POST ? "POST" : "HTTP"),
+           req->uri,
+           relay_on ? "ON" : "OFF");
 
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_hdr(req, "Cache-Control", "no-cache, no-store, must-revalidate");
@@ -38,14 +44,14 @@ static esp_err_t send_relay_status(httpd_req_t *req)
 // GET /api/v1/relay -> current pump state.
 static esp_err_t http_server_relay_get_handler(httpd_req_t *req)
 {
-  ESP_LOGI(TAG, "Relay status requested");
+  ESP_LOGI(TAG, "GET %s requested", req->uri);
   return send_relay_status(req);
 }
 
 // POST /api/v1/relay  body: {"state":"on"|"off"} -> switches the pump.
 static esp_err_t http_server_relay_post_handler(httpd_req_t *req)
 {
-  ESP_LOGI(TAG, "Relay control requested");
+  ESP_LOGI(TAG, "POST %s requested (content_len=%d)", req->uri, req->content_len);
 
   if (req->content_len <= 0 || req->content_len >= RELAY_BODY_MAX_LEN)
   {
@@ -69,6 +75,7 @@ static esp_err_t http_server_relay_post_handler(httpd_req_t *req)
     return ESP_FAIL;
   }
   body[received] = '\0';
+  ESP_LOGI(TAG, "POST body: %s", body);
 
   cJSON *root = cJSON_Parse(body);
   if (root == NULL)
@@ -106,6 +113,7 @@ static esp_err_t http_server_relay_post_handler(httpd_req_t *req)
 
   cJSON_Delete(root);
 
+  ESP_LOGI(TAG, "Applying relay state: %s", enable ? "ON" : "OFF");
   esp_err_t err = relay_set(enable);
   if (err != ESP_OK)
   {

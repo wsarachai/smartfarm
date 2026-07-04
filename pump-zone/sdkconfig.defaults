@@ -20,3 +20,7 @@ CONFIG_FREERTOS_HZ=100
 
 # INFO-level logging.
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# Browser requests can include long headers (cookies, sec-ch-ua, etc.).
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=1024

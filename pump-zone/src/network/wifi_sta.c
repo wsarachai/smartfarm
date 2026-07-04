@@ -1,5 +1,6 @@
 #include "wifi_sta.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_event.h"
@@ -106,6 +107,35 @@ bool wifi_sta_is_connected(void)
   return s_connected;
 }
 
+esp_err_t wifi_sta_get_ip_str(char *out, size_t out_len)
+{
+  if (out == NULL || out_len == 0)
+  {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+  if (sta_netif == NULL)
+  {
+    return ESP_ERR_NOT_FOUND;
+  }
+
+  esp_netif_ip_info_t ip_info;
+  esp_err_t err = esp_netif_get_ip_info(sta_netif, &ip_info);
+  if (err != ESP_OK)
+  {
+    return err;
+  }
+
+  int written = snprintf(out, out_len, IPSTR, IP2STR(&ip_info.ip));
+  if (written <= 0 || written >= (int)out_len)
+  {
+    return ESP_FAIL;
+  }
+
+  return ESP_OK;
+}
+
 // ---------------------------------------------------------------------------
 // Event handler (runs in the WiFi/IP event loop task)
 // ---------------------------------------------------------------------------
@@ -157,7 +187,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
   else if (base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
   {
     ip_event_got_ip_t *e = (ip_event_got_ip_t *)event_data;
-    ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&e->ip_info.ip));
+    ESP_LOGI(TAG,
+             "Got IP: " IPSTR " | Netmask: " IPSTR " | Gateway: " IPSTR,
+             IP2STR(&e->ip_info.ip),
+             IP2STR(&e->ip_info.netmask),
+             IP2STR(&e->ip_info.gw));
     s_connected = true;
     xEventGroupSetBits(s_event_group, WIFI_CONNECTED_BIT);
     app_send_message(APP_MSG_WIFI_CONNECTED_GOT_IP);
