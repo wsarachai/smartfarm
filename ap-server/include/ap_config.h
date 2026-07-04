@@ -2,10 +2,8 @@
 // -----------------------------------------------------------------------------
 // Access Point configuration for ap-server.
 //
-// This is a standalone AP ("MJU-SmartFarm-AP-II" @ 192.168.1.1) — a distinct
-// network from the ESP-IDF reference in ../esp-idf-iot/web-server (which uses
-// "MJU-SmartFarm-AP" @ 192.168.0.1). Clients join THIS AP; sensor-node firmware
-// pointed at the reference AP will not reach it.
+// This is a standalone AP ("MJU-SmartFarm-AP-II" @ 192.168.0.1). Clients join
+// THIS AP; sensor-node firmware pointed at the reference AP will not reach it.
 //
 // None of this is truly secret: a WPA2 pre-shared key is shared with every
 // client that joins, so it lives in a committed header (no secrets.h needed).
@@ -21,8 +19,8 @@
 
 // --- Addressing (comma-separated octets, consumed by IPAddress(...)) ---
 // Gateway is intentionally the same as the AP IP.
-#define AP_IP      192, 168, 1, 1
-#define AP_GATEWAY 192, 168, 1, 1
+#define AP_IP      192, 168, 0, 1
+#define AP_GATEWAY 192, 168, 0, 1
 #define AP_NETMASK 255, 255, 255, 0
 
 // --- Addressing scheme (served by our custom DHCP server, not the built-in) ---
@@ -39,5 +37,5 @@
 #define RESERVATION_LABEL_MAXLEN 24 // friendly-name length (excl. NUL)
 
 // --- HTTP status page ---
-#define HTTP_PORT           80  // browse to http://192.168.1.1/
+#define HTTP_PORT           80  // browse to http://192.168.0.1/
 #define STATUS_REFRESH_SECS 5   // client-side meta-refresh interval

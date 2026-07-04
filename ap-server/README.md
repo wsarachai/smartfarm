@@ -3,8 +3,8 @@
 A PlatformIO/Arduino project that turns an **ESP-WROOM-32** (ESP32-D0WDQ6) into a
 Wi-Fi **Access Point** with a **custom DHCP server** and a **web UI** for managing
 **MAC→IP reservations**. Devices you register (the "server group") always receive
-their assigned address in `192.168.1.2`–`.99`; everyone else gets a dynamic lease
-from `192.168.1.100`+. Reservations persist across reboots in NVS.
+their assigned address in `192.168.0.2`–`.99`; everyone else gets a dynamic lease
+from `192.168.0.100`+. Reservations persist across reboots in NVS.
 
 It grew out of re-implementing the AP behavior of
 [`../esp-idf-iot/web-server`](../esp-idf-iot/web-server) (ESP-IDF) on the
@@ -17,9 +17,9 @@ It grew out of re-implementing the AP behavior of
    on UDP port 67, polled from `loop()`. The built-in ESP DHCP server has **no
    MAC-reservation API**, so a custom one was the only way to pin specific devices
    to specific IPs.
-   - **Reserved MAC** → its fixed address in `192.168.1.2`–`.99`.
-   - **Unknown MAC** → a dynamic lease from `192.168.1.100`–`.109`.
-3. Serves a **web UI** at **http://192.168.1.1/**:
+   - **Reserved MAC** → its fixed address in `192.168.0.2`–`.99`.
+   - **Unknown MAC** → a dynamic lease from `192.168.0.100`–`.109`.
+3. Serves a **web UI** at **http://192.168.0.1/**:
    - a live **dashboard** (auto-refreshing) of connected clients and current
      reservations;
    - an **`/edit` form** to add/update a reservation (label + MAC + IP), with a
@@ -44,10 +44,10 @@ header (no `secrets.h`; a WPA2 PSK is shared with every client anyway). This is 
 |---|---|
 | SSID | `MJU-SmartFarm-AP-II` |
 | Password | `password` (WPA2-PSK — **change before real use**) |
-| AP IP / gateway | `192.168.1.1` |
+| AP IP / gateway | `192.168.0.1` |
 | Netmask | `255.255.255.0` |
-| Reserved band (static) | `192.168.1.2`–`.99` (MAC reservations) |
-| Dynamic DHCP pool | `192.168.1.100`–`.109` (`DHCP_POOL_FIRST_HOST` + max − 1) |
+| Reserved band (static) | `192.168.0.2`–`.99` (MAC reservations) |
+| Dynamic DHCP pool | `192.168.0.100`–`.109` (`DHCP_POOL_FIRST_HOST` + max − 1) |
 | Lease time | 7200 s (`DHCP_LEASE_SECS`) |
 | Max reservations | 32 (`MAX_RESERVATIONS`) |
 | Channel | 1 |
@@ -68,7 +68,7 @@ set `upload_port` / `monitor_port` in `platformio.ini`.
 ## Try it
 
 1. Flash, open the serial monitor, join Wi-Fi **`MJU-SmartFarm-AP-II`** (password
-   `password`), and browse to **http://192.168.1.1/**.
+   `password`), and browse to **http://192.168.0.1/**.
 2. Your device shows up under **Connected clients** with a dynamic `.100+` IP.
 3. Click **Reserve**, pick an IP in `.2`–`.99` (the form defaults to the next free
    one), optionally name it, and **Save**.
@@ -76,7 +76,7 @@ set `upload_port` / `monitor_port` in `platformio.ini`.
    Reboot the AP and the reservation is still there.
 
 > **First-boot tip:** because this replaces the DHCP server, during initial
-> hardware testing set one laptop to a **static** `192.168.1.50` so you can always
+> hardware testing set one laptop to a **static** `192.168.0.50` so you can always
 > reach the UI even if DHCP misbehaves.
 
 ## Project layout

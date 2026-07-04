@@ -226,7 +226,7 @@ static void sendReply(uint8_t msgType, const uint8_t *chaddr, uint32_t xidNet,
   }
   out[pos++] = 255;                          // end
 
-  // Subnet-directed broadcast (e.g. 192.168.1.255): reaches every associated
+  // Subnet-directed broadcast (e.g. 192.168.0.255): reaches every associated
   // station at L2 with no ARP, and — unlike 255.255.255.255 — has a route via
   // the AP netif, so lwIP actually sends it.
   s_udp.beginPacket(s_broadcast, kClientPort);
