@@ -5,7 +5,7 @@ const CAMERA_SETTINGS_KEY = "smartfarm.camera-settings.v1";
 
 export const DEFAULT_CAMERA_SETTINGS = {
   sourceMode: "custom",
-  streamUrl: "http://192.168.1.3:81/stream",
+  streamUrl: "http://192.168.0.3:81/stream",
   snapshotUrl: "/api/v1/camera/frame.jpg",
 };
 
