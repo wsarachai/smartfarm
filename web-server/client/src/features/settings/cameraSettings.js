@@ -3,8 +3,23 @@ import { useEffect, useState } from "react";
 export const CAMERA_SETTINGS_EVENT = "smartfarm:camera-settings-changed";
 const CAMERA_SETTINGS_KEY = "smartfarm.camera-settings.v1";
 
+// Same-origin PUSH relay: replays the JPEG frames the camera POSTs to the
+// server (frameStore). Reliable — it only needs the camera->server push, which
+// always works — but it's paced by the camera's PUSH_INTERVAL_MS. This is the
+// default the Cameras + Irrigation pages stream from.
+export const RELAY_STREAM_URL = "/api/v1/camera/stream";
+
+// Same-origin LIVE proxy: the server PULLS the camera's :81 MJPEG and fans it
+// out (see src/store/cameraLive.js) — smoother/higher-fps, but it requires the
+// server to reach the camera's :81 directly. Used as a fallback; make it the
+// primary only where the server can pull the camera stream.
+export const RELAY_LIVE_URL = "/api/v1/camera/live";
+
 export const DEFAULT_CAMERA_SETTINGS = {
-  sourceMode: "custom",
+  // Default to relay so a fresh install streams through the web-server proxy.
+  // Custom mode points the browser straight at a camera URL (needs direct
+  // reachability); use it only when viewing from the camera's own network.
+  sourceMode: "relay",
   streamUrl: "http://192.168.0.3:81/stream",
   snapshotUrl: "/api/v1/camera/frame.jpg",
 };

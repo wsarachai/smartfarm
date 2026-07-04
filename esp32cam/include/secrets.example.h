@@ -27,7 +27,7 @@
 // Set PUSH_ENABLED to 0 to disable. Coexists with the on-demand /capture endpoint.
 #define PUSH_ENABLED     0
 #define PUSH_URL         "http://192.168.1.20:3000/ingest"
-#define PUSH_INTERVAL_MS 10000
+#define PUSH_INTERVAL_MS 2000
 
 // --- Rolling SD-card save --- also write each pushed frame to the microSD card,
 // deleting the oldest files when free space drops below SD_MIN_FREE_KB so the

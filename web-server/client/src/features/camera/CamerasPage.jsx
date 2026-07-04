@@ -8,7 +8,8 @@ import { selectAllDevices } from "../devices/devicesSlice";
 import { metricMeta, formatMetricValue } from "../../lib/metricMeta";
 import Led from "../../components/Led";
 import {
-  DEFAULT_CAMERA_SETTINGS,
+  RELAY_STREAM_URL,
+  RELAY_LIVE_URL,
   isSameOriginUrl,
   useCameraSettings,
 } from "../settings/cameraSettings";
@@ -245,14 +246,13 @@ function SensorChips({ devices }) {
 export default function CamerasPage() {
   const cameraSettings = useCameraSettings();
   const usingRelay = cameraSettings.sourceMode !== "custom";
-  const streamUrl = usingRelay
-    ? DEFAULT_CAMERA_SETTINGS.streamUrl
-    : cameraSettings.streamUrl;
-  const fallbackStreamUrl = usingRelay
-    ? cameraSettings.streamUrl
-    : DEFAULT_CAMERA_SETTINGS.streamUrl;
+  // Relay mode streams same-origin through the web-server: the reliable PUSH
+  // relay first, falling back to the LIVE pull proxy. Custom mode points the
+  // browser straight at the configured camera URL (needs direct reachability).
+  const streamUrl = usingRelay ? RELAY_STREAM_URL : cameraSettings.streamUrl;
+  const fallbackStreamUrl = usingRelay ? RELAY_LIVE_URL : RELAY_STREAM_URL;
   const snapshotUrl = usingRelay
-    ? DEFAULT_CAMERA_SETTINGS.snapshotUrl
+    ? "/api/v1/camera/frame.jpg"
     : cameraSettings.snapshotUrl;
   const canFetchSnapshot = isSameOriginUrl(snapshotUrl);
 
@@ -390,7 +390,7 @@ export default function CamerasPage() {
               viewportRef={viewportRef}
               streamUrl={streamUrl}
               fallbackStreamUrl={fallbackStreamUrl}
-              forceStream={!usingRelay}
+              forceStream
             />
             <button
               type="button"

@@ -1,5 +1,6 @@
 const express = require('express');
 const { setFrame, getFrame, subscribe, status } = require('../store/frameStore');
+const cameraLive = require('../store/cameraLive');
 
 const router = express.Router();
 
@@ -61,6 +62,14 @@ router.get('/stream', (req, res) => {
 
   const unsubscribe = subscribe(send);
   req.on('close', unsubscribe);
+});
+
+// Live MJPEG proxy: the web-server pulls the camera's own :81 stream and relays
+// it same-origin, so browsers that can't reach the camera directly still see
+// live video (and the camera only serves one connection). See cameraLive.js.
+router.get('/live', (req, res) => {
+  cameraLive.addViewer(res);
+  req.on('close', () => cameraLive.removeViewer(res));
 });
 
 router.get('/status', (req, res) => {

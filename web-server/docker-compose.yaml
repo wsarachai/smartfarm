@@ -13,6 +13,9 @@ services:
       PORT: 3000
       CAMERA_MAX_FRAME_BYTES: 2097152
       CAMERA_STALE_MS: 15000
+      # Source for the live MJPEG proxy (GET /api/v1/camera/live). The server
+      # pulls this and fans it out to viewers. Set to the camera's own stream.
+      CAMERA_STREAM_URL: http://192.168.0.3:81/stream
 
     healthcheck:
       test:
