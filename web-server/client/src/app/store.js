@@ -7,6 +7,7 @@ import historyReducer from '../features/history/historySlice';
 import { healthApi } from '../features/health/healthApi';
 import analyticsReducer from '../features/analytics/analyticsSlice';
 import { analyticsApi } from '../features/analytics/analyticsApi';
+import { pumpApi } from '../features/pump/pumpApi';
 
 export const store = configureStore({
   reducer: {
@@ -18,12 +19,14 @@ export const store = configureStore({
     [cameraApi.reducerPath]: cameraApi.reducer,
     [healthApi.reducerPath]: healthApi.reducer,
     [analyticsApi.reducerPath]: analyticsApi.reducer,
+    [pumpApi.reducerPath]: pumpApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       devicesApi.middleware,
       cameraApi.middleware,
       healthApi.middleware,
-      analyticsApi.middleware
+      analyticsApi.middleware,
+      pumpApi.middleware
     ),
 });

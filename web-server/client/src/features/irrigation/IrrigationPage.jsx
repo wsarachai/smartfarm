@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Fan, Clock, Activity } from 'lucide-react';
-import { useGetDevicesQuery, useSendCommandMutation } from '../devices/devicesApi';
+import { useGetDevicesQuery } from '../devices/devicesApi';
+import { usePumpSettings } from '../pump/pumpSettings';
+import { useGetPumpStatusQuery, useSetPumpMutation } from '../pump/pumpApi';
 import { selectAllDevices } from '../devices/devicesSlice';
 import { selectHistory } from '../history/historySlice';
 import { freshness } from '../../lib/freshness';
@@ -77,18 +80,27 @@ function PumpVisual({ mode, running }) {
 }
 
 function PumpControlPanel({ pump }) {
-  const [sendCommand, { isLoading }] = useSendCommandMutation();
+  const settings = usePumpSettings();
+  const [setPump, { isLoading }] = useSetPumpMutation();
+  // Hardware is on/off only (no auto engine yet), so mode is a local UI concept,
+  // not sent to the pump or mirrored. Default MANUAL so the buttons are live.
+  const [mode, setMode] = useState('manual');
 
   if (!pump) {
     return <EmptyPanel>NO PUMP REPORTING (device_id: {PUMP_ID})</EmptyPanel>;
   }
 
-  const mode = pump.metrics?.mode === 'manual' ? 'manual' : 'auto';
   const running = Boolean(pump.metrics?.running);
   const status = freshness(pump.lastSeen);
 
-  const setMode = (next) => sendCommand({ device_id: PUMP_ID, action: { mode: next } });
-  const togglePump = (next) => sendCommand({ device_id: PUMP_ID, action: { running: next } });
+  // Drives the real pump through the same relay + auto-off path as the dashboard
+  // card; the backend mirrors the result back into this 'main-pump' device.
+  const togglePump = (next) =>
+    setPump({
+      target: settings.url,
+      state: next ? 'on' : 'off',
+      autoOffMinutes: settings.autoOffMinutes,
+    });
 
   return (
     <div className="bg-surface-container p-5 border border-outline-variant relative overflow-hidden">
@@ -281,7 +293,11 @@ function NodeSensorsTable({ node }) {
 }
 
 export default function IrrigationPage() {
+  const pumpSettings = usePumpSettings();
   useGetDevicesQuery(undefined, { pollingInterval: POLL_INTERVAL_MS });
+  // Poll the real pump so its state stays mirrored into the store (as main-pump)
+  // while this page is open — even when the dashboard's pump card isn't mounted.
+  useGetPumpStatusQuery(pumpSettings.url, { pollingInterval: POLL_INTERVAL_MS });
   const devices = useSelector(selectAllDevices);
   const historyPoints = useSelector(selectHistory);
 

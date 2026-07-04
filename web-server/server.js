@@ -7,6 +7,7 @@ const devicesRouter = require('./src/routes/devices');
 const healthRouter = require('./src/routes/health');
 const cameraRouter = require('./src/routes/camera');
 const analyticsRouter = require('./src/routes/analytics');
+const pumpRouter = require('./src/routes/pump');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +21,7 @@ app.use('/api/v1/devices', devicesRouter);
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/camera', cameraRouter);
 app.use('/api/v1/analytics', analyticsRouter);
+app.use('/api/v1/pump', pumpRouter);
 
 app.use(express.static(CLIENT_BUILD_DIR));
 
