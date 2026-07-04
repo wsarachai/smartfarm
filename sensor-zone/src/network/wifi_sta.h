@@ -6,7 +6,7 @@
 // Target AP credentials and web-server host/port live in secrets.h
 // (gitignored). Copy include/secrets.example.h -> include/secrets.h and fill
 // in your values. Provides: WIFI_STA_AP_SSID, WIFI_STA_AP_PASSWORD,
-// WIFI_SERVER_HOST, WIFI_SERVER_PORT.
+// WIFI_SERVER_HOST, WIFI_SERVER_PORT, DEVICE_ID.
 #include "secrets.h"
 
 /**

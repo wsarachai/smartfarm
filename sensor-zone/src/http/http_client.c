@@ -5,7 +5,6 @@
 
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "esp_mac.h"
 #include "rgb_led.h"
 #include "wifi_sta.h"
 
@@ -19,39 +18,16 @@
 
 static const char *TAG = "http_client";
 
-static char s_device_id[32] = {0};
-static bool s_device_id_initialized = false;
+// Telemetry device_id comes from secrets.h (DEVICE_ID) so the dashboard shows a
+// friendly name (e.g. "zone-a") instead of the raw MAC. Falls back to a generic
+// id only if an older secrets.h predates this field.
+#ifndef DEVICE_ID
+#define DEVICE_ID "sensor-zone"
+#endif
 
 static const char *http_client_get_device_id(void)
 {
-    if (s_device_id_initialized)
-    {
-        return s_device_id;
-    }
-
-    uint8_t base_mac[6] = {0};
-    esp_err_t err = esp_efuse_mac_get_default(base_mac);
-    if (err != ESP_OK)
-    {
-        ESP_LOGW(TAG, "Failed to read base MAC: %s", esp_err_to_name(err));
-        snprintf(s_device_id, sizeof(s_device_id), "esp32-unknown");
-    }
-    else
-    {
-        snprintf(s_device_id,
-                 sizeof(s_device_id),
-                 "esp32-%02X%02X%02X%02X%02X%02X",
-                 base_mac[0],
-                 base_mac[1],
-                 base_mac[2],
-                 base_mac[3],
-                 base_mac[4],
-                 base_mac[5]);
-    }
-
-    s_device_id_initialized = true;
-    ESP_LOGI(TAG, "Device ID: %s", s_device_id);
-    return s_device_id;
+    return DEVICE_ID;
 }
 
 esp_err_t http_client_post_sensor_data(float temperature, float humidity, float soil_moisture)

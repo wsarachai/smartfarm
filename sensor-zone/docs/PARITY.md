@@ -16,7 +16,7 @@ The port deliberately changed both:
 
 | | Legacy (ESP-IDF) | New (PlatformIO) |
 |---|---|---|
-| Endpoint | `http://192.168.0.1:80/sensor-update` | `http://192.168.1.2:3000/api/v1/telemetry` |
+| Endpoint | `http://192.168.0.1:80/sensor-update` | `http://192.168.0.2:3000/api/v1/telemetry` |
 | Body shape | flat: `{"device_id":...,"temperature":T,"humidity":H,"soil_moisture":S}` | metrics-nested: `{"device_id":...,"metrics":{"temperature":T,"humidity":H,"soil_moisture":S}}` |
 | Timestamp | (none) | omitted by device; server stamps it |
 

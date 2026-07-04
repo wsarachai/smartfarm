@@ -134,7 +134,7 @@ sensor-zone/
 ├── .gitignore
 ├── docs/PARITY.md         # legacy-vs-new telemetry parity procedure
 ├── include/
-│   ├── secrets.h          # gitignored — SSID/password/host/port (current topology)
+│   ├── secrets.h          # gitignored — SSID/password/host/port/device_id (current topology)
 │   └── secrets.example.h  # committed placeholder template
 ├── src/                   # flattened verbatim port of esp-idf-iot/sensor-node/main/
 │   ├── main.c  main.h  task_settings.h
@@ -154,7 +154,7 @@ sensor-zone/
 - **Why the pioarduino platform fork:** the code needs **IDF ≥ 5.2** (`ADC_ATTEN_DB_12` + `esp_adc/adc_oneshot`), which mainline `platformio/espressif32` doesn't ship. `platformio.ini` pins `https://github.com/pioarduino/platform-espressif32.git#53.03.13` (Arduino core 3.1.3 / **IDF 5.3.2**), matching the legacy IDF 5.3.1.
 - **Layout:** the legacy `main/` is a *single* IDF component with subfolders, so it's flattened verbatim into `src/` with one adapted `src/CMakeLists.txt` (no `lib/` / `components/` split).
 - **GPIO map (preserved exactly from the legacy build):** DHT22 data `GPIO32` (bit-banged); soil moisture `ADC1_CH6` = `GPIO34` @ `ADC_ATTEN_DB_12` (DRY 2800 mV → 0%, WET 1200 mV → 100%); RGB status LED via LEDC on `GPIO25/26/27` (active-high, 5 kHz, 8-bit, ch 0/1/2, timer 0); onboard status LED `GPIO2` (active-low, 500 ms blink). No I2C/SPI in use.
-- **Telemetry contract changed on purpose:** the legacy firmware POSTed a *flat* body to the old ESP-IDF web-server (`192.168.0.1:80/sensor-update`). This port targets the **Node web-server** (`192.168.1.2:3000/api/v1/telemetry`), which **requires** a `metrics{}` object (else HTTP 400), so `http_client.c` nests the readings: `{"device_id":"…","metrics":{"temperature":…,"humidity":…,"soil_moisture":…}}` (timestamp omitted — no RTC; the server stamps it). Because the HTTP body deliberately differs from the legacy binary, **parity is verified on the physical-pin readings** (serial-log diff via `tools/parity_diff.py`), not on the wire payload.
+- **Telemetry contract changed on purpose:** the legacy firmware POSTed a *flat* body to the old ESP-IDF web-server (`192.168.0.1:80/sensor-update`). This port targets the **Node web-server** (`192.168.0.2:3000/api/v1/telemetry`), which **requires** a `metrics{}` object (else HTTP 400), so `http_client.c` nests the readings: `{"device_id":"…","metrics":{"temperature":…,"humidity":…,"soil_moisture":…}}` (timestamp omitted — no RTC; the server stamps it). Because the HTTP body deliberately differs from the legacy binary, **parity is verified on the physical-pin readings** (serial-log diff via `tools/parity_diff.py`), not on the wire payload.
 - Commands: `cd sensor-zone && cp include/secrets.example.h include/secrets.h` (fill creds) → `pio run` / `pio run -t upload` / `pio device monitor` (115200) / `pio test -e native`. **Not yet compiled or hardware-verified** — the first `pio run` pulls the pioarduino platform + IDF 5.3.2 (slow, one-time); confirm `ADC_ATTEN_DB_12` resolves before trusting it.
 
 ## pump-zone/

@@ -3,6 +3,7 @@
 #define SECRETS_H
 #define WIFI_STA_AP_SSID     "YOUR_AP_SSID"
 #define WIFI_STA_AP_PASSWORD "YOUR_AP_PASSWORD"
-#define WIFI_SERVER_HOST     "192.168.1.2"
+#define WIFI_SERVER_HOST     "192.168.0.2"
 #define WIFI_SERVER_PORT     3000
+#define DEVICE_ID            "zone-a"       // this node's telemetry id (shown on the dashboard)
 #endif // SECRETS_H
