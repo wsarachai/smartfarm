@@ -27,10 +27,9 @@ viewable in any browser.
    cp include/secrets.example.h include/secrets.h
    ```
    Edit `include/secrets.h` — set `WIFI_SSID`, `WIFI_PASS`, and an
-   `OTA_PASSWORD`. The camera gets its IP via **DHCP** (assigned by ap-server),
-   so the `STATIC_IP` block is optional/legacy; to pin a fixed address, add a
-   MAC reservation in ap-server instead. The MAC is printed on the serial
-   monitor at boot.
+   `OTA_PASSWORD`. The camera gets its IP via **DHCP** (assigned by ap-server);
+   to pin a fixed address, add a MAC reservation in ap-server instead. The MAC
+   is printed on the serial monitor at boot.
 
 2. First flash over USB (ESP32-CAM-MB plugged in):
    ```

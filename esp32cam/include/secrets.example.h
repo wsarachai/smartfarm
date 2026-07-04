@@ -11,15 +11,10 @@
 #define WIFI_SSID "YourNetworkName"
 #define WIFI_PASS "YourNetworkPassword"
 
-// --- Static IP (OPTIONAL / LEGACY) ---
-// The firmware now uses DHCP (ap-server assigns the address), so these are NOT
-// applied. Kept for reference / if you re-enable a static WiFi.config(). To pin
-// the camera to a fixed address, add a MAC reservation in ap-server instead.
-#define STATIC_IP 192, 168, 1, 50
-#define GATEWAY_IP 192, 168, 1, 1
-#define SUBNET_MASK 255, 255, 255, 0
-#define PRIMARY_DNS 192, 168, 1, 1
-#define SECONDARY_DNS 8, 8, 8, 8
+// --- Addressing ---
+// The firmware uses DHCP; ap-server assigns the address. To pin the camera to a
+// fixed address, add a MAC->IP reservation for this board in ap-server's web UI
+// (http://192.168.0.1/edit) — do NOT hard-code a static IP here.
 
 // --- mDNS hostname --- reachable as http://<hostname>.local/ on supporting OSes.
 #define MDNS_HOSTNAME "esp32cam"

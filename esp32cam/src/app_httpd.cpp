@@ -27,8 +27,14 @@ static httpd_handle_t stream_httpd = NULL;  // port 81: MJPEG stream
 static int led_intensity = 0;  // 0 (off) .. 255 (full)
 
 static void setupLedFlash() {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+  // Arduino-ESP32 core v3 uses ledcAttach(pin, freq, resolution).
+  ledcAttach(LED_GPIO_NUM, 5000, 8);      // 5 kHz, 8-bit duty (0..255)
+#else
+  // Arduino-ESP32 core v2 uses channel-based setup + pin attach.
   ledcSetup(LED_LEDC_CHANNEL, 5000, 8);   // 5 kHz, 8-bit duty (0..255)
   ledcAttachPin(LED_GPIO_NUM, LED_LEDC_CHANNEL);
+#endif
   ledcWrite(LED_LEDC_CHANNEL, led_intensity);  // start off
 }
 
