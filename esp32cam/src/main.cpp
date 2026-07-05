@@ -14,6 +14,18 @@
 #include "secrets.h"
 #include "camera_pins.h"
 
+// v2 health telemetry defaults — override in secrets.h. TELEMETRY_URL empty
+// disables the health POST, so an older secrets.h still compiles and runs.
+#ifndef DEVICE_ID
+#define DEVICE_ID "esp32cam"
+#endif
+#ifndef FW_VERSION
+#define FW_VERSION "2.0.0"
+#endif
+#ifndef TELEMETRY_URL
+#define TELEMETRY_URL ""
+#endif
+
 #if SD_SAVE_ENABLED
 #include "FS.h"
 #include "SD_MMC.h"
@@ -255,6 +267,29 @@ static void pushSnapshot() {
   }
   esp_camera_fb_return(fb);
 }
+
+// v2: report device health to the hub's generic telemetry endpoint so the
+// camera shows up as a normal device card (heap/rssi/uptime/fw). Watching heap
+// and uptime trend is how the hub catches a degrading board before it locks up.
+static void pushTelemetry() {
+  if (strlen(TELEMETRY_URL) == 0) return;  // disabled
+  char body[256];
+  snprintf(body, sizeof(body),
+           "{\"device_id\":\"%s\",\"metrics\":{"
+           "\"free_heap\":%u,\"rssi\":%ld,\"uptime_s\":%lu,\"fw_version\":\"%s\"}}",
+           DEVICE_ID, (unsigned)ESP.getFreeHeap(), (long)WiFi.RSSI(),
+           (unsigned long)(millis() / 1000UL), FW_VERSION);
+
+  WiFiClient client;
+  HTTPClient http;
+  if (http.begin(client, TELEMETRY_URL)) {
+    http.addHeader("Content-Type", "application/json");
+    int code = http.POST((uint8_t *)body, strlen(body));
+    if (code > 0) Serial.printf("[telem] POST %s -> %d\n", TELEMETRY_URL, code);
+    else          Serial.printf("[telem] POST failed: %s\n", http.errorToString(code).c_str());
+    http.end();
+  }
+}
 #endif
 
 void setup() {
@@ -321,6 +356,7 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED && millis() - lastPush >= PUSH_INTERVAL_MS) {
     lastPush = millis();
     pushSnapshot();
+    pushTelemetry();
   }
 #endif
 

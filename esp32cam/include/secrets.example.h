@@ -19,6 +19,12 @@
 // --- mDNS hostname --- reachable as http://<hostname>.local/ on supporting OSes.
 #define MDNS_HOSTNAME "esp32cam"
 
+// --- v2 health telemetry --- POST heap/rssi/uptime/fw to the hub each cycle so
+// the camera appears as a device card. Leave TELEMETRY_URL empty to disable.
+#define DEVICE_ID     "esp32cam"
+#define FW_VERSION    "2.0.0"
+#define TELEMETRY_URL "http://192.168.1.20:3000/api/v1/telemetry"
+
 // --- OTA --- password required to push firmware over WiFi.
 // MUST match `upload_flags = --auth=...` for the esp32cam_ota env in platformio.ini.
 #define OTA_PASSWORD "change-me-ota-pass"

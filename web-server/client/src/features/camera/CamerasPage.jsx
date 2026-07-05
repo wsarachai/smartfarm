@@ -44,6 +44,16 @@ function withCacheBust(url) {
   return `${url}${sep}t=${Date.now()}`;
 }
 
+function fmtUptime(s) {
+  if (s == null) return "—";
+  const sec = Number(s);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${sec}s`;
+}
+
 function sourceLabel(mode, streamUrl) {
   if (mode === "relay") return "ESP32-CAM (relay)";
   try {
@@ -237,7 +247,7 @@ function HistoryScrubber({ frames, selectedSeq, isLive, onScrub, onLive }) {
 }
 
 // --- Node metrics (real fields only) ---------------------------------------
-function NodeMetrics({ status, ageMs, bytes, clients }) {
+function NodeMetrics({ status, ageMs, bytes, clients, health }) {
   const rows = [
     {
       k: "Status",
@@ -257,6 +267,24 @@ function NodeMetrics({ status, ageMs, bytes, clients }) {
     },
     { k: "Viewers", v: String(clients ?? 0), cls: "text-on-surface" },
   ];
+
+  // Real firmware telemetry (esp32cam device card) — only rows the camera reports.
+  const h = health || {};
+  if (h.rssi != null)
+    rows.push({ k: "RSSI", v: `${h.rssi} dBm`, cls: "text-on-surface" });
+  if (h.free_heap != null)
+    rows.push({
+      k: "Free Heap",
+      v: `${(Number(h.free_heap) / 1024).toFixed(0)} KB`,
+      cls: "text-on-surface",
+    });
+  if (h.uptime_s != null)
+    rows.push({ k: "Uptime", v: fmtUptime(h.uptime_s), cls: "text-on-surface" });
+  if (h.fw_version)
+    rows.push({ k: "Firmware", v: String(h.fw_version), cls: "text-on-surface" });
+
+  const hasTelemetry = h.rssi != null || h.free_heap != null;
+
   return (
     <div className="panel rounded-lg p-5 border-t-2 border-t-secondary">
       <h3 className="font-headline-sm text-headline-sm text-on-surface mb-4">
@@ -277,9 +305,11 @@ function NodeMetrics({ status, ageMs, bytes, clients }) {
           </div>
         ))}
       </div>
-      <p className="mt-4 font-data-mono text-[10px] text-on-surface-variant/70">
-        RSSI / CPU temp / FPS need firmware telemetry (not yet reported).
-      </p>
+      {!hasTelemetry && (
+        <p className="mt-4 font-data-mono text-[10px] text-on-surface-variant/70">
+          Awaiting firmware health telemetry…
+        </p>
+      )}
     </div>
   );
 }
@@ -341,6 +371,8 @@ export default function CamerasPage() {
   const { online, hasFrame, ageMs, bytes, clients } =
     useSelector(selectCameraStatus);
   const devices = useSelector(selectAllDevices);
+  const camHealth =
+    devices.find((d) => d.device_id === "esp32cam")?.metrics || {};
 
   const status = usingRelay
     ? !hasFrame
@@ -547,6 +579,7 @@ export default function CamerasPage() {
             ageMs={displayAgeMs}
             bytes={displayBytes}
             clients={displayClients}
+            health={camHealth}
           />
           <SensorChips devices={devices} />
         </div>
