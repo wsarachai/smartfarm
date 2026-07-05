@@ -1,5 +1,12 @@
 const express = require('express');
-const { setFrame, getFrame, subscribe, status } = require('../store/frameStore');
+const {
+  setFrame,
+  getFrame,
+  getFrameBySeq,
+  listFrames,
+  subscribe,
+  status,
+} = require('../store/frameStore');
 
 const router = express.Router();
 
@@ -35,6 +42,26 @@ router.post(
 router.get('/frame.jpg', (req, res) => {
   const frame = getFrame();
   if (!frame) return res.status(503).json({ error: 'no frame received yet' });
+  res.set('Content-Type', 'image/jpeg');
+  res.set('Cache-Control', 'no-store');
+  res.send(frame.buf);
+});
+
+// Ring history metadata (newest first) for the dashboard timeline scrubber.
+// Buffers are not included — poll this, then fetch /frames/:seq for the pixels.
+router.get('/frames', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ frames: listFrames(), capacity: status(STALE_MS).ringCapacity });
+});
+
+// One historical frame by monotonic seq. 404 once it has rotated out of the ring.
+router.get('/frames/:seq', (req, res) => {
+  const seq = Number(req.params.seq);
+  if (!Number.isInteger(seq)) {
+    return res.status(400).json({ error: 'seq must be an integer' });
+  }
+  const frame = getFrameBySeq(seq);
+  if (!frame) return res.status(404).json({ error: 'frame not in ring (evicted or never existed)' });
   res.set('Content-Type', 'image/jpeg');
   res.set('Cache-Control', 'no-store');
   res.send(frame.buf);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { Camera, Maximize2, ExternalLink, Users } from "lucide-react";
+import { Maximize2, ExternalLink, Users, Download, Radio } from "lucide-react";
 import { useGetCameraStatusQuery } from "./cameraApi";
 import { selectCameraStatus } from "./cameraSlice";
 import { useGetDevicesQuery } from "../devices/devicesApi";
@@ -14,7 +14,8 @@ import {
 } from "../settings/cameraSettings";
 
 const STATUS_POLL_MS = 5000;
-const MAX_CAPTURES = 6;
+const FRAMES_POLL_MS = 5000;
+const STRIP_MAX = 10;
 
 function tsName() {
   const d = new Date();
@@ -24,6 +25,18 @@ function tsName() {
 
 function ageLabel(ms) {
   return ms == null ? "—" : `${Math.round(ms / 1000)}s ago`;
+}
+
+function timeLabel(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
 }
 
 function withCacheBust(url) {
@@ -42,6 +55,8 @@ function sourceLabel(mode, streamUrl) {
 }
 
 // --- Live viewport ----------------------------------------------------------
+// Shows the live slideshow (streamUrl) unless `overrideSrc` is set — when the
+// user scrubs history, the parent passes a specific frame URL to freeze on.
 function LiveViewport({
   status,
   label,
@@ -50,24 +65,35 @@ function LiveViewport({
   viewportRef,
   streamUrl,
   fallbackStreamUrl,
+  overrideSrc,
   forceStream,
 }) {
   const [imgError, setImgError] = useState(false);
   const [activeStreamUrl, setActiveStreamUrl] = useState(streamUrl);
-  const hasFrame = forceStream || status !== "offline";
+  const hasFrame = overrideSrc || forceStream || status !== "offline";
 
   useEffect(() => {
     setImgError(false);
     setActiveStreamUrl(streamUrl);
   }, [streamUrl]);
 
+  useEffect(() => {
+    setImgError(false);
+  }, [overrideSrc]);
+
   const handleError = () => {
+    if (overrideSrc) {
+      setImgError(true);
+      return;
+    }
     if (fallbackStreamUrl && fallbackStreamUrl !== activeStreamUrl) {
       setActiveStreamUrl(fallbackStreamUrl);
       return;
     }
     setImgError(true);
   };
+
+  const src = overrideSrc || activeStreamUrl;
 
   return (
     <div
@@ -76,8 +102,8 @@ function LiveViewport({
     >
       {hasFrame && !imgError ? (
         <img
-          src={activeStreamUrl}
-          alt="ESP32-CAM live stream"
+          src={src}
+          alt="ESP32-CAM"
           className="absolute inset-0 w-full h-full object-contain bg-black"
           onError={handleError}
         />
@@ -108,6 +134,103 @@ function LiveViewport({
         <span className="font-data-mono text-label-caps text-white">
           {clients ?? 0} · {ageLabel(ageMs)}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// --- Timeline scrubber (server-backed history over the RAM ring) ------------
+function HistoryScrubber({ frames, selectedSeq, isLive, onScrub, onLive }) {
+  const count = frames.length;
+  if (count === 0) {
+    return (
+      <div className="panel rounded-lg p-4">
+        <div className="flex justify-between items-center mb-1">
+          <h3 className="font-headline-sm text-headline-sm text-on-surface">
+            History
+          </h3>
+          <span className="font-label-caps text-label-caps text-on-surface-variant">
+            RING
+          </span>
+        </div>
+        <p className="font-data-mono text-xs text-on-surface-variant">
+          No frames in history yet — waiting for the camera to push.
+        </p>
+      </div>
+    );
+  }
+
+  const liveIdx = count - 1;
+  const idx = isLive
+    ? liveIdx
+    : Math.max(0, frames.findIndex((f) => f.seq === selectedSeq));
+  const sel = frames[idx];
+
+  // A light thumbnail strip: up to STRIP_MAX evenly-spaced frames for "scent".
+  const stripCount = Math.min(STRIP_MAX, count);
+  const strip = [];
+  for (let i = 0; i < stripCount; i++) {
+    const fi = Math.round((i * (count - 1)) / Math.max(1, stripCount - 1));
+    strip.push({ f: frames[fi], fi });
+  }
+
+  return (
+    <div className="panel rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-headline-sm text-headline-sm text-on-surface">
+          History
+        </h3>
+        <div className="flex items-center gap-2">
+          <span className="font-data-mono text-xs text-on-surface-variant">
+            {isLive ? "LIVE" : `REPLAY · ${timeLabel(sel.receivedAt)}`}
+          </span>
+          <button
+            type="button"
+            onClick={onLive}
+            disabled={isLive}
+            className="flex items-center gap-1 border border-primary text-primary px-3 py-1 font-label-caps text-label-caps rounded hover:bg-primary/10 disabled:opacity-40 transition-colors"
+          >
+            <Radio size={12} />
+            LIVE
+          </button>
+        </div>
+      </div>
+
+      <input
+        type="range"
+        min={0}
+        max={liveIdx}
+        value={idx}
+        onChange={(e) => onScrub(Number(e.target.value), frames)}
+        className="w-full accent-primary"
+        aria-label="Scrub camera history"
+      />
+
+      <div className="flex gap-1 overflow-x-auto">
+        {strip.map(({ f, fi }) => (
+          <button
+            key={f.seq}
+            type="button"
+            onClick={() => onScrub(fi, frames)}
+            title={timeLabel(f.receivedAt)}
+            className={`shrink-0 border overflow-hidden ${
+              f.seq === sel.seq ? "border-primary" : "border-outline-variant"
+            }`}
+          >
+            <img
+              src={`/api/v1/camera/frames/${f.seq}`}
+              alt=""
+              loading="lazy"
+              className="h-12 w-16 object-cover grayscale"
+            />
+          </button>
+        ))}
+      </div>
+
+      <div className="flex justify-between font-data-mono text-[10px] text-on-surface-variant">
+        <span>{timeLabel(frames[0].receivedAt)}</span>
+        <span>{count} frames</span>
+        <span>{timeLabel(frames[liveIdx].receivedAt)}</span>
       </div>
     </div>
   );
@@ -161,50 +284,6 @@ function NodeMetrics({ status, ageMs, bytes, clients }) {
   );
 }
 
-// --- Recent captures (client-side session gallery) -------------------------
-function RecentCaptures({ captures }) {
-  return (
-    <div className="panel rounded-lg p-5">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="font-headline-sm text-headline-sm text-on-surface">
-          Recent Captures
-        </h3>
-        <span className="font-label-caps text-label-caps text-on-surface-variant">
-          SESSION
-        </span>
-      </div>
-      {captures.length === 0 ? (
-        <p className="font-data-mono text-xs text-on-surface-variant">
-          No captures yet — hit “Capture Image”.
-        </p>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          {captures.map((c) => (
-            <a
-              key={c.id}
-              href={c.url}
-              target="_blank"
-              rel="noreferrer"
-              className="aspect-square bg-surface-container-highest border border-outline-variant relative overflow-hidden group"
-            >
-              <img
-                src={c.url}
-                alt={`capture ${c.time}`}
-                className="object-cover w-full h-full grayscale group-hover:grayscale-0 transition-all"
-              />
-              <div className="absolute bottom-1 left-1 bg-black/60 px-1">
-                <span className="font-data-mono text-[8px] text-white">
-                  {c.time}
-                </span>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // --- Sensor chips (real devices) -------------------------------------------
 function SensorChips({ devices }) {
   const chips = [];
@@ -245,9 +324,6 @@ function SensorChips({ devices }) {
 export default function CamerasPage() {
   const cameraSettings = useCameraSettings();
   const usingRelay = cameraSettings.sourceMode !== "custom";
-  // Relay mode streams same-origin through the web-server: the reliable PUSH
-  // relay first, falling back to the LIVE pull proxy. Custom mode points the
-  // browser straight at the configured camera URL (needs direct reachability).
   const streamUrl = usingRelay ? RELAY_STREAM_URL : cameraSettings.streamUrl;
   // camera-v2: /live is retired, so relay mode has no secondary source (it shows
   // NO SIGNAL on error). Custom mode can still fall back to the slideshow relay.
@@ -273,64 +349,90 @@ export default function CamerasPage() {
         ? "online"
         : "stale"
     : "online";
-  const label = usingRelay
-    ? status === "online"
-      ? "LIVE"
-      : status === "stale"
-        ? "STALE"
-        : "OFFLINE"
-    : "EXTERNAL";
   const sourceName = sourceLabel(cameraSettings.sourceMode, streamUrl);
   const displayAgeMs = usingRelay ? ageMs : null;
   const displayBytes = usingRelay ? bytes : 0;
   const displayClients = usingRelay ? clients : null;
 
+  // --- Server-backed history (RAM ring) -----------------------------------
+  const [frames, setFrames] = useState([]); // oldest-first: { seq, receivedAt, bytes }
+  const [selectedSeq, setSelectedSeq] = useState(null); // null = live (newest)
+
+  useEffect(() => {
+    if (!usingRelay) {
+      setFrames([]);
+      setSelectedSeq(null);
+      return undefined;
+    }
+    let active = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/v1/camera/frames");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!active) return;
+        // API returns newest-first; scrubber wants oldest-first (left=old).
+        const list = (data.frames || []).slice().reverse();
+        setFrames(list);
+        // If the frame we were parked on rotated out of the ring, snap to live.
+        setSelectedSeq((prev) =>
+          prev != null && !list.some((f) => f.seq === prev) ? null : prev,
+        );
+      } catch {
+        /* keep last-known history on a transient fetch error */
+      }
+    };
+    load();
+    const id = setInterval(load, FRAMES_POLL_MS);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [usingRelay]);
+
+  const isLive = selectedSeq == null;
+  const overrideSrc =
+    !isLive && usingRelay ? `/api/v1/camera/frames/${selectedSeq}` : null;
+
+  const onScrub = (idx, list) => {
+    const liveIdx = list.length - 1;
+    setSelectedSeq(idx >= liveIdx ? null : list[idx].seq);
+  };
+  const onLive = () => setSelectedSeq(null);
+
+  const label = usingRelay
+    ? !isLive
+      ? "REPLAY"
+      : status === "online"
+        ? "LIVE"
+        : status === "stale"
+          ? "STALE"
+          : "OFFLINE"
+    : "EXTERNAL";
+
   const viewportRef = useRef(null);
-  const [captures, setCaptures] = useState([]);
   const [busy, setBusy] = useState(false);
 
-  // Revoke all object URLs on unmount to avoid leaking blobs.
-  const capturesRef = useRef(captures);
-  capturesRef.current = captures;
-  useEffect(
-    () => () => capturesRef.current.forEach((c) => URL.revokeObjectURL(c.url)),
-    [],
-  );
-
-  const capture = async (download) => {
+  // Download the current snapshot straight to disk (no in-app gallery — history
+  // is server-backed now).
+  const downloadCurrent = async () => {
     setBusy(true);
     try {
       if (!canFetchSnapshot) {
-        window.open(
-          withCacheBust(snapshotUrl),
-          "_blank",
-          "noopener,noreferrer",
-        );
+        window.open(withCacheBust(snapshotUrl), "_blank", "noopener,noreferrer");
         return;
       }
-
       const res = await fetch(withCacheBust(snapshotUrl));
       if (!res.ok) throw new Error(`snapshot ${res.status}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const name = tsName();
-      const time = new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      setCaptures((prev) => {
-        const next = [{ id: name, url, time }, ...prev];
-        next.slice(MAX_CAPTURES).forEach((c) => URL.revokeObjectURL(c.url));
-        return next.slice(0, MAX_CAPTURES);
-      });
-      if (download) {
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${name}.jpg`;
-        a.click();
-      }
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${tsName()}.jpg`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
-      // No frame available yet — keep the UI quiet; the viewport already shows NO SIGNAL.
+      // No frame available yet — keep quiet; the viewport already shows NO SIGNAL.
     } finally {
       setBusy(false);
     }
@@ -391,6 +493,7 @@ export default function CamerasPage() {
               viewportRef={viewportRef}
               streamUrl={streamUrl}
               fallbackStreamUrl={fallbackStreamUrl}
+              overrideSrc={overrideSrc}
               forceStream
             />
             <button
@@ -403,15 +506,25 @@ export default function CamerasPage() {
             </button>
           </div>
 
+          {usingRelay && (
+            <HistoryScrubber
+              frames={frames}
+              selectedSeq={selectedSeq}
+              isLive={isLive}
+              onScrub={onScrub}
+              onLive={onLive}
+            />
+          )}
+
           <div className="flex flex-wrap gap-gutter">
             <button
               type="button"
-              onClick={() => capture(true)}
+              onClick={downloadCurrent}
               disabled={busy || status === "offline"}
               className="flex-1 min-w-[200px] flex items-center justify-center gap-3 py-4 px-6 bg-primary text-on-primary font-headline-sm rounded hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
             >
-              <Camera size={20} />
-              <span>Capture Image</span>
+              <Download size={20} />
+              <span>Download current frame</span>
             </button>
             <a
               href={snapshotUrl}
@@ -435,7 +548,6 @@ export default function CamerasPage() {
             bytes={displayBytes}
             clients={displayClients}
           />
-          <RecentCaptures captures={captures} />
           <SensorChips devices={devices} />
         </div>
       </div>
