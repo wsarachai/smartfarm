@@ -7,8 +7,13 @@ const router = express.Router();
 // Reject anything bigger than a UXGA JPEG could plausibly be, so a runaway
 // client can't balloon memory. Tunable via env for higher-res sensors.
 const MAX_FRAME_BYTES = Number(process.env.CAMERA_MAX_FRAME_BYTES) || 2 * 1024 * 1024; // 2 MB
-// How long since the last frame before we call the camera "stale" vs "live".
-const STALE_MS = Number(process.env.CAMERA_STALE_MS) || 15000;
+// The v2 camera pushes on a duty cycle (default 60s), so the liveness window has
+// to be derived from that cadence — a fixed 15s would read every snapshot camera
+// as permanently offline. stale = factor x interval tolerates one dropped push
+// but flips to STALE after ~2 missed in a row.
+const SNAPSHOT_INTERVAL_MS = Number(process.env.CAMERA_SNAPSHOT_INTERVAL_MS) || 60000;
+const STALE_FACTOR = Number(process.env.CAMERA_STALE_FACTOR) || 2.5;
+const STALE_MS = Math.round(SNAPSHOT_INTERVAL_MS * STALE_FACTOR);
 const BOUNDARY = 'smartfarmframe';
 
 // ESP32-CAM PUSH target: firmware POSTs one raw JPEG per request (see its
