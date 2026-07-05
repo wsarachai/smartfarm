@@ -8,18 +8,27 @@
 // MJPEG viewers subscribe and are handed the same shared Buffer, so N browsers
 // cost no extra frame memory.
 
-const RING_SIZE = Math.max(1, Number(process.env.CAMERA_RING_SIZE) || 90);
+let capacity = Math.max(1, Number(process.env.CAMERA_RING_SIZE) || 90);
 
 let seqCounter = 0;
 let latest = null; // { seq, buf, bytes, receivedAt }
-const ring = []; // FIFO, oldest first, length <= RING_SIZE
+const ring = []; // FIFO, oldest first, length <= capacity
 const subscribers = new Set(); // (frame) => void, one per live MJPEG client
+
+// Runtime-adjustable ring size (driven by cameraConfig). Shrinking evicts the
+// oldest frames immediately so memory tracks the new capacity.
+function setCapacity(n) {
+  const next = Math.max(1, Math.floor(Number(n)) || capacity);
+  capacity = next;
+  while (ring.length > capacity) ring.shift();
+  return capacity;
+}
 
 function setFrame(buf) {
   seqCounter += 1;
   latest = { seq: seqCounter, buf, bytes: buf.length, receivedAt: Date.now() };
   ring.push(latest);
-  while (ring.length > RING_SIZE) ring.shift(); // evict oldest past capacity
+  while (ring.length > capacity) ring.shift(); // evict oldest past capacity
   for (const send of subscribers) {
     try {
       send(latest);
@@ -65,7 +74,7 @@ function status(staleMs) {
       receivedAt: null,
       clients: subscribers.size,
       ringSize: ring.length,
-      ringCapacity: RING_SIZE,
+      ringCapacity: capacity,
     };
   }
   const ageMs = Date.now() - latest.receivedAt;
@@ -77,8 +86,16 @@ function status(staleMs) {
     receivedAt: new Date(latest.receivedAt).toISOString(),
     clients: subscribers.size,
     ringSize: ring.length,
-    ringCapacity: RING_SIZE,
+    ringCapacity: capacity,
   };
 }
 
-module.exports = { setFrame, getFrame, getFrameBySeq, listFrames, subscribe, status, RING_SIZE };
+module.exports = {
+  setFrame,
+  getFrame,
+  getFrameBySeq,
+  listFrames,
+  subscribe,
+  status,
+  setCapacity,
+};

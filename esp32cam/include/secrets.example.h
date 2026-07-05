@@ -25,6 +25,10 @@
 #define FW_VERSION    "2.0.0"
 #define TELEMETRY_URL "http://192.168.1.20:3000/api/v1/telemetry"
 
+// --- v2 config pull --- GET the hub's camera config each cycle and apply deltas
+// (interval, resolution, quality, enable). Leave empty to keep compile-time defaults.
+#define CONFIG_URL    "http://192.168.1.20:3000/api/v1/camera/config"
+
 // --- OTA --- password required to push firmware over WiFi.
 // MUST match `upload_flags = --auth=...` for the esp32cam_ota env in platformio.ini.
 #define OTA_PASSWORD "change-me-ota-pass"

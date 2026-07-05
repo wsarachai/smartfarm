@@ -10,6 +10,7 @@
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 #include "secrets.h"
 #include "camera_pins.h"
@@ -25,6 +26,14 @@
 #ifndef TELEMETRY_URL
 #define TELEMETRY_URL ""
 #endif
+#ifndef CONFIG_URL
+#define CONFIG_URL ""
+#endif
+
+// Runtime state pulled from the hub's /config each cycle (camera-v2). Seeded
+// from the compile-time default, then overridden by server config.
+static uint32_t g_snapshotIntervalMs = PUSH_INTERVAL_MS;
+static bool     g_enabled            = true;
 
 #if SD_SAVE_ENABLED
 #include "FS.h"
@@ -290,6 +299,53 @@ static void pushTelemetry() {
     http.end();
   }
 }
+
+static framesize_t framesizeFromStr(const char *s) {
+  if (!strcmp(s, "QVGA")) return FRAMESIZE_QVGA;
+  if (!strcmp(s, "CIF"))  return FRAMESIZE_CIF;
+  if (!strcmp(s, "VGA"))  return FRAMESIZE_VGA;
+  if (!strcmp(s, "SVGA")) return FRAMESIZE_SVGA;
+  if (!strcmp(s, "XGA"))  return FRAMESIZE_XGA;
+  if (!strcmp(s, "HD"))   return FRAMESIZE_HD;
+  if (!strcmp(s, "SXGA")) return FRAMESIZE_SXGA;
+  if (!strcmp(s, "UXGA")) return FRAMESIZE_UXGA;
+  return FRAMESIZE_INVALID;
+}
+
+// v2: pull behavior config from the hub and apply deltas (interval, framesize,
+// quality, enable). No-ops if CONFIG_URL is unset or unreachable, so the camera
+// keeps running on its last-known config through a server outage.
+static void fetchConfig() {
+  if (strlen(CONFIG_URL) == 0) return;
+  WiFiClient client;
+  HTTPClient http;
+  if (!http.begin(client, CONFIG_URL)) return;
+  int code = http.GET();
+  if (code == 200) {
+    JsonDocument doc;
+    if (deserializeJson(doc, http.getString()) == DeserializationError::Ok) {
+      if (!doc["snapshot_interval_ms"].isNull()) {
+        uint32_t v = doc["snapshot_interval_ms"].as<uint32_t>();
+        if (v >= 5000 && v <= 3600000) g_snapshotIntervalMs = v;
+      }
+      if (!doc["enabled"].isNull()) g_enabled = doc["enabled"].as<bool>();
+      sensor_t *s = esp_camera_sensor_get();
+      if (s) {
+        const char *fs = doc["framesize"] | "";
+        framesize_t f = framesizeFromStr(fs);
+        if (f != FRAMESIZE_INVALID) s->set_framesize(s, f);
+        if (!doc["jpeg_quality"].isNull()) {
+          int q = doc["jpeg_quality"].as<int>();
+          if (q >= 4 && q <= 63) s->set_quality(s, q);
+        }
+      }
+      // reboot_interval_hours + reboot flag are handled in a later slice.
+    }
+  } else {
+    Serial.printf("[config] GET %s -> %d\n", CONFIG_URL, code);
+  }
+  http.end();
+}
 #endif
 
 void setup() {
@@ -350,13 +406,18 @@ void loop() {
   }
 
 #if PUSH_ENABLED
-  // Periodic snapshot push. Blocks the loop briefly (~capture+POST); the HTTP
-  // server tasks keep serving during it, so /capture and /stream stay live.
-  static uint32_t lastPush = 0;
-  if (WiFi.status() == WL_CONNECTED && millis() - lastPush >= PUSH_INTERVAL_MS) {
-    lastPush = millis();
-    pushSnapshot();
-    pushTelemetry();
+  // Periodic cycle: snapshot + health telemetry (when enabled), then pull config
+  // so a dashboard change (interval / resolution / enable) applies within one
+  // cycle. Config is fetched even while disabled, so the camera can be re-enabled
+  // remotely. Blocks the loop briefly; the HTTP server tasks keep serving.
+  static uint32_t lastCycle = 0;
+  if (WiFi.status() == WL_CONNECTED && millis() - lastCycle >= g_snapshotIntervalMs) {
+    lastCycle = millis();
+    if (g_enabled) {
+      pushSnapshot();
+      pushTelemetry();
+    }
+    fetchConfig();
   }
 #endif
 

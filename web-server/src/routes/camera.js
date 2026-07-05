@@ -7,19 +7,21 @@ const {
   subscribe,
   status,
 } = require('../store/frameStore');
+const cameraConfig = require('../store/cameraConfig');
 
 const router = express.Router();
 
 // Reject anything bigger than a UXGA JPEG could plausibly be, so a runaway
 // client can't balloon memory. Tunable via env for higher-res sensors.
 const MAX_FRAME_BYTES = Number(process.env.CAMERA_MAX_FRAME_BYTES) || 2 * 1024 * 1024; // 2 MB
-// The v2 camera pushes on a duty cycle (default 60s), so the liveness window has
-// to be derived from that cadence — a fixed 15s would read every snapshot camera
-// as permanently offline. stale = factor x interval tolerates one dropped push
-// but flips to STALE after ~2 missed in a row.
-const SNAPSHOT_INTERVAL_MS = Number(process.env.CAMERA_SNAPSHOT_INTERVAL_MS) || 60000;
+// The v2 camera pushes on a duty cycle, so the liveness window is derived from
+// that cadence — a fixed 15s would read every snapshot camera as permanently
+// offline. stale = factor x interval tolerates one dropped push but flips to
+// STALE after ~2 missed in a row. The interval is the live config value, so
+// changing the cadence retunes staleness automatically.
 const STALE_FACTOR = Number(process.env.CAMERA_STALE_FACTOR) || 2.5;
-const STALE_MS = Math.round(SNAPSHOT_INTERVAL_MS * STALE_FACTOR);
+const currentStaleMs = () =>
+  Math.round(cameraConfig.get().snapshot_interval_ms * STALE_FACTOR);
 const BOUNDARY = 'smartfarmframe';
 
 // ESP32-CAM PUSH target: firmware POSTs one raw JPEG per request (see its
@@ -51,7 +53,7 @@ router.get('/frame.jpg', (req, res) => {
 // Buffers are not included — poll this, then fetch /frames/:seq for the pixels.
 router.get('/frames', (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ frames: listFrames(), capacity: status(STALE_MS).ringCapacity });
+  res.json({ frames: listFrames(), capacity: status(currentStaleMs()).ringCapacity });
 });
 
 // One historical frame by monotonic seq. 404 once it has rotated out of the ring.
@@ -101,7 +103,21 @@ router.get('/stream', (req, res) => {
 // docs/camera-longevity-redesign.md.
 
 router.get('/status', (req, res) => {
-  res.json(status(STALE_MS));
+  res.json(status(currentStaleMs()));
+});
+
+// --- Config (camera-v2) ---------------------------------------------------
+// The camera GETs this each cycle and applies deltas; the dashboard POSTs it.
+// Persisted to a host-mounted JSON file (see store/cameraConfig.js).
+router.get('/config', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(cameraConfig.get());
+});
+
+router.post('/config', (req, res) => {
+  const result = cameraConfig.update(req.body || {});
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json(result.value);
 });
 
 module.exports = router;

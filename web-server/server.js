@@ -8,6 +8,7 @@ const healthRouter = require('./src/routes/health');
 const cameraRouter = require('./src/routes/camera');
 const analyticsRouter = require('./src/routes/analytics');
 const pumpRouter = require('./src/routes/pump');
+const cameraConfig = require('./src/store/cameraConfig');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,9 @@ app.use(express.static(CLIENT_BUILD_DIR));
 app.get('*', (req, res) => {
   res.sendFile(path.join(CLIENT_BUILD_DIR, 'index.html'));
 });
+
+// Load persisted camera config (and size the frame ring to match) before serving.
+cameraConfig.load();
 
 app.listen(PORT, () => {
   console.log(`Smart Farm Control Center listening on port ${PORT}`);
