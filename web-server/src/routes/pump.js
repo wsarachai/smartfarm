@@ -1,5 +1,5 @@
 const express = require('express');
-const { reflectState } = require('../store/deviceStore');
+const { reflectState, upsertTelemetry } = require('../store/deviceStore');
 
 const router = express.Router();
 
@@ -7,6 +7,13 @@ const router = express.Router();
 // and the irrigation page can read live hardware state like any other device.
 // Single pump in this system; matches the seed + irrigation page's PUMP_ID.
 const PUMP_DEVICE_ID = 'main-pump';
+
+// The pump hardware has NO onboard sensors. We still surface a node entry so the
+// Irrigation page shows it reporting — but every reading is "n/a" rather than a
+// fabricated number. Non-numeric values are ignored by the trend history/charts
+// (see historySlice) and render verbatim in tables (see formatMetricValue).
+const PUMP_NODE_ID = 'main-pump-node';
+const PUMP_NODE_NA_METRICS = { pressure: 'n/a', flow_rate: 'n/a', temperature: 'n/a', voltage: 'n/a' };
 
 // Thin CORS-clean relay between the browser/dashboard and a pump-zone node
 // (ESP-WROOM-32 running pump-zone firmware, HTTP server at <target>/api/v1/relay
@@ -105,12 +112,15 @@ function armedAutoOffAt(key) {
   return t ? t.autoOffAt : null;
 }
 
-// Mirror the pump's real relay state into the store as a generic actuator.
+// Mirror the pump's real relay state into the store as a generic actuator, and
+// surface the (sensorless) pump node as reporting-but-n/a so the Irrigation page
+// shows it "sending data" without inventing fake sensor numbers.
 function mirror(relayStatus) {
   reflectState({
     device_id: PUMP_DEVICE_ID,
     metrics: { running: relayStatus === 'ON' },
   });
+  upsertTelemetry({ device_id: PUMP_NODE_ID, metrics: PUMP_NODE_NA_METRICS });
 }
 
 // GET /api/v1/pump/status?target=http://192.168.0.4  -> current state (polled)

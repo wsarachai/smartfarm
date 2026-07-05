@@ -215,6 +215,7 @@ function FlowSparkline({ points }) {
 
 function FlowMetricsCard({ node, flowPoints }) {
   const flowRate = node?.metrics?.flow_rate;
+  const isNum = typeof flowRate === 'number';
   return (
     <div className="bg-surface-container p-5 border border-outline-variant">
       <h4 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
@@ -224,7 +225,13 @@ function FlowMetricsCard({ node, flowPoints }) {
       <div className="flex items-end justify-between">
         <div>
           <p className="font-display-lg text-[32px] leading-none text-secondary">
-            {flowRate == null ? '—' : formatMetricValue(flowRate)} <span className="text-sm font-label-caps">L/min</span>
+            {isNum ? (
+              <>
+                {formatMetricValue(flowRate)} <span className="text-sm font-label-caps">L/min</span>
+              </>
+            ) : (
+              <span className="text-on-surface-variant">n/a</span>
+            )}
           </p>
           <p className="font-body-md text-outline mt-2">Current Throughput</p>
         </div>
@@ -251,43 +258,46 @@ function NodeCameraPreview() {
 }
 
 function NodeSensorsTable({ node }) {
-  const rows = NODE_SENSOR_KEYS.filter((k) => node?.metrics?.[k] != null).map((k) => ({
-    key: k,
-    ...metricMeta(k),
-    value: node.metrics[k],
-  }));
+  // This node has no onboard sensors — always list the known keys, showing the
+  // real reading if one is ever reported, otherwise "n/a". Never blank out.
+  const rows = NODE_SENSOR_KEYS.map((k) => {
+    const meta = metricMeta(k);
+    const v = node?.metrics?.[k];
+    const isNum = typeof v === 'number';
+    return {
+      key: k,
+      label: meta.label,
+      display: isNum ? `${formatMetricValue(v)}${meta.unit ? ` ${meta.unit}` : ''}` : 'n/a',
+      na: !isNum,
+    };
+  });
 
   return (
     <div className="bg-surface-container border border-outline-variant">
       <div className="px-5 py-4 border-b border-outline-variant bg-surface-container-high">
         <h3 className="font-label-caps text-label-caps text-on-surface">Node Sensors</h3>
       </div>
-      {rows.length === 0 ? (
-        <div className="p-5 font-data-mono text-xs text-on-surface-variant">NO TELEMETRY (device_id: {PUMP_NODE_ID})</div>
-      ) : (
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-surface-container-lowest">
-              <th className="px-5 py-3 font-label-caps text-[10px] text-outline">SENSOR</th>
-              <th className="px-5 py-3 font-label-caps text-[10px] text-outline text-right">VALUE</th>
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-surface-container-lowest">
+            <th className="px-5 py-3 font-label-caps text-[10px] text-outline">SENSOR</th>
+            <th className="px-5 py-3 font-label-caps text-[10px] text-outline text-right">VALUE</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-outline-variant/20">
+          {rows.map((r) => (
+            <tr key={r.key} className="hover:bg-surface-container-high transition-colors">
+              <td className="px-5 py-3 flex items-center gap-2">
+                <div className={`w-1.5 h-1.5 rounded-full ${r.na ? 'bg-outline' : 'bg-primary'}`} />
+                <span className="font-data-mono text-on-surface">{r.label}</span>
+              </td>
+              <td className={`px-5 py-3 text-right font-data-mono ${r.na ? 'text-on-surface-variant' : 'text-secondary'}`}>
+                {r.display}
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-outline-variant/20">
-            {rows.map((r) => (
-              <tr key={r.key} className="hover:bg-surface-container-high transition-colors">
-                <td className="px-5 py-3 flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  <span className="font-data-mono text-on-surface">{r.label}</span>
-                </td>
-                <td className="px-5 py-3 text-right font-data-mono text-secondary">
-                  {formatMetricValue(r.value)}
-                  {r.unit ? ` ${r.unit}` : ''}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

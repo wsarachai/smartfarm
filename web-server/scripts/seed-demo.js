@@ -17,11 +17,16 @@ const START = Date.now();
 const SENSORS = [
   { device_id: 'zone-a', base: { temperature: 30.8, humidity: 72, soil_moisture: 45 } },
   { device_id: 'zone-b', base: { temperature: 30.5, humidity: 70, soil_moisture: 35 } },
-  // Onboard telemetry for the irrigation pump's hardware node (paired with the
-  // main-pump actuator below) — feeds the Irrigation page's Node Sensors table.
-  { device_id: 'main-pump-node', base: { pressure: 42, flow_rate: 12.5, temperature: 38.4, voltage: 11.8 } },
 ];
 const ACTUATORS = [{ device_id: 'main-pump', action: { running: true, mode: 'auto' } }];
+
+// The irrigation pump's hardware node has NO onboard sensors, so it reports but
+// every reading is "n/a" (not a fabricated number). Feeds the Irrigation page's
+// Node Sensors table; non-numeric values are ignored by the trend charts.
+const PUMP_NODE = {
+  device_id: 'main-pump-node',
+  metrics: { pressure: 'n/a', flow_rate: 'n/a', temperature: 'n/a', voltage: 'n/a' },
+};
 
 // camera-v2: the ESP32-CAM's own health telemetry (heap/rssi/uptime/fw) so the
 // Cameras page Node Metrics + the health/reboot tracker have data. Heap is held
@@ -94,6 +99,8 @@ async function tick() {
   for (const a of ACTUATORS) {
     await post('/api/v1/control', { device_id: a.device_id, action: a.action });
   }
+  // Pump node: no sensors — still reports, but every reading is n/a.
+  await post('/api/v1/telemetry', PUMP_NODE);
   // Camera: push a frame into the ring + report health telemetry.
   await postFrame();
   await post('/api/v1/telemetry', {
