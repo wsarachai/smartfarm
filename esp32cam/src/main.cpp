@@ -10,9 +10,36 @@
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include "esp_task_wdt.h"
+
+// Task watchdog: if loop() stops feeding it for this long (an acute hang —
+// wedged WiFi stack, blocked capture), the chip resets itself.
+#define WDT_TIMEOUT_S 30
 
 #include "secrets.h"
 #include "camera_pins.h"
+
+// v2 health telemetry defaults — override in secrets.h. TELEMETRY_URL empty
+// disables the health POST, so an older secrets.h still compiles and runs.
+#ifndef DEVICE_ID
+#define DEVICE_ID "esp32cam"
+#endif
+#ifndef FW_VERSION
+#define FW_VERSION "2.0.0"
+#endif
+#ifndef TELEMETRY_URL
+#define TELEMETRY_URL ""
+#endif
+#ifndef CONFIG_URL
+#define CONFIG_URL ""
+#endif
+
+// Runtime state pulled from the hub's /config each cycle (camera-v2). Seeded
+// from the compile-time default, then overridden by server config.
+static uint32_t g_snapshotIntervalMs  = PUSH_INTERVAL_MS;
+static bool     g_enabled             = true;
+static uint32_t g_rebootIntervalHours = 24;  // local fallback reboot (0 = off)
 
 #if SD_SAVE_ENABLED
 #include "FS.h"
@@ -155,6 +182,25 @@ static void setupOTA() {
   Serial.println("[ota] ready for wireless updates");
 }
 
+// Arm the task watchdog on the loop task. Armed AFTER boot so the one-time
+// camera/WiFi init (which can take many seconds) isn't judged a hang; it guards
+// only the steady-state loop, which must call esp_task_wdt_reset() each pass.
+static void setupWatchdog() {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+  // Core v3 already initializes the TWDT (for idle tasks), so reconfigure it.
+  esp_task_wdt_config_t cfg = {
+    .timeout_ms = WDT_TIMEOUT_S * 1000,
+    .idle_core_mask = 0,
+    .trigger_panic = true,
+  };
+  esp_task_wdt_reconfigure(&cfg);
+#else
+  esp_task_wdt_init(WDT_TIMEOUT_S, true);
+#endif
+  esp_task_wdt_add(NULL);  // subscribe the loop task (no-op if already added)
+  Serial.printf("[wdt] task watchdog armed (%ds)\n", WDT_TIMEOUT_S);
+}
+
 #if SD_SAVE_ENABLED
 // Rolling storage on the microSD card. Files are named /<dir>/<8-digit>.jpg
 // (FAT 8.3-safe). We track the newest index to write and the oldest index to
@@ -255,6 +301,88 @@ static void pushSnapshot() {
   }
   esp_camera_fb_return(fb);
 }
+
+// v2: report device health to the hub's generic telemetry endpoint so the
+// camera shows up as a normal device card (heap/rssi/uptime/fw). Watching heap
+// and uptime trend is how the hub catches a degrading board before it locks up.
+static void pushTelemetry() {
+  if (strlen(TELEMETRY_URL) == 0) return;  // disabled
+  char body[256];
+  snprintf(body, sizeof(body),
+           "{\"device_id\":\"%s\",\"metrics\":{"
+           "\"free_heap\":%u,\"rssi\":%ld,\"uptime_s\":%lu,\"fw_version\":\"%s\"}}",
+           DEVICE_ID, (unsigned)ESP.getFreeHeap(), (long)WiFi.RSSI(),
+           (unsigned long)(millis() / 1000UL), FW_VERSION);
+
+  WiFiClient client;
+  HTTPClient http;
+  if (http.begin(client, TELEMETRY_URL)) {
+    http.addHeader("Content-Type", "application/json");
+    int code = http.POST((uint8_t *)body, strlen(body));
+    if (code > 0) Serial.printf("[telem] POST %s -> %d\n", TELEMETRY_URL, code);
+    else          Serial.printf("[telem] POST failed: %s\n", http.errorToString(code).c_str());
+    http.end();
+  }
+}
+
+static framesize_t framesizeFromStr(const char *s) {
+  if (!strcmp(s, "QVGA")) return FRAMESIZE_QVGA;
+  if (!strcmp(s, "CIF"))  return FRAMESIZE_CIF;
+  if (!strcmp(s, "VGA"))  return FRAMESIZE_VGA;
+  if (!strcmp(s, "SVGA")) return FRAMESIZE_SVGA;
+  if (!strcmp(s, "XGA"))  return FRAMESIZE_XGA;
+  if (!strcmp(s, "HD"))   return FRAMESIZE_HD;
+  if (!strcmp(s, "SXGA")) return FRAMESIZE_SXGA;
+  if (!strcmp(s, "UXGA")) return FRAMESIZE_UXGA;
+  return FRAMESIZE_INVALID;
+}
+
+// v2: pull behavior config from the hub and apply deltas (interval, framesize,
+// quality, enable). No-ops if CONFIG_URL is unset or unreachable, so the camera
+// keeps running on its last-known config through a server outage.
+static void fetchConfig() {
+  if (strlen(CONFIG_URL) == 0) return;
+  WiFiClient client;
+  HTTPClient http;
+  if (!http.begin(client, CONFIG_URL)) return;
+  bool doReboot = false;
+  int code = http.GET();
+  if (code == 200) {
+    JsonDocument doc;
+    if (deserializeJson(doc, http.getString()) == DeserializationError::Ok) {
+      if (!doc["snapshot_interval_ms"].isNull()) {
+        uint32_t v = doc["snapshot_interval_ms"].as<uint32_t>();
+        if (v >= 5000 && v <= 3600000) g_snapshotIntervalMs = v;
+      }
+      if (!doc["enabled"].isNull()) g_enabled = doc["enabled"].as<bool>();
+      if (!doc["reboot_interval_hours"].isNull()) {
+        uint32_t h = doc["reboot_interval_hours"].as<uint32_t>();
+        if (h <= 168) g_rebootIntervalHours = h;
+      }
+      // Server-driven health reboot: honored after we finish reading the body.
+      doReboot = doc["reboot"].is<bool>() && doc["reboot"].as<bool>();
+      sensor_t *s = esp_camera_sensor_get();
+      if (s) {
+        const char *fs = doc["framesize"] | "";
+        framesize_t f = framesizeFromStr(fs);
+        if (f != FRAMESIZE_INVALID) s->set_framesize(s, f);
+        if (!doc["jpeg_quality"].isNull()) {
+          int q = doc["jpeg_quality"].as<int>();
+          if (q >= 4 && q <= 63) s->set_quality(s, q);
+        }
+      }
+    }
+  } else {
+    Serial.printf("[config] GET %s -> %d\n", CONFIG_URL, code);
+  }
+  http.end();
+
+  if (doReboot) {
+    Serial.println("[reboot] server-commanded (health) — restarting");
+    delay(200);  // let the serial line flush
+    ESP.restart();
+  }
+}
 #endif
 
 void setup() {
@@ -283,10 +411,13 @@ void setup() {
   } else {
     Serial.println("[http] WARNING: web UI did not start (control server failed to bind)");
   }
+
+  setupWatchdog();  // arm last — steady-state loop guard only
 }
 
 void loop() {
-  ArduinoOTA.handle();  // must be serviced often for wireless updates to work
+  esp_task_wdt_reset();  // feed the watchdog; a wedged loop stops feeding -> reset
+  ArduinoOTA.handle();   // must be serviced often for wireless updates to work
 
   // Throttled link check: reconnect if WiFi drops (DHCP re-leases on reconnect).
   static uint32_t lastCheck = 0;
@@ -296,6 +427,15 @@ void loop() {
       Serial.println("[wifi] link lost — reconnecting");
       WiFi.reconnect();
     }
+  }
+
+  // Local fallback reboot (camera-v2): if the server can't be reached to command
+  // a health reboot, still recycle on our own schedule to clear slow degradation
+  // and recover WiFi/DHCP. 0 disables. Server-driven reboot is the primary path.
+  if (g_rebootIntervalHours > 0 && (millis() / 3600000UL) >= g_rebootIntervalHours) {
+    Serial.println("[reboot] local uptime fallback — restarting");
+    delay(200);
+    ESP.restart();
   }
 
   // Periodic status heartbeat so the serial monitor always shows proof-of-life
@@ -315,12 +455,18 @@ void loop() {
   }
 
 #if PUSH_ENABLED
-  // Periodic snapshot push. Blocks the loop briefly (~capture+POST); the HTTP
-  // server tasks keep serving during it, so /capture and /stream stay live.
-  static uint32_t lastPush = 0;
-  if (WiFi.status() == WL_CONNECTED && millis() - lastPush >= PUSH_INTERVAL_MS) {
-    lastPush = millis();
-    pushSnapshot();
+  // Periodic cycle: snapshot + health telemetry (when enabled), then pull config
+  // so a dashboard change (interval / resolution / enable) applies within one
+  // cycle. Config is fetched even while disabled, so the camera can be re-enabled
+  // remotely. Blocks the loop briefly; the HTTP server tasks keep serving.
+  static uint32_t lastCycle = 0;
+  if (WiFi.status() == WL_CONNECTED && millis() - lastCycle >= g_snapshotIntervalMs) {
+    lastCycle = millis();
+    if (g_enabled) {
+      pushSnapshot();
+      pushTelemetry();
+    }
+    fetchConfig();
   }
 #endif
 

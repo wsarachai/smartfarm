@@ -11,7 +11,7 @@ const STATUS_POLL_MS = 5000;
 // Cameras page). Polls only the tiny status JSON.
 export default function CameraStatusCard() {
   useGetCameraStatusQuery(undefined, { pollingInterval: STATUS_POLL_MS });
-  const { online, hasFrame, ageMs } = useSelector(selectCameraStatus);
+  const { online, hasFrame, ageMs, degrading } = useSelector(selectCameraStatus);
 
   const status = !hasFrame ? 'offline' : online ? 'online' : 'stale';
   const label = status === 'online' ? 'ONLINE' : status === 'stale' ? 'STALE' : 'OFFLINE';
@@ -32,6 +32,11 @@ export default function CameraStatusCard() {
             </span>
             <span className="font-data-mono text-[10px] text-on-surface-variant">{age}</span>
           </div>
+          {degrading ? (
+            <span className="mt-1 inline-block font-label-caps text-label-caps text-error uppercase">
+              ⚠ Degrading
+            </span>
+          ) : null}
         </div>
       </div>
       <Link

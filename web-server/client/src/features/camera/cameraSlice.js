@@ -7,6 +7,7 @@ const initialState = {
   ageMs: null,
   bytes: 0,
   receivedAt: null,
+  degrading: false,
 };
 
 // Mirrors the pattern used by devicesSlice: the polled RTK Query result is

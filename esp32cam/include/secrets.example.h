@@ -19,15 +19,27 @@
 // --- mDNS hostname --- reachable as http://<hostname>.local/ on supporting OSes.
 #define MDNS_HOSTNAME "esp32cam"
 
+// --- v2 health telemetry --- POST heap/rssi/uptime/fw to the hub each cycle so
+// the camera appears as a device card. Leave TELEMETRY_URL empty to disable.
+#define DEVICE_ID     "esp32cam"
+#define FW_VERSION    "2.0.0"
+#define TELEMETRY_URL "http://192.168.1.20:3000/api/v1/telemetry"
+
+// --- v2 config pull --- GET the hub's camera config each cycle and apply deltas
+// (interval, resolution, quality, enable). Leave empty to keep compile-time defaults.
+#define CONFIG_URL    "http://192.168.1.20:3000/api/v1/camera/config"
+
 // --- OTA --- password required to push firmware over WiFi.
 // MUST match `upload_flags = --auth=...` for the esp32cam_ota env in platformio.ini.
 #define OTA_PASSWORD "change-me-ota-pass"
 
 // --- Periodic snapshot push --- POST a JPEG to PUSH_URL every PUSH_INTERVAL_MS.
 // Set PUSH_ENABLED to 0 to disable. Coexists with the on-demand /capture endpoint.
+// v2 duty-cycle default is 60s (was 10s) to cut heat/duty-cycle for long-term
+// operation; this is only the boot default — the server config can override it.
 #define PUSH_ENABLED     0
 #define PUSH_URL         "http://192.168.1.20:3000/ingest"
-#define PUSH_INTERVAL_MS 10000
+#define PUSH_INTERVAL_MS 60000
 
 // --- Rolling SD-card save --- also write each pushed frame to the microSD card,
 // deleting the oldest files when free space drops below SD_MIN_FREE_KB so the

@@ -1,14 +1,31 @@
 const express = require('express');
-const { setFrame, getFrame, subscribe, status } = require('../store/frameStore');
-const cameraLive = require('../store/cameraLive');
+const {
+  setFrame,
+  getFrame,
+  getFrameBySeq,
+  listFrames,
+  subscribe,
+  status,
+} = require('../store/frameStore');
+const cameraConfig = require('../store/cameraConfig');
+const cameraHealth = require('../store/cameraHealth');
 
 const router = express.Router();
+
+// Which telemetry device_id is this camera, for health/reboot decisions.
+const CAMERA_DEVICE_ID = process.env.CAMERA_DEVICE_ID || 'esp32cam';
 
 // Reject anything bigger than a UXGA JPEG could plausibly be, so a runaway
 // client can't balloon memory. Tunable via env for higher-res sensors.
 const MAX_FRAME_BYTES = Number(process.env.CAMERA_MAX_FRAME_BYTES) || 2 * 1024 * 1024; // 2 MB
-// How long since the last frame before we call the camera "stale" vs "live".
-const STALE_MS = Number(process.env.CAMERA_STALE_MS) || 15000;
+// The v2 camera pushes on a duty cycle, so the liveness window is derived from
+// that cadence — a fixed 15s would read every snapshot camera as permanently
+// offline. stale = factor x interval tolerates one dropped push but flips to
+// STALE after ~2 missed in a row. The interval is the live config value, so
+// changing the cadence retunes staleness automatically.
+const STALE_FACTOR = Number(process.env.CAMERA_STALE_FACTOR) || 2.5;
+const currentStaleMs = () =>
+  Math.round(cameraConfig.get().snapshot_interval_ms * STALE_FACTOR);
 const BOUNDARY = 'smartfarmframe';
 
 // ESP32-CAM PUSH target: firmware POSTs one raw JPEG per request (see its
@@ -31,6 +48,26 @@ router.post(
 router.get('/frame.jpg', (req, res) => {
   const frame = getFrame();
   if (!frame) return res.status(503).json({ error: 'no frame received yet' });
+  res.set('Content-Type', 'image/jpeg');
+  res.set('Cache-Control', 'no-store');
+  res.send(frame.buf);
+});
+
+// Ring history metadata (newest first) for the dashboard timeline scrubber.
+// Buffers are not included — poll this, then fetch /frames/:seq for the pixels.
+router.get('/frames', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ frames: listFrames(), capacity: status(currentStaleMs()).ringCapacity });
+});
+
+// One historical frame by monotonic seq. 404 once it has rotated out of the ring.
+router.get('/frames/:seq', (req, res) => {
+  const seq = Number(req.params.seq);
+  if (!Number.isInteger(seq)) {
+    return res.status(400).json({ error: 'seq must be an integer' });
+  }
+  const frame = getFrameBySeq(seq);
+  if (!frame) return res.status(404).json({ error: 'frame not in ring (evicted or never existed)' });
   res.set('Content-Type', 'image/jpeg');
   res.set('Cache-Control', 'no-store');
   res.send(frame.buf);
@@ -64,16 +101,31 @@ router.get('/stream', (req, res) => {
   req.on('close', unsubscribe);
 });
 
-// Live MJPEG proxy: the web-server pulls the camera's own :81 stream and relays
-// it same-origin, so browsers that can't reach the camera directly still see
-// live video (and the camera only serves one connection). See cameraLive.js.
-router.get('/live', (req, res) => {
-  cameraLive.addViewer(res);
-  req.on('close', () => cameraLive.removeViewer(res));
-});
+// NOTE (camera-v2): the /live pull-proxy was retired. The v2 camera no longer
+// runs a continuous :81 MJPEG stream, so there is nothing to pull. "Live" is now
+// the slideshow relay of pushed snapshots (GET /stream above). See
+// docs/camera-longevity-redesign.md.
 
 router.get('/status', (req, res) => {
-  res.json(status(STALE_MS));
+  const { degrading } = cameraHealth.health(CAMERA_DEVICE_ID);
+  res.json({ ...status(currentStaleMs()), degrading });
+});
+
+// --- Config (camera-v2) ---------------------------------------------------
+// The camera GETs this each cycle and applies deltas; the dashboard POSTs it.
+// Persisted to a host-mounted JSON file (see store/cameraConfig.js). The
+// transient `reboot` flag is the server-driven health-reboot decision (see
+// store/cameraHealth.js) — it is NOT stored, only computed per request.
+router.get('/config', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const reboot = cameraHealth.shouldReboot(CAMERA_DEVICE_ID);
+  res.json({ ...cameraConfig.get(), reboot });
+});
+
+router.post('/config', (req, res) => {
+  const result = cameraConfig.update(req.body || {});
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json(result.value);
 });
 
 module.exports = router;

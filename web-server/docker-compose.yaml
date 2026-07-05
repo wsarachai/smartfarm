@@ -8,14 +8,22 @@ services:
     ports:
       - "3000:3000"
 
+    # Camera config persists here (camera-v2). Host-mounted so it survives
+    # container recreation; the server writes it atomically on dashboard edits.
+    volumes:
+      - ./data:/data
+
     environment:
       NODE_ENV: production
       PORT: 3000
       CAMERA_MAX_FRAME_BYTES: 2097152
-      CAMERA_STALE_MS: 15000
-      # Source for the live MJPEG proxy (GET /api/v1/camera/live). The server
-      # pulls this and fans it out to viewers. Set to the camera's own stream.
-      CAMERA_STREAM_URL: http://192.168.0.3:81/stream
+      # v2 duty-cycle: the camera pushes one frame every CAMERA_SNAPSHOT_INTERVAL_MS
+      # (this is the seed default; the persisted config file takes over once written).
+      # Liveness "stale" is derived as interval x CAMERA_STALE_FACTOR (see camera.js).
+      CAMERA_SNAPSHOT_INTERVAL_MS: 60000
+      CAMERA_STALE_FACTOR: "2.5"
+      CAMERA_RING_SIZE: 90
+      CAMERA_CONFIG_PATH: /data/camera-config.json
 
     healthcheck:
       test:
