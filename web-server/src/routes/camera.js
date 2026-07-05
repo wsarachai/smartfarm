@@ -8,8 +8,12 @@ const {
   status,
 } = require('../store/frameStore');
 const cameraConfig = require('../store/cameraConfig');
+const cameraHealth = require('../store/cameraHealth');
 
 const router = express.Router();
+
+// Which telemetry device_id is this camera, for health/reboot decisions.
+const CAMERA_DEVICE_ID = process.env.CAMERA_DEVICE_ID || 'esp32cam';
 
 // Reject anything bigger than a UXGA JPEG could plausibly be, so a runaway
 // client can't balloon memory. Tunable via env for higher-res sensors.
@@ -103,15 +107,19 @@ router.get('/stream', (req, res) => {
 // docs/camera-longevity-redesign.md.
 
 router.get('/status', (req, res) => {
-  res.json(status(currentStaleMs()));
+  const { degrading } = cameraHealth.health(CAMERA_DEVICE_ID);
+  res.json({ ...status(currentStaleMs()), degrading });
 });
 
 // --- Config (camera-v2) ---------------------------------------------------
 // The camera GETs this each cycle and applies deltas; the dashboard POSTs it.
-// Persisted to a host-mounted JSON file (see store/cameraConfig.js).
+// Persisted to a host-mounted JSON file (see store/cameraConfig.js). The
+// transient `reboot` flag is the server-driven health-reboot decision (see
+// store/cameraHealth.js) — it is NOT stored, only computed per request.
 router.get('/config', (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json(cameraConfig.get());
+  const reboot = cameraHealth.shouldReboot(CAMERA_DEVICE_ID);
+  res.json({ ...cameraConfig.get(), reboot });
 });
 
 router.post('/config', (req, res) => {

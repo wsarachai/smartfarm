@@ -11,6 +11,11 @@
 #include <ArduinoOTA.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include "esp_task_wdt.h"
+
+// Task watchdog: if loop() stops feeding it for this long (an acute hang —
+// wedged WiFi stack, blocked capture), the chip resets itself.
+#define WDT_TIMEOUT_S 30
 
 #include "secrets.h"
 #include "camera_pins.h"
@@ -32,8 +37,9 @@
 
 // Runtime state pulled from the hub's /config each cycle (camera-v2). Seeded
 // from the compile-time default, then overridden by server config.
-static uint32_t g_snapshotIntervalMs = PUSH_INTERVAL_MS;
-static bool     g_enabled            = true;
+static uint32_t g_snapshotIntervalMs  = PUSH_INTERVAL_MS;
+static bool     g_enabled             = true;
+static uint32_t g_rebootIntervalHours = 24;  // local fallback reboot (0 = off)
 
 #if SD_SAVE_ENABLED
 #include "FS.h"
@@ -174,6 +180,25 @@ static void setupOTA() {
   ArduinoOTA.onError([](ota_error_t e) { Serial.printf("[ota] error %u\n", e); });
   ArduinoOTA.begin();
   Serial.println("[ota] ready for wireless updates");
+}
+
+// Arm the task watchdog on the loop task. Armed AFTER boot so the one-time
+// camera/WiFi init (which can take many seconds) isn't judged a hang; it guards
+// only the steady-state loop, which must call esp_task_wdt_reset() each pass.
+static void setupWatchdog() {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+  // Core v3 already initializes the TWDT (for idle tasks), so reconfigure it.
+  esp_task_wdt_config_t cfg = {
+    .timeout_ms = WDT_TIMEOUT_S * 1000,
+    .idle_core_mask = 0,
+    .trigger_panic = true,
+  };
+  esp_task_wdt_reconfigure(&cfg);
+#else
+  esp_task_wdt_init(WDT_TIMEOUT_S, true);
+#endif
+  esp_task_wdt_add(NULL);  // subscribe the loop task (no-op if already added)
+  Serial.printf("[wdt] task watchdog armed (%ds)\n", WDT_TIMEOUT_S);
 }
 
 #if SD_SAVE_ENABLED
@@ -320,6 +345,7 @@ static void fetchConfig() {
   WiFiClient client;
   HTTPClient http;
   if (!http.begin(client, CONFIG_URL)) return;
+  bool doReboot = false;
   int code = http.GET();
   if (code == 200) {
     JsonDocument doc;
@@ -329,6 +355,12 @@ static void fetchConfig() {
         if (v >= 5000 && v <= 3600000) g_snapshotIntervalMs = v;
       }
       if (!doc["enabled"].isNull()) g_enabled = doc["enabled"].as<bool>();
+      if (!doc["reboot_interval_hours"].isNull()) {
+        uint32_t h = doc["reboot_interval_hours"].as<uint32_t>();
+        if (h <= 168) g_rebootIntervalHours = h;
+      }
+      // Server-driven health reboot: honored after we finish reading the body.
+      doReboot = doc["reboot"].is<bool>() && doc["reboot"].as<bool>();
       sensor_t *s = esp_camera_sensor_get();
       if (s) {
         const char *fs = doc["framesize"] | "";
@@ -339,12 +371,17 @@ static void fetchConfig() {
           if (q >= 4 && q <= 63) s->set_quality(s, q);
         }
       }
-      // reboot_interval_hours + reboot flag are handled in a later slice.
     }
   } else {
     Serial.printf("[config] GET %s -> %d\n", CONFIG_URL, code);
   }
   http.end();
+
+  if (doReboot) {
+    Serial.println("[reboot] server-commanded (health) — restarting");
+    delay(200);  // let the serial line flush
+    ESP.restart();
+  }
 }
 #endif
 
@@ -374,10 +411,13 @@ void setup() {
   } else {
     Serial.println("[http] WARNING: web UI did not start (control server failed to bind)");
   }
+
+  setupWatchdog();  // arm last — steady-state loop guard only
 }
 
 void loop() {
-  ArduinoOTA.handle();  // must be serviced often for wireless updates to work
+  esp_task_wdt_reset();  // feed the watchdog; a wedged loop stops feeding -> reset
+  ArduinoOTA.handle();   // must be serviced often for wireless updates to work
 
   // Throttled link check: reconnect if WiFi drops (DHCP re-leases on reconnect).
   static uint32_t lastCheck = 0;
@@ -387,6 +427,15 @@ void loop() {
       Serial.println("[wifi] link lost — reconnecting");
       WiFi.reconnect();
     }
+  }
+
+  // Local fallback reboot (camera-v2): if the server can't be reached to command
+  // a health reboot, still recycle on our own schedule to clear slow degradation
+  // and recover WiFi/DHCP. 0 disables. Server-driven reboot is the primary path.
+  if (g_rebootIntervalHours > 0 && (millis() / 3600000UL) >= g_rebootIntervalHours) {
+    Serial.println("[reboot] local uptime fallback — restarting");
+    delay(200);
+    ESP.restart();
   }
 
   // Periodic status heartbeat so the serial monitor always shows proof-of-life

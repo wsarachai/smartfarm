@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { Maximize2, ExternalLink, Users, Download, Radio } from "lucide-react";
+import {
+  Maximize2,
+  ExternalLink,
+  Users,
+  Download,
+  Radio,
+  AlertTriangle,
+} from "lucide-react";
 import { useGetCameraStatusQuery } from "./cameraApi";
 import { selectCameraStatus } from "./cameraSlice";
 import { useGetDevicesQuery } from "../devices/devicesApi";
@@ -368,7 +375,7 @@ export default function CamerasPage() {
     skip: !usingRelay,
   });
   useGetDevicesQuery(undefined, { pollingInterval: STATUS_POLL_MS });
-  const { online, hasFrame, ageMs, bytes, clients } =
+  const { online, hasFrame, ageMs, bytes, clients, degrading } =
     useSelector(selectCameraStatus);
   const devices = useSelector(selectAllDevices);
   const camHealth =
@@ -492,6 +499,17 @@ export default function CamerasPage() {
               {sourceName}
             </span>
           </div>
+          {usingRelay && degrading && (
+            <>
+              <div className="h-4 w-px bg-outline-variant" />
+              <div className="flex items-center gap-2 bg-error/15 border border-error/40 px-2 py-1 rounded">
+                <AlertTriangle size={14} className="text-error" />
+                <span className="font-label-caps text-label-caps text-error uppercase">
+                  Degrading
+                </span>
+              </div>
+            </>
+          )}
         </div>
         <div className="hidden md:flex items-center gap-6">
           <div className="text-right">
