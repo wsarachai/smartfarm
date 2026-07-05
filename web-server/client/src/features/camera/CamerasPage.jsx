@@ -9,7 +9,6 @@ import { metricMeta, formatMetricValue } from "../../lib/metricMeta";
 import Led from "../../components/Led";
 import {
   RELAY_STREAM_URL,
-  RELAY_LIVE_URL,
   isSameOriginUrl,
   useCameraSettings,
 } from "../settings/cameraSettings";
@@ -250,7 +249,9 @@ export default function CamerasPage() {
   // relay first, falling back to the LIVE pull proxy. Custom mode points the
   // browser straight at the configured camera URL (needs direct reachability).
   const streamUrl = usingRelay ? RELAY_STREAM_URL : cameraSettings.streamUrl;
-  const fallbackStreamUrl = usingRelay ? RELAY_LIVE_URL : RELAY_STREAM_URL;
+  // camera-v2: /live is retired, so relay mode has no secondary source (it shows
+  // NO SIGNAL on error). Custom mode can still fall back to the slideshow relay.
+  const fallbackStreamUrl = usingRelay ? null : RELAY_STREAM_URL;
   const snapshotUrl = usingRelay
     ? "/api/v1/camera/frame.jpg"
     : cameraSettings.snapshotUrl;

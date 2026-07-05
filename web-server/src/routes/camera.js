@@ -1,6 +1,5 @@
 const express = require('express');
 const { setFrame, getFrame, subscribe, status } = require('../store/frameStore');
-const cameraLive = require('../store/cameraLive');
 
 const router = express.Router();
 
@@ -69,13 +68,10 @@ router.get('/stream', (req, res) => {
   req.on('close', unsubscribe);
 });
 
-// Live MJPEG proxy: the web-server pulls the camera's own :81 stream and relays
-// it same-origin, so browsers that can't reach the camera directly still see
-// live video (and the camera only serves one connection). See cameraLive.js.
-router.get('/live', (req, res) => {
-  cameraLive.addViewer(res);
-  req.on('close', () => cameraLive.removeViewer(res));
-});
+// NOTE (camera-v2): the /live pull-proxy was retired. The v2 camera no longer
+// runs a continuous :81 MJPEG stream, so there is nothing to pull. "Live" is now
+// the slideshow relay of pushed snapshots (GET /stream above). See
+// docs/camera-longevity-redesign.md.
 
 router.get('/status', (req, res) => {
   res.json(status(STALE_MS));

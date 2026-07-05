@@ -9,11 +9,9 @@ const CAMERA_SETTINGS_KEY = "smartfarm.camera-settings.v1";
 // default the Cameras + Irrigation pages stream from.
 export const RELAY_STREAM_URL = "/api/v1/camera/stream";
 
-// Same-origin LIVE proxy: the server PULLS the camera's :81 MJPEG and fans it
-// out (see src/store/cameraLive.js) — smoother/higher-fps, but it requires the
-// server to reach the camera's :81 directly. Used as a fallback; make it the
-// primary only where the server can pull the camera stream.
-export const RELAY_LIVE_URL = "/api/v1/camera/live";
+// NOTE (camera-v2): RELAY_LIVE_URL (/api/v1/camera/live) was retired — the v2
+// camera no longer streams continuously, so there is nothing to pull. The
+// slideshow relay (RELAY_STREAM_URL) is now the only same-origin live source.
 
 export const DEFAULT_CAMERA_SETTINGS = {
   // Default to relay so a fresh install streams through the web-server proxy.
