@@ -49,4 +49,16 @@
 // Set to 0 to DISABLE (not recommended for a real pump).
 #define PUMP_MAX_RUN_MS       300000UL   // 5 minutes
 
+// --- Watchdog (device-hang / lost-link recovery) ---
+// 1) Software-watchdog window: if loop() stops feeding it for this long (an acute
+//    hang — a wedged HTTP handler or blocked call), the chip resets. The ESP8266
+//    hardware watchdog (~8 s, always on) backstops it, so ~8 s is the practical max.
+#define WDT_TIMEOUT_MS        8000UL     // 8 s
+// 2) Lost-link recovery: if WiFi stays disconnected continuously for this long the
+//    node can no longer be commanded, so force the pump OFF and reboot to recover
+//    the link/DHCP. 0 disables (relies on setAutoReconnect + the dead-man timer).
+//    Keep this well under PUMP_MAX_RUN_MS so a lost link recovers before/without
+//    depending on the dead-man cutoff.
+#define WIFI_RECOVER_MS       120000UL   // 2 minutes
+
 #endif // PUMP_CONFIG_H

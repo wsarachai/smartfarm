@@ -72,6 +72,26 @@ just the hub re-POSTing `on` before it expires — a natural heartbeat. A silent
 crashed hub can never leave the pump running longer than one window. Set
 `PUMP_MAX_RUN_MS` to `0` to disable (**not** recommended for a real pump).
 
+## Watchdog (device-hang / lost-link recovery)
+
+The dead-man timer above bounds how long the pump can run, but it doesn't cover
+the *device itself* getting into a bad state. [`src/watchdog.cpp`](src/watchdog.cpp)
+adds two recovery layers on top:
+
+1. **Acute-hang watchdog** — arms the ESP8266 software watchdog (`WDT_TIMEOUT_MS`,
+   default 8 s) and feeds it every `loop()`. If the loop wedges (a stuck HTTP
+   handler, a blocked call), feeding stops and the chip resets. The always-on
+   hardware watchdog (~8 s) backstops it.
+2. **Lost-link recovery** — a pump that can't reach the AP can no longer be
+   commanded OFF, which is unsafe. If WiFi stays disconnected continuously past
+   `WIFI_RECOVER_MS` (default **2 min**), the node **forces the pump OFF and
+   reboots** to recover the link/DHCP. This sits below `PUMP_MAX_RUN_MS` so a
+   wedged link recovers before the dead-man cutoff would fire, and complements
+   `WiFi.setAutoReconnect(true)` (which already handles brief blips).
+
+Both windows live in [`include/pump_config.h`](include/pump_config.h); set
+`WIFI_RECOVER_MS` to `0` to disable the reboot-on-lost-link layer.
+
 ## Topology / addressing
 
 Joins `MJU-SmartFarm-AP-II` as a STA with a **static IP `192.168.0.5`**

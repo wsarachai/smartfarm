@@ -13,6 +13,7 @@
 #include "relay.h"
 #include "secrets.h"  // DEVICE_ID, OTA_PASSWORD
 #include "status_led.h"
+#include "watchdog.h"
 #include "web_server.h"
 #include "wifi.h"
 
@@ -47,6 +48,7 @@ void setup() {
   status_led_set(LED_CONNECTING);
 
   wifi_begin();
+  watchdog_init();  // arm the device-hang watchdog once boot init is done
   // The HTTP server + OTA come up once WiFi connects (handled in loop()).
 }
 
@@ -55,6 +57,7 @@ void loop() {
   status_led_loop();  // drive blink timing
 
   const bool connected = wifi_is_connected();
+  watchdog_loop(connected);  // feed the watchdog + recover from a wedged link
 
   // Start services once, on the first successful connection.
   if (connected && !s_was_connected) {
