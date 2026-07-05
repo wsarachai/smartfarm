@@ -3,7 +3,10 @@
 Design for the second-generation `web-server` ↔ `esp32cam` integration. Supersedes
 the v1 protocol in [`camera-protocol.md`](./camera-protocol.md).
 
-> **Status:** design agreed, not yet implemented. This document is the spec.
+> **Status:** implemented (issues #1–#6) on branch `feat/pump-zone-esp01`.
+> Server + client changes are runtime-verified; the ESP32-CAM firmware compiles
+> against the described APIs but is **not yet hardware-tested** — flash and bench
+> it before trusting the reboot/watchdog paths.
 
 ## 1. Motivation & what changed from v1
 
@@ -241,11 +244,27 @@ degradation**, before it locks up — and can never enter a reboot loop.
 - **OTA still works** (camera stays awake) — no maintenance window needed, unlike the
   deep-sleep design would have required.
 
-## 10. Open items for implementation
+## 10. Open items — resolution
 
-- Exact `framesize` remote-set semantics (apply live via `sensor_t::set_framesize`
-  vs require a reboot).
-- Whether the optional daily quiet-hour reboot ships in v1 or waits.
-- Scrubber polling cadence for `/frames` (metadata is cheap; poll ~5 s).
-- Ring size vs frame size ceiling: cap `N × max_frame_bytes` so a UXGA config can't
-  blow the RAM budget (guard `CAMERA_RING_SIZE` against `CAMERA_MAX_FRAME_BYTES`).
+- `framesize` remote-set: **applied live** via `sensor_t::set_framesize` in
+  `fetchConfig()` (no reboot required).
+- Daily quiet-hour reboot: **not shipped** in v1 — the heap-trend health reboot
+  ships instead (server-side `cameraHealth.js`); the quiet-hour trigger is a
+  documented fast-follow (add a wall-clock branch to `shouldReboot`).
+- Scrubber polls `/frames` every **5 s** (`FRAMES_POLL_MS`).
+- Ring RAM ceiling: **implemented** — `POST /config` rejects
+  `ring_size × CAMERA_MAX_FRAME_BYTES` over `CAMERA_RING_RAM_BUDGET_BYTES`
+  (default 256 MB).
+
+## 11. Firmware bring-up caveats (not yet hardware-tested)
+
+- The camera now depends on **ArduinoJson** (`platformio.ini` `lib_deps`) — first
+  `pio run` pulls it.
+- `secrets.h` needs the new keys (`DEVICE_ID`, `FW_VERSION`, `TELEMETRY_URL`,
+  `CONFIG_URL`); `#ifndef` guards keep an older file compiling but with telemetry/
+  config disabled. See `secrets.example.h`.
+- The **task watchdog** is armed at 30 s and fed once per `loop()`. The push cycle
+  (capture + two POSTs + config GET) must stay well under 30 s; HTTPClient's 5 s
+  per-op timeout keeps worst case ~15 s. Bench-verify before trusting it.
+- Server-commanded reboot and the local uptime fallback both call `ESP.restart()`;
+  confirm the board re-associates + re-leases DHCP cleanly on your AP.
