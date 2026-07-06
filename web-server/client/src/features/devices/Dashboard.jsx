@@ -7,7 +7,7 @@ import { compareDevices } from './deviceCategory';
 import TrendChart from './TrendChart';
 import CameraStatusCard from '../camera/CameraStatusCard';
 import PumpControlCard from '../pump/PumpControlCard';
-import AiInsightCard from '../insights/AiInsightCard';
+import WaterStressCard from '../insights/WaterStressCard';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -60,7 +60,7 @@ export default function Dashboard() {
         <TrendChart />
       </div>
       <div className="md:col-span-12 lg:col-span-4">
-        <AiInsightCard />
+        <WaterStressCard />
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ const NAV = [
   { label: "DASHBOARD", Icon: LayoutDashboard, to: "/" },
   { label: "CAMERAS", Icon: Video, to: "/cameras" },
   { label: "IRRIGATION", Icon: Droplet, to: "/irrigation" },
-  { label: "AI ANALYTICS", Icon: BrainCircuit, to: "/analytics" },
+  { label: "AI INSIGHTS", Icon: BrainCircuit, to: "/insights" },
 ];
 
 export default function AppShell({ children }) {

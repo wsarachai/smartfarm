@@ -1,0 +1,152 @@
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BrainCircuit, Droplet, Thermometer, Waves, Info } from 'lucide-react';
+import { useGetWaterStressQuery, useGetWaterStressHistoryQuery } from './waterStressApi';
+import { riskMeta } from './risk';
+
+const POLL_MS = 5000;
+const AXIS = '#bbcbbb';
+const GRID = '#3d4a3e';
+const SERIES = '#7fb0ff'; // tech-blue: this is REAL data now, not the gold "simulated" hue
+
+// band 1/2/3 -> chart y; unknown -> null (gap).
+function bandOf(p) {
+  return p.band == null ? null : p.band;
+}
+function fmtTime(t) {
+  const d = new Date(t);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+const BAND_LABEL = { 1: 'Low', 2: 'Medium', 3: 'High' };
+
+function StatChip({ Icon, label, value, unit }) {
+  return (
+    <div className="bg-surface-container-low px-4 py-2 border border-outline-variant flex items-center gap-3">
+      <Icon size={18} className="text-primary shrink-0" />
+      <div>
+        <p className="font-label-caps text-[10px] text-on-surface-variant leading-none mb-1">{label}</p>
+        <p className="font-data-mono text-headline-sm leading-none text-on-surface">
+          {value == null ? '—' : `${value}${unit}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RiskPanel({ current }) {
+  const risk = current?.risk ?? 'unknown';
+  const m = riskMeta(risk);
+  const inputs = current?.inputs ?? {};
+  return (
+    <div className="panel industrial-top p-5">
+      <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
+        <BrainCircuit size={14} />
+        Water Stress Estimate
+        <span className="ml-auto font-label-caps text-[9px] text-primary/70 tracking-widest">RULE-BASED</span>
+      </h3>
+
+      <div className="flex flex-wrap items-center gap-4 mb-5">
+        <div className={`inline-flex items-center gap-3 px-4 py-2 rounded border ${m.bg} ${m.border}`}>
+          <span className={`w-3 h-3 rounded-full ${m.dot}`} />
+          <span className={`font-display-lg text-[28px] leading-none ${m.text}`}>{m.label}</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatChip Icon={Droplet} label="SOIL" value={inputs.soilMoisture} unit="%" />
+          <StatChip Icon={Thermometer} label="TEMP" value={inputs.temperature} unit="°C" />
+          <StatChip Icon={Waves} label="HUMIDITY" value={inputs.humidity} unit="%" />
+        </div>
+      </div>
+
+      <div className="rounded border border-outline-variant bg-surface-container-low p-3">
+        <p className="font-label-caps text-[10px] text-on-surface-variant mb-2 flex items-center gap-1.5">
+          <Info size={12} /> Why
+        </p>
+        <ul className="space-y-1">
+          {(current?.factors ?? []).map((f, i) => (
+            <li key={i} className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
+              • {f}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function TrendPanel({ history }) {
+  const data = history.map((p) => ({ t: new Date(p.at).getTime(), value: bandOf(p) }));
+  return (
+    <div className="panel industrial-top overflow-hidden relative min-h-[300px]">
+      <div className="p-5 flex flex-wrap gap-2 justify-between items-center border-b border-outline-variant/30">
+        <h3 className="font-headline-sm text-headline-sm text-on-background">Risk Trend</h3>
+        <span className="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">
+          {data.length} POINTS
+        </span>
+      </div>
+      <div className="h-64 w-full p-2">
+        {data.length < 2 ? (
+          <div className="h-full flex items-center justify-center text-on-surface-variant font-data-mono text-xs">
+            Collecting history…
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="wsFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={SERIES} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={SERIES} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={GRID} strokeOpacity={0.5} vertical={false} />
+              <XAxis dataKey="t" tickFormatter={fmtTime} stroke={AXIS} tick={{ fontSize: 10, fontFamily: 'JetBrains Mono' }} minTickGap={40} />
+              <YAxis
+                stroke={AXIS}
+                tick={{ fontSize: 10, fontFamily: 'JetBrains Mono' }}
+                width={64}
+                domain={[1, 3]}
+                ticks={[1, 2, 3]}
+                tickFormatter={(v) => BAND_LABEL[v] || ''}
+              />
+              <Tooltip
+                labelFormatter={fmtTime}
+                formatter={(v) => [BAND_LABEL[v] || '—', 'Risk']}
+                contentStyle={{ background: '#1e2023', border: '1px solid #3d4a3e', fontFamily: 'JetBrains Mono', fontSize: 12, color: '#e2e2e6' }}
+              />
+              <Area type="stepAfter" dataKey="value" stroke={SERIES} strokeWidth={2} fill="url(#wsFill)" isAnimationActive={false} connectNulls={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function AiInsightsPage() {
+  const { data: current } = useGetWaterStressQuery(undefined, { pollingInterval: POLL_MS });
+  const { data: hist } = useGetWaterStressHistoryQuery(288, { pollingInterval: 30000 });
+  const history = hist?.points ?? [];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+      <section className="md:col-span-12 mb-4">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="flex items-center gap-2 bg-primary/10 border border-primary/40 text-primary px-3 py-1 font-data-mono text-[12px] uppercase tracking-widest">
+            <BrainCircuit size={13} />
+            AI Insights
+          </span>
+        </div>
+        <h2 className="font-display-lg text-display-lg text-on-background">Water Stress</h2>
+        <p className="font-body-md text-on-surface-variant text-sm mt-1">
+          A rule-based estimate combining soil moisture with temperature &amp; humidity (evaporative demand).
+          Plant growth &amp; disease detection will join this page as they come online.
+        </p>
+      </section>
+
+      <div className="md:col-span-12">
+        <RiskPanel current={current} />
+      </div>
+      <div className="md:col-span-12">
+        <TrendPanel history={history} />
+      </div>
+    </div>
+  );
+}

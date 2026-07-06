@@ -49,7 +49,23 @@ function defaults() {
       moistureThreshold: clampPercent(process.env.IRRIGATION_MOISTURE_THRESHOLD, 60),
       entries: [],
     },
+    // Water-stress estimator thresholds (see insights/waterStress.js). Soil bands
+    // set the base risk; the hot&dry / cool&humid pairs adjust it by evaporative
+    // demand. All tunable per-crop from the Settings page.
+    waterStress: {
+      soilMediumBelow: clampPercent(process.env.WATER_STRESS_SOIL_MEDIUM_BELOW, 60),
+      soilHighBelow: clampPercent(process.env.WATER_STRESS_SOIL_HIGH_BELOW, 30),
+      hotAtOrAbove: numOr(process.env.WATER_STRESS_HOT_AT_OR_ABOVE, 33),
+      dryAtOrBelow: clampPercent(process.env.WATER_STRESS_DRY_AT_OR_BELOW, 45),
+      coolAtOrBelow: numOr(process.env.WATER_STRESS_COOL_AT_OR_BELOW, 22),
+      humidAtOrAbove: clampPercent(process.env.WATER_STRESS_HUMID_AT_OR_ABOVE, 75),
+    },
   };
+}
+
+function numOr(raw, fallback) {
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function clampMinutes(raw, fallback) {
@@ -139,6 +155,7 @@ function validate(patch) {
       ...settings.irrigation,
       entries: settings.irrigation.entries.map((e) => ({ ...e })),
     },
+    waterStress: { ...settings.waterStress },
   };
   const p = patch || {};
 
@@ -208,6 +225,36 @@ function validate(patch) {
     }
   }
 
+  if ('waterStress' in p) {
+    const ws = p.waterStress || {};
+    const bounded = (key, lo, hi) => {
+      if (!(key in ws)) return null;
+      const n = Number(ws[key]);
+      if (!Number.isFinite(n) || n < lo || n > hi)
+        return { ok: false, error: `waterStress.${key} must be ${lo}..${hi}` };
+      next.waterStress[key] = Math.round(n);
+      return { ok: true };
+    };
+    for (const [key, lo, hi] of [
+      ['soilMediumBelow', 0, 100],
+      ['soilHighBelow', 0, 100],
+      ['hotAtOrAbove', -20, 60],
+      ['dryAtOrBelow', 0, 100],
+      ['coolAtOrBelow', -20, 60],
+      ['humidAtOrAbove', 0, 100],
+    ]) {
+      const res = bounded(key, lo, hi);
+      if (res && !res.ok) return res;
+    }
+    // Cross-field sanity so the bands can't invert.
+    if (next.waterStress.soilHighBelow >= next.waterStress.soilMediumBelow)
+      return { ok: false, error: 'waterStress.soilHighBelow must be < soilMediumBelow' };
+    if (next.waterStress.coolAtOrBelow >= next.waterStress.hotAtOrAbove)
+      return { ok: false, error: 'waterStress.coolAtOrBelow must be < hotAtOrAbove' };
+    if (next.waterStress.dryAtOrBelow >= next.waterStress.humidAtOrAbove)
+      return { ok: false, error: 'waterStress.dryAtOrBelow must be < humidAtOrAbove' };
+  }
+
   return { ok: true, value: next };
 }
 
@@ -245,6 +292,7 @@ function get() {
       ...settings.irrigation,
       entries: settings.irrigation.entries.map((e) => ({ ...e })),
     },
+    waterStress: { ...settings.waterStress },
   };
 }
 
