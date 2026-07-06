@@ -2,7 +2,7 @@
 """Normalize a downloaded PlantVillage MobileNetV2 checkpoint for /disease.
 
 Reads models/mobilenetv2_plant.pth (the raw download), loads it into a
-torchvision MobileNetV2 (Dropout(0.2) + Linear head — torchvision's default),
+torchvision MobileNetV2 (Dropout(0.2) + Linear head - torchvision's default),
 and writes:
   - models/disease.pth        a clean state_dict, re-saved in LEGACY format so
                               the Jetson's old torch (<1.6) can read it too, and
@@ -10,7 +10,7 @@ and writes:
                               preprocessing, so disease.py loads it with no code
                               change.
 
-Run where torch/torchvision exist — i.e. INSIDE the smartfarm-ai container:
+Run where torch/torchvision exist - i.e. INSIDE the smartfarm-ai container:
     docker exec smartfarm-ai python3 /smartfarm-ai/convert_weights.py
 
 Env overrides: DISEASE_SRC_WEIGHTS, DISEASE_CLASS_NAMES, DISEASE_CLASS_NAMES_URL.
@@ -103,8 +103,9 @@ def main():
         sys.exit("ERROR: no final Linear found in checkpoint (keys like %s)." % lin_key)
     num = int(sd[lin_key].shape[0])
     in_f = tvm.mobilenet_v2(pretrained=False).classifier[1].in_features
+    print("checkpoint classes=%d, class_names.json labels=%d, head=%s" % (num, len(labels), "nested" if nested else "flat"))
     if num != len(labels):
-        print("WARNING: checkpoint has %d classes but class_names.json has %d — using %d; check label order." % (num, len(labels), num))
+        print("WARNING: class count mismatch (%d vs %d) -- using %d; verify label order." % (num, len(labels), num))
         if len(labels) < num:
             labels = labels + ["class_%d" % i for i in range(len(labels), num)]
         else:
