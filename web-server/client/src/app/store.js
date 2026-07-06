@@ -1,4 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
+import { setupListeners } from '@reduxjs/toolkit/query';
 import devicesReducer from '../features/devices/devicesSlice';
 import { devicesApi } from '../features/devices/devicesApi';
 import cameraReducer from '../features/camera/cameraSlice';
@@ -8,6 +9,7 @@ import { healthApi } from '../features/health/healthApi';
 import analyticsReducer from '../features/analytics/analyticsSlice';
 import { analyticsApi } from '../features/analytics/analyticsApi';
 import { pumpApi } from '../features/pump/pumpApi';
+import { settingsApi } from '../features/settings/settingsApi';
 
 export const store = configureStore({
   reducer: {
@@ -20,6 +22,7 @@ export const store = configureStore({
     [healthApi.reducerPath]: healthApi.reducer,
     [analyticsApi.reducerPath]: analyticsApi.reducer,
     [pumpApi.reducerPath]: pumpApi.reducer,
+    [settingsApi.reducerPath]: settingsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -27,6 +30,11 @@ export const store = configureStore({
       cameraApi.middleware,
       healthApi.middleware,
       analyticsApi.middleware,
-      pumpApi.middleware
+      pumpApi.middleware,
+      settingsApi.middleware
     ),
 });
+
+// Enables refetchOnFocus / refetchOnReconnect for the settings query so
+// already-open tablets pick up a change made elsewhere without a manual refresh.
+setupListeners(store.dispatch);

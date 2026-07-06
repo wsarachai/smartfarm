@@ -1,5 +1,6 @@
 const express = require('express');
 const { reflectState, upsertTelemetry } = require('../store/deviceStore');
+const settingsStore = require('../store/settingsStore');
 
 const router = express.Router();
 
@@ -21,11 +22,13 @@ const PUMP_NODE_NA_METRICS = { pressure: 'n/a', flow_rate: 'n/a', temperature: '
 //
 // The browser can't POST JSON to the pump directly (CORS preflight the pump's
 // esp_http_server doesn't answer), so all pump traffic goes through here. The
-// pump holds NO state on this server beyond a single safety-timer per target.
+// pump TARGET and auto-off duration are server-owned config (settingsStore); the
+// client posts only { state }. The pump holds NO state on this server beyond a
+// single safety-timer per target.
 
 // How long we wait on the pump before calling it unreachable.
 const RELAY_TIMEOUT_MS = Number(process.env.PUMP_RELAY_TIMEOUT_MS) || 4000;
-// Backend clamp for the auto-off duration (defense-in-depth; the UI clamps too).
+// Backend clamp for the auto-off duration (defense-in-depth; the store clamps too).
 const AUTO_OFF_MIN = 1;
 const AUTO_OFF_MAX = 60;
 
@@ -45,6 +48,16 @@ function normalizeTarget(target) {
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
   return u.origin; // scheme://host[:port], no path/query/trailing slash
+}
+
+// The pump target + auto-off now live in server-owned settings (settingsStore),
+// not the request. Read + normalize the configured pump URL.
+function configuredTarget() {
+  return normalizeTarget(settingsStore.get().pump.url);
+}
+
+function configuredAutoOffMinutes() {
+  return clampMinutes(settingsStore.get().pump.autoOffMinutes);
 }
 
 function relayUrl(base) {
@@ -123,11 +136,11 @@ function mirror(relayStatus) {
   upsertTelemetry({ device_id: PUMP_NODE_ID, metrics: PUMP_NODE_NA_METRICS });
 }
 
-// GET /api/v1/pump/status?target=http://192.168.0.4  -> current state (polled)
+// GET /api/v1/pump/status  -> current state (polled). Target comes from settings.
 router.get('/status', async (req, res) => {
-  const base = normalizeTarget(req.query.target);
+  const base = configuredTarget();
   if (!base) {
-    return res.status(400).json({ error: 'valid http(s) target query param required' });
+    return res.status(400).json({ error: 'no valid pump.url configured in settings' });
   }
   try {
     const data = await relay(base, 'GET');
@@ -142,12 +155,13 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// POST /api/v1/pump/control  body: { target, state:"on"|"off", autoOffMinutes }
+// POST /api/v1/pump/control  body: { state:"on"|"off" }
+// Target + auto-off duration are read from server-owned settings.
 router.post('/control', async (req, res) => {
-  const { target, state, autoOffMinutes } = req.body || {};
-  const base = normalizeTarget(target);
+  const { state } = req.body || {};
+  const base = configuredTarget();
   if (!base) {
-    return res.status(400).json({ error: 'valid http(s) target required' });
+    return res.status(400).json({ error: 'no valid pump.url configured in settings' });
   }
   if (state !== 'on' && state !== 'off') {
     return res.status(400).json({ error: 'state must be "on" or "off"' });
@@ -159,7 +173,7 @@ router.post('/control', async (req, res) => {
     // Arm the safety timer on ON; cancel it on manual OFF.
     let autoOffAt = null;
     if (state === 'on') {
-      autoOffAt = armTimer(base, clampMinutes(autoOffMinutes));
+      autoOffAt = armTimer(base, configuredAutoOffMinutes());
     } else {
       clearTimer(base);
     }

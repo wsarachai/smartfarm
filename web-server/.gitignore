@@ -7,6 +7,9 @@ client/dist/
 # Runtime camera config (host volume, camera-v2) — persisted at runtime, not code
 data/
 
+# Local dev env (backend). Copy .env.example -> .env and fill for `npm run dev`.
+.env
+
 # Logs / misc
 *.log
 .DS_Store

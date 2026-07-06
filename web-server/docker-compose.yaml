@@ -8,8 +8,8 @@ services:
     ports:
       - "3000:3000"
 
-    # Camera config persists here (camera-v2). Host-mounted so it survives
-    # container recreation; the server writes it atomically on dashboard edits.
+    # Camera config + dashboard settings persist here. Host-mounted so they
+    # survive container recreation; the server writes them atomically on edits.
     volumes:
       - ./data:/data
 
@@ -24,6 +24,20 @@ services:
       CAMERA_STALE_FACTOR: "2.5"
       CAMERA_RING_SIZE: 90
       CAMERA_CONFIG_PATH: /data/camera-config.json
+
+      # Dashboard settings (camera source + pump), server-owned + persisted.
+      # These seed data/settings.json on first boot; the persisted file takes
+      # over once written (edited from the Settings page).
+      SETTINGS_PATH: /data/settings.json
+      # Pump target the relay commands. Set to the actually-deployed node
+      # (pump-zone-esp01 uses a static 192.168.0.5).
+      PUMP_URL: http://192.168.0.5
+      PUMP_LABEL: Main Pump
+      PUMP_AUTO_OFF_MINUTES: 5
+      # Camera source prefs (where the browser reads live/snapshot frames).
+      CAMERA_SOURCE_MODE: relay
+      CAMERA_STREAM_URL: http://192.168.0.3:81/stream
+      CAMERA_SNAPSHOT_URL: /api/v1/camera/frame.jpg
 
     healthcheck:
       test:
