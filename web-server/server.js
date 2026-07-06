@@ -12,6 +12,7 @@ const settingsRouter = require('./src/routes/settings');
 const irrigationRouter = require('./src/routes/irrigation');
 const cameraConfig = require('./src/store/cameraConfig');
 const settingsStore = require('./src/store/settingsStore');
+const pumpLog = require('./src/store/pumpLog');
 const irrigationScheduler = require('./src/scheduler/irrigationScheduler');
 
 const app = express();
@@ -40,6 +41,7 @@ app.get('*', (req, res) => {
 // cameraConfig also sizes the frame ring to match its persisted ring_size.
 cameraConfig.load();
 settingsStore.load();
+pumpLog.load(); // restore the pump action log so history survives restart
 
 // Start the AUTO-mode irrigation scheduler (reads the schedule from settings
 // each tick; idle until irrigation.auto is enabled).

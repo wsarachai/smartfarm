@@ -9,6 +9,7 @@ import { freshness } from '../../lib/freshness';
 import { metricMeta, formatMetricValue } from '../../lib/metricMeta';
 import Led from '../../components/Led';
 import ScheduleEditor from './ScheduleEditor';
+import ActivityLog from './ActivityLog';
 
 const POLL_INTERVAL_MS = 5000;
 const PUMP_ID = 'main-pump';
@@ -317,6 +318,7 @@ export default function IrrigationPage() {
       <div className="md:col-span-4 space-y-gutter">
         <NodeCameraPreview />
         <NodeSensorsTable node={node} />
+        <ActivityLog />
       </div>
     </div>
   );

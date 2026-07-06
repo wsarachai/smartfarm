@@ -10,6 +10,7 @@
 
 const pumpControl = require('./../store/pumpControl');
 const settingsStore = require('./../store/settingsStore');
+const pumpLog = require('./../store/pumpLog');
 const { listDevices } = require('./../store/deviceStore');
 
 const TICK_MS = Number(process.env.IRRIGATION_TICK_MS) || 20000;
@@ -81,7 +82,12 @@ function computeNextRun(irr, now) {
 }
 
 async function fire(entry, moisture) {
-  const result = await pumpControl.command('on', { runMinutes: entry.durationMinutes });
+  // pumpControl logs the actuation itself (source: schedule) with the label.
+  const result = await pumpControl.command('on', {
+    runMinutes: entry.durationMinutes,
+    source: 'schedule',
+    label: entry.label || entry.id,
+  });
   lastRun = {
     at: new Date().toISOString(),
     entryId: entry.id,
@@ -125,14 +131,17 @@ async function tick() {
 
     const moisture = avgSoilMoisture();
     if (moisture !== null && moisture >= irr.moistureThreshold) {
-      lastSkip = {
-        at: new Date().toISOString(),
-        entryId: entry.id,
-        label: entry.label,
-        reason: `soil moisture ${Math.round(moisture)}% >= threshold ${irr.moistureThreshold}%`,
-        moisture,
-      };
-      console.log(`[irrigation] skip "${entry.label || entry.id}" — ${lastSkip.reason}`);
+      const reason = `soil moisture ${Math.round(moisture)}% >= threshold ${irr.moistureThreshold}%`;
+      lastSkip = { at: new Date().toISOString(), entryId: entry.id, label: entry.label, reason, moisture };
+      pumpLog.append({
+        action: 'skip',
+        source: 'schedule',
+        ok: true,
+        label: entry.label || entry.id,
+        moisture: Math.round(moisture),
+        note: reason,
+      });
+      console.log(`[irrigation] skip "${entry.label || entry.id}" — ${reason}`);
       continue;
     }
     await fire(entry, moisture);

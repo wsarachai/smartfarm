@@ -10,7 +10,11 @@ export const irrigationApi = createApi({
     getIrrigationStatus: builder.query({
       query: () => '/status',
     }),
+    // Pump action log (newest first). Polled so the Activity Log stays live.
+    getIrrigationLog: builder.query({
+      query: (limit = 50) => `/log?limit=${limit}`,
+    }),
   }),
 });
 
-export const { useGetIrrigationStatusQuery } = irrigationApi;
+export const { useGetIrrigationStatusQuery, useGetIrrigationLogQuery } = irrigationApi;

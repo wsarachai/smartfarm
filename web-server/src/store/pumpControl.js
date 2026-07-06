@@ -7,6 +7,7 @@
 
 const { reflectState, upsertTelemetry } = require('./deviceStore');
 const settingsStore = require('./settingsStore');
+const pumpLog = require('./pumpLog');
 
 // The store device_id the real pump is mirrored into, so the generic dashboard
 // and the irrigation page can read live hardware state like any other device.
@@ -81,8 +82,10 @@ function clearTimer(key) {
 }
 
 // Arm (or re-arm) the backend-authoritative auto-off. When it fires, the SERVER
-// POSTs off on its own — independent of any browser or the scheduler.
-function armTimer(base, minutes) {
+// POSTs off on its own — independent of any browser or the scheduler. `meta.label`
+// (a scheduled run's name) is carried through so the auto-off is logged with the
+// run it ended; absent => a manual safety-window auto-off.
+function armTimer(base, minutes, meta = {}) {
   clearTimer(base);
   const ms = minutes * 60 * 1000;
   const autoOffAt = new Date(Date.now() + ms).toISOString();
@@ -91,8 +94,10 @@ function armTimer(base, minutes) {
     try {
       const data = await relay(base, 'POST', { state: 'off' });
       mirror(data.relay_status);
+      pumpLog.append({ action: 'off', source: 'auto-off', ok: true, label: meta.label || null });
       console.log(`[pump] auto-off fired for ${base}`);
     } catch (err) {
+      pumpLog.append({ action: 'off', source: 'auto-off', ok: false, label: meta.label || null, error: err.message });
       console.error(`[pump] auto-off FAILED for ${base}: ${err.message}`);
     }
   }, ms);
@@ -130,8 +135,9 @@ async function getStatus() {
 
 // Command the pump on/off. On "on", arms the auto-off with `runMinutes` if given
 // (a scheduled run's duration), else the configured safety window. On "off",
-// clears the timer. Resolves like getStatus().
-async function command(state, { runMinutes } = {}) {
+// clears the timer. Every attempt is logged (pumpLog) with its `source`
+// ("manual" | "schedule") and outcome. Resolves like getStatus().
+async function command(state, { runMinutes, source = 'manual', label = null } = {}) {
   const base = configuredTarget();
   if (!base) return { online: false, error: 'no valid pump.url configured in settings' };
   if (state !== 'on' && state !== 'off') return { online: false, error: 'state must be "on" or "off"' };
@@ -139,14 +145,19 @@ async function command(state, { runMinutes } = {}) {
     const data = await relay(base, 'POST', { state });
     mirror(data.relay_status);
     let autoOffAt = null;
+    let durationMinutes = null;
     if (state === 'on') {
-      autoOffAt = armTimer(base, runMinutes != null ? clampMinutes(runMinutes) : configuredAutoOffMinutes());
+      durationMinutes = runMinutes != null ? clampMinutes(runMinutes) : configuredAutoOffMinutes();
+      autoOffAt = armTimer(base, durationMinutes, { label });
     } else {
       clearTimer(base);
     }
+    pumpLog.append({ action: state, source, ok: true, label, durationMinutes });
     return { online: true, relay_status: data.relay_status, autoOffAt };
   } catch (err) {
-    return { online: false, error: err.name === 'AbortError' ? 'timeout' : 'unreachable' };
+    const error = err.name === 'AbortError' ? 'timeout' : 'unreachable';
+    pumpLog.append({ action: state, source, ok: false, label, error });
+    return { online: false, error };
   }
 }
 

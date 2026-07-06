@@ -30,7 +30,7 @@ router.post('/control', async (req, res) => {
   if (state === 'on' && autoModeOn()) {
     return res.status(409).json({ error: 'auto mode is on — manual start is disabled (switch to MANUAL first)' });
   }
-  res.json(await pumpControl.command(state));
+  res.json(await pumpControl.command(state, { source: 'manual' }));
 });
 
 module.exports = router;
