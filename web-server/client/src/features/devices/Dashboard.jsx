@@ -3,6 +3,7 @@ import { useGetDevicesQuery } from './devicesApi';
 import { selectAllDevices } from './devicesSlice';
 import SensorCard from './SensorCard';
 import ControlCard from './ControlCard';
+import { compareDevices } from './deviceCategory';
 import TrendChart from './TrendChart';
 import CameraStatusCard from '../camera/CameraStatusCard';
 import PumpControlCard from '../pump/PumpControlCard';
@@ -21,7 +22,9 @@ function EmptyPanel({ children }) {
 export default function Dashboard() {
   useGetDevicesQuery(undefined, { pollingInterval: POLL_INTERVAL_MS });
   const devices = useSelector(selectAllDevices);
-  const sensors = devices.filter((d) => d.type !== 'actuator');
+  // Order the widgets by category (sensor -> pump -> camera -> other), stable by
+  // device_id, so the grid isn't shuffled by arbitrary Map insertion order.
+  const sensors = devices.filter((d) => d.type !== 'actuator').sort(compareDevices);
   // 'main-pump' is rendered by the dedicated PumpControlCard below; keep it out
   // of the generic list so it isn't shown twice.
   const actuators = devices.filter((d) => d.type === 'actuator' && d.device_id !== 'main-pump');
