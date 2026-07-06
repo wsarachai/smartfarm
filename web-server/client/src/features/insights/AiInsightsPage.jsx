@@ -1,6 +1,7 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { BrainCircuit, Droplet, Thermometer, Waves, Info } from 'lucide-react';
+import { BrainCircuit, Droplet, Thermometer, Waves, Info, Sprout } from 'lucide-react';
 import { useGetWaterStressQuery, useGetWaterStressHistoryQuery } from './waterStressApi';
+import { useGetCanopyQuery, useGetCanopyHistoryQuery } from './canopyApi';
 import { riskMeta } from './risk';
 
 const POLL_MS = 5000;
@@ -128,10 +129,103 @@ function TrendPanel({ history }) {
   );
 }
 
+function CanopyPanel({ current }) {
+  const pct = current?.canopyPercent;
+  const aiOffline = current?.aiOnline === false;
+  const hasValue = typeof pct === 'number';
+  // Cache-bust the preview so it refreshes each tick (keyed on the result time).
+  const previewSrc = hasValue ? `/api/v1/canopy/preview.png?ts=${encodeURIComponent(current.at || '')}` : null;
+  return (
+    <div className="panel industrial-top p-5">
+      <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
+        <Sprout size={14} />
+        Canopy Coverage
+        <span
+          className={`ml-auto inline-flex items-center gap-1.5 font-label-caps text-[9px] tracking-widest ${
+            aiOffline ? 'text-error' : 'text-primary/70'
+          }`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${aiOffline ? 'bg-error' : 'bg-primary'}`} />
+          {aiOffline ? 'AI OFFLINE — LAST KNOWN' : 'SMARTFARM-AI'}
+        </span>
+      </h3>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-start">
+        <div>
+          <p className="font-display-lg text-[44px] leading-none text-primary">
+            {hasValue ? `${pct}%` : <span className="text-on-surface-variant text-[28px]">n/a</span>}
+          </p>
+          <p className="font-body-md text-outline mt-2">Green-pixel cover</p>
+          <div className="mt-4 rounded border border-outline-variant bg-surface-container-low p-3">
+            <ul className="space-y-1">
+              {(current?.factors ?? []).map((f, i) => (
+                <li key={i} className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
+                  • {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="border border-outline-variant bg-surface-container-lowest aspect-video overflow-hidden flex items-center justify-center">
+          {previewSrc ? (
+            <img src={previewSrc} alt="Canopy detection mask" className="w-full h-full object-contain" />
+          ) : (
+            <span className="font-data-mono text-[11px] text-on-surface-variant">no preview</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CanopyTrend({ history }) {
+  const data = history.map((p) => ({ t: new Date(p.at).getTime(), value: p.canopyPercent }));
+  return (
+    <div className="panel industrial-top overflow-hidden relative min-h-[280px]">
+      <div className="p-5 flex flex-wrap gap-2 justify-between items-center border-b border-outline-variant/30">
+        <h3 className="font-headline-sm text-headline-sm text-on-background">Canopy Trend</h3>
+        <span className="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">
+          {data.length} POINTS
+        </span>
+      </div>
+      <div className="h-56 w-full p-2">
+        {data.length < 2 ? (
+          <div className="h-full flex items-center justify-center text-on-surface-variant font-data-mono text-xs">
+            Collecting history…
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="canopyFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={SERIES} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={SERIES} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={GRID} strokeOpacity={0.5} vertical={false} />
+              <XAxis dataKey="t" tickFormatter={fmtTime} stroke={AXIS} tick={{ fontSize: 10, fontFamily: 'JetBrains Mono' }} minTickGap={40} />
+              <YAxis stroke={AXIS} tick={{ fontSize: 10, fontFamily: 'JetBrains Mono' }} width={40} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+              <Tooltip
+                labelFormatter={fmtTime}
+                formatter={(v) => [`${v}%`, 'Canopy']}
+                contentStyle={{ background: '#1e2023', border: '1px solid #3d4a3e', fontFamily: 'JetBrains Mono', fontSize: 12, color: '#e2e2e6' }}
+              />
+              <Area type="monotone" dataKey="value" stroke={SERIES} strokeWidth={2} fill="url(#canopyFill)" isAnimationActive={false} connectNulls={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AiInsightsPage() {
   const { data: current } = useGetWaterStressQuery(undefined, { pollingInterval: POLL_MS });
   const { data: hist } = useGetWaterStressHistoryQuery(288, { pollingInterval: 30000 });
   const history = hist?.points ?? [];
+  const { data: canopy } = useGetCanopyQuery(undefined, { pollingInterval: POLL_MS });
+  const { data: canopyHist } = useGetCanopyHistoryQuery(288, { pollingInterval: 30000 });
+  const canopyHistory = canopyHist?.points ?? [];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-gutter">
@@ -154,6 +248,13 @@ export default function AiInsightsPage() {
       </div>
       <div className="md:col-span-12">
         <TrendPanel history={history} />
+      </div>
+
+      <div className="md:col-span-12">
+        <CanopyPanel current={canopy} />
+      </div>
+      <div className="md:col-span-12">
+        <CanopyTrend history={canopyHistory} />
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { pumpApi } from '../features/pump/pumpApi';
 import { settingsApi } from '../features/settings/settingsApi';
 import { irrigationApi } from '../features/irrigation/irrigationApi';
 import { waterStressApi } from '../features/insights/waterStressApi';
+import { canopyApi } from '../features/insights/canopyApi';
 
 export const store = configureStore({
   reducer: {
@@ -23,6 +24,7 @@ export const store = configureStore({
     [settingsApi.reducerPath]: settingsApi.reducer,
     [irrigationApi.reducerPath]: irrigationApi.reducer,
     [waterStressApi.reducerPath]: waterStressApi.reducer,
+    [canopyApi.reducerPath]: canopyApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -32,7 +34,8 @@ export const store = configureStore({
       pumpApi.middleware,
       settingsApi.middleware,
       irrigationApi.middleware,
-      waterStressApi.middleware
+      waterStressApi.middleware,
+      canopyApi.middleware
     ),
 });
 

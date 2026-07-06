@@ -28,6 +28,10 @@ export default function SettingsPage() {
   const [wsSaved, setWsSaved] = useState(false);
   const [wsErr, setWsErr] = useState('');
 
+  const [cy, setCy] = useState(null);
+  const [cySaved, setCySaved] = useState(false);
+  const [cyErr, setCyErr] = useState('');
+
   // Seed the local forms from the server the first time settings arrive.
   useEffect(() => {
     if (serverSettings?.cameraSource && settings === null) {
@@ -39,7 +43,30 @@ export default function SettingsPage() {
     if (serverSettings?.waterStress && ws === null) {
       setWs(serverSettings.waterStress);
     }
-  }, [serverSettings, settings, pump, ws]);
+    if (serverSettings?.canopy && cy === null) {
+      setCy(serverSettings.canopy);
+    }
+  }, [serverSettings, settings, pump, ws, cy]);
+
+  const onSaveCy = async (event) => {
+    event.preventDefault();
+    setCyErr('');
+    try {
+      const next = await updateSettings({
+        canopy: {
+          hueMinDeg: Number(cy.hueMinDeg),
+          hueMaxDeg: Number(cy.hueMaxDeg),
+          satMinPct: Number(cy.satMinPct),
+          valMinPct: Number(cy.valMinPct),
+        },
+      }).unwrap();
+      setCy(next.canopy);
+      setCySaved(true);
+      window.setTimeout(() => setCySaved(false), 2000);
+    } catch (err) {
+      setCyErr(err?.data?.error || 'Save failed — check the values and try again.');
+    }
+  };
 
   const onSaveWs = async (event) => {
     event.preventDefault();
@@ -553,6 +580,67 @@ export default function SettingsPage() {
                   Save Thresholds
                 </button>
                 {wsSaved ? (
+                  <span className="inline-flex items-center font-data-mono text-xs text-primary">Saved</span>
+                ) : null}
+              </div>
+            </form>
+          )}
+        </section>
+
+        <section className="panel rounded-lg border border-outline-variant p-6">
+          <div className="flex items-start gap-3 mb-6">
+            <div className="p-2 rounded bg-primary/15 text-primary">
+              <Droplets size={18} />
+            </div>
+            <div>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">Canopy Detection (HSV)</h2>
+              <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
+                Which pixels count as green canopy (AI Insights → Canopy). Watch the mask preview there
+                while tuning. Hue in degrees (green ≈ 120°); saturation/value as %.
+              </p>
+            </div>
+          </div>
+
+          {cy === null ? (
+            <p className="font-data-mono text-xs text-on-surface-variant">Loading thresholds…</p>
+          ) : (
+            <form className="space-y-5" onSubmit={onSaveCy}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {[
+                  ['hueMinDeg', 'Hue min (°)', 0, 360],
+                  ['hueMaxDeg', 'Hue max (°)', 0, 360],
+                  ['satMinPct', 'Saturation min (%)', 0, 100],
+                  ['valMinPct', 'Value/brightness min (%)', 0, 100],
+                ].map(([key, label, min, max]) => (
+                  <label key={key} className="block">
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">{label}</span>
+                    <input
+                      type="number"
+                      min={min}
+                      max={max}
+                      value={cy[key]}
+                      onChange={(e) => setCy((prev) => ({ ...prev, [key]: e.target.value }))}
+                      className="mt-2 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              {cyErr ? (
+                <div className="rounded border border-error/40 bg-error/10 p-3">
+                  <p className="font-data-mono text-[11px] text-error">{cyErr}</p>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110"
+                >
+                  <Save size={16} />
+                  Save Thresholds
+                </button>
+                {cySaved ? (
                   <span className="inline-flex items-center font-data-mono text-xs text-primary">Saved</span>
                 ) : null}
               </div>

@@ -15,6 +15,8 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
   as the container command.
 - `water_stress.py` — the stateless water-stress **decision** (bands + evaporative
   adjust + factors), called by the service.
+- `canopy.py` — canopy-coverage **decision** (feature 2): % green pixels via HSV
+  thresholding (PIL + numpy) + a mask-preview PNG.
 - `frame_poller.py` / `smartfarm_inference.ipynb` — dev artifacts for the camera
   frame-pull path (`../web-server/docs/ai-frame-pull.md`); used interactively.
 
@@ -23,6 +25,8 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
 - `GET  /health` → `{"status":"ok"}`
 - `POST /water-stress` → body `{ inputs:{soilMoisture,temperature,humidity},
   thresholds:{…} }` → `{ band, risk, factors }`.
+- `POST /canopy?hueMinDeg=&hueMaxDeg=&satMinPct=&valMinPct=` → **raw JPEG body** →
+  `{ canopyPercent, factors, maskPng (base64 PNG), width, height }`.
 
 The web-server sends already-averaged fresh inputs + the thresholds; this service
 holds no state. When it's unreachable the web-server degrades gracefully (shows

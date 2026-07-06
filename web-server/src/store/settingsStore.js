@@ -60,7 +60,21 @@ function defaults() {
       coolAtOrBelow: numOr(process.env.WATER_STRESS_COOL_AT_OR_BELOW, 22),
       humidAtOrAbove: clampPercent(process.env.WATER_STRESS_HUMID_AT_OR_ABOVE, 75),
     },
+    // Canopy-coverage green-detection thresholds (HSV). Hue in DEGREES (0-360),
+    // saturation/value as PERCENT (0-100). Sent to the AI /canopy endpoint.
+    canopy: {
+      hueMinDeg: clampRange(process.env.CANOPY_HUE_MIN_DEG, 60, 0, 360),
+      hueMaxDeg: clampRange(process.env.CANOPY_HUE_MAX_DEG, 170, 0, 360),
+      satMinPct: clampPercent(process.env.CANOPY_SAT_MIN_PCT, 20),
+      valMinPct: clampPercent(process.env.CANOPY_VAL_MIN_PCT, 15),
+    },
   };
+}
+
+function clampRange(raw, fallback, lo, hi) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(hi, Math.max(lo, Math.round(n)));
 }
 
 function numOr(raw, fallback) {
@@ -156,6 +170,7 @@ function validate(patch) {
       entries: settings.irrigation.entries.map((e) => ({ ...e })),
     },
     waterStress: { ...settings.waterStress },
+    canopy: { ...settings.canopy },
   };
   const p = patch || {};
 
@@ -255,6 +270,24 @@ function validate(patch) {
       return { ok: false, error: 'waterStress.dryAtOrBelow must be < humidAtOrAbove' };
   }
 
+  if ('canopy' in p) {
+    const cp = p.canopy || {};
+    for (const [key, lo, hi] of [
+      ['hueMinDeg', 0, 360],
+      ['hueMaxDeg', 0, 360],
+      ['satMinPct', 0, 100],
+      ['valMinPct', 0, 100],
+    ]) {
+      if (!(key in cp)) continue;
+      const n = Number(cp[key]);
+      if (!Number.isFinite(n) || n < lo || n > hi)
+        return { ok: false, error: `canopy.${key} must be ${lo}..${hi}` };
+      next.canopy[key] = Math.round(n);
+    }
+    if (next.canopy.hueMinDeg >= next.canopy.hueMaxDeg)
+      return { ok: false, error: 'canopy.hueMinDeg must be < hueMaxDeg' };
+  }
+
   return { ok: true, value: next };
 }
 
@@ -293,6 +326,7 @@ function get() {
       entries: settings.irrigation.entries.map((e) => ({ ...e })),
     },
     waterStress: { ...settings.waterStress },
+    canopy: { ...settings.canopy },
   };
 }
 

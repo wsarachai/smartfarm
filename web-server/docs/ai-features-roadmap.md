@@ -25,16 +25,22 @@ and (for pushing results back) still need a results-ingestion path.
 - Advisory only (no pump coupling). See CLAUDE.md for the full note.
 - A canopy-greenness image signal can be blended in later (depends on feature 2).
 
-## 2. Canopy Coverage — easiest VISION feature  ⏳ LATER
+## 2. Canopy Coverage — easiest VISION feature  ✅ DONE
 
-- **Approach:** % green-pixel coverage via classical OpenCV color thresholding on
-  the pulled frame — no trained model, just image processing on the Jetson.
-- A single honest metric; a slice of the "Plant Growth Monitoring" group
-  (height / leaf count / growth rate are much harder — need calibration + instance
-  segmentation, so they are explicitly out of the first vision pass).
-- **Requires building the results-ingestion path** (AI container POSTs results →
-  server store → dashboard). This path, once built, serves feature 3 too.
-- Can feed feature 1 (greenness as an extra water-stress input).
+- **Approach:** % green-pixel coverage via classical **HSV** thresholding (PIL +
+  numpy, no cv2) on the latest frame — no trained model. A single honest metric;
+  a slice of "Plant Growth Monitoring" (height / leaf count / growth rate remain
+  much harder — calibration + instance segmentation — and are out of this pass).
+- **Decision in `smartfarm-ai`:** `smartfarm-ai/canopy.py` (served by `ai_service.py`
+  `POST /canopy`, raw JPEG + HSV params as query) returns `{canopyPercent, factors,
+  maskPng}`. Uses the **orchestrator** pattern (web-server POSTs its latest frame),
+  not a results-ingestion path — consistent with water stress.
+- **Shipped:** web-server `src/insights/canopy.js` (orchestrator) + `canopyStore.js`
+  (persisted history) + `routes/canopy.js` (`/`, `/history`, `/preview.png` mask);
+  HSV thresholds in `settings.json` `canopy` (Settings panel, live-tunable while
+  watching the mask); a Canopy panel + trend on the AI Insights page. Graceful
+  degrade (no fresh frame → unknown; AI down → AI OFFLINE).
+- Greenness could feed feature 1 (water stress) as an extra input later.
 
 ## 3. Disease Detection — hardest  ⏳ LATER
 

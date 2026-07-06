@@ -17,10 +17,12 @@ import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse, parse_qs
 
 # Import sibling modules regardless of the process working directory.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from water_stress import decide  # noqa: E402
+from canopy import analyze as analyze_canopy  # noqa: E402
 
 PORT = int(os.environ.get("AI_SERVICE_PORT", "8000"))
 
@@ -41,14 +43,24 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path.rstrip("/") != "/water-stress":
-            self._send(404, {"error": "not found"})
-            return
+        route = urlparse(self.path).path.rstrip("/")
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        body = self.rfile.read(length) if length else b""
         try:
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            payload = json.loads(self.rfile.read(length) or b"{}")
-            result = decide(payload.get("inputs"), payload.get("thresholds"))
-            self._send(200, result)
+            if route == "/water-stress":
+                # JSON body: { inputs, thresholds } -> { band, risk, factors }
+                payload = json.loads(body or b"{}")
+                self._send(200, decide(payload.get("inputs"), payload.get("thresholds")))
+            elif route == "/canopy":
+                # Raw JPEG body + HSV params as query string -> canopy result.
+                if not body:
+                    self._send(400, {"error": "empty image body"})
+                    return
+                q = parse_qs(urlparse(self.path).query)
+                params = {k: v[0] for k, v in q.items()}
+                self._send(200, analyze_canopy(body, params))
+            else:
+                self._send(404, {"error": "not found"})
         except Exception as exc:  # noqa: BLE001 - report any parse/decision error as 400
             self._send(400, {"error": str(exc)})
 
