@@ -9,8 +9,10 @@ const cameraRouter = require('./src/routes/camera');
 const analyticsRouter = require('./src/routes/analytics');
 const pumpRouter = require('./src/routes/pump');
 const settingsRouter = require('./src/routes/settings');
+const irrigationRouter = require('./src/routes/irrigation');
 const cameraConfig = require('./src/store/cameraConfig');
 const settingsStore = require('./src/store/settingsStore');
+const irrigationScheduler = require('./src/scheduler/irrigationScheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +28,7 @@ app.use('/api/v1/camera', cameraRouter);
 app.use('/api/v1/analytics', analyticsRouter);
 app.use('/api/v1/pump', pumpRouter);
 app.use('/api/v1/settings', settingsRouter);
+app.use('/api/v1/irrigation', irrigationRouter);
 
 app.use(express.static(CLIENT_BUILD_DIR));
 
@@ -37,6 +40,10 @@ app.get('*', (req, res) => {
 // cameraConfig also sizes the frame ring to match its persisted ring_size.
 cameraConfig.load();
 settingsStore.load();
+
+// Start the AUTO-mode irrigation scheduler (reads the schedule from settings
+// each tick; idle until irrigation.auto is enabled).
+irrigationScheduler.start();
 
 app.listen(PORT, () => {
   console.log(`Smart Farm Control Center listening on port ${PORT}`);

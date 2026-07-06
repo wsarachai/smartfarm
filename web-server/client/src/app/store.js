@@ -10,6 +10,7 @@ import analyticsReducer from '../features/analytics/analyticsSlice';
 import { analyticsApi } from '../features/analytics/analyticsApi';
 import { pumpApi } from '../features/pump/pumpApi';
 import { settingsApi } from '../features/settings/settingsApi';
+import { irrigationApi } from '../features/irrigation/irrigationApi';
 
 export const store = configureStore({
   reducer: {
@@ -23,6 +24,7 @@ export const store = configureStore({
     [analyticsApi.reducerPath]: analyticsApi.reducer,
     [pumpApi.reducerPath]: pumpApi.reducer,
     [settingsApi.reducerPath]: settingsApi.reducer,
+    [irrigationApi.reducerPath]: irrigationApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -31,7 +33,8 @@ export const store = configureStore({
       healthApi.middleware,
       analyticsApi.middleware,
       pumpApi.middleware,
-      settingsApi.middleware
+      settingsApi.middleware,
+      irrigationApi.middleware
     ),
 });
 

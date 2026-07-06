@@ -1,25 +1,20 @@
-import { useState } from 'react';
 import { useSelector } from 'react-redux';
-import { Fan, Clock, Activity } from 'lucide-react';
+import { Fan, Activity } from 'lucide-react';
 import { useGetDevicesQuery } from '../devices/devicesApi';
 import { useGetPumpStatusQuery, useSetPumpMutation } from '../pump/pumpApi';
+import { useGetSettingsQuery, useUpdateSettingsMutation } from '../settings/settingsApi';
 import { selectAllDevices } from '../devices/devicesSlice';
 import { selectHistory } from '../history/historySlice';
 import { freshness } from '../../lib/freshness';
 import { metricMeta, formatMetricValue } from '../../lib/metricMeta';
 import Led from '../../components/Led';
+import ScheduleEditor from './ScheduleEditor';
 
 const POLL_INTERVAL_MS = 5000;
 const PUMP_ID = 'main-pump';
 const PUMP_NODE_ID = 'main-pump-node';
 const NODE_SENSOR_KEYS = ['pressure', 'flow_rate', 'temperature', 'voltage'];
 const STREAM_URL = '/api/v1/camera/stream';
-
-// Static preview — no scheduling engine exists yet (see CLAUDE.md notes).
-const UPCOMING_SCHEDULE = [
-  { label: 'Morning Soak', time: '05:00 AM' },
-  { label: 'Evening Mist', time: '07:30 PM' },
-];
 
 function EmptyPanel({ children }) {
   return (
@@ -80,9 +75,13 @@ function PumpVisual({ mode, running }) {
 
 function PumpControlPanel({ pump }) {
   const [setPump, { isLoading }] = useSetPumpMutation();
-  // Hardware is on/off only (no auto engine yet), so mode is a local UI concept,
-  // not sent to the pump or mirrored. Default MANUAL so the buttons are live.
-  const [mode, setMode] = useState('manual');
+  // AUTO/MANUAL is now a server-global mode (settings.irrigation.auto): the
+  // scheduler runs in AUTO; MANUAL pauses it. Persisted so every client agrees.
+  const { data: settings } = useGetSettingsQuery();
+  const [updateSettings] = useUpdateSettingsMutation();
+  const auto = Boolean(settings?.irrigation?.auto);
+  const mode = auto ? 'auto' : 'manual';
+  const setAuto = (on) => updateSettings({ irrigation: { auto: on } });
 
   if (!pump) {
     return <EmptyPanel>NO PUMP REPORTING (device_id: {PUMP_ID})</EmptyPanel>;
@@ -92,7 +91,8 @@ function PumpControlPanel({ pump }) {
   const status = freshness(pump.lastSeen);
 
   // Drives the real pump through the same relay + auto-off path as the dashboard
-  // card; the backend mirrors the result back into this 'main-pump' device.
+  // card; the backend mirrors the result back into this 'main-pump' device. In
+  // AUTO the server refuses manual ON (409); manual OFF is always allowed.
   const togglePump = (next) => setPump({ state: next ? 'on' : 'off' });
 
   return (
@@ -114,8 +114,7 @@ function PumpControlPanel({ pump }) {
         <div className="flex p-1 bg-surface-container-lowest border border-outline-variant rounded-lg">
           <button
             type="button"
-            onClick={() => setMode('auto')}
-            disabled={isLoading}
+            onClick={() => setAuto(true)}
             className={`px-6 py-2 font-label-caps text-label-caps rounded-md transition-all duration-200 ${
               mode === 'auto' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
             }`}
@@ -124,8 +123,7 @@ function PumpControlPanel({ pump }) {
           </button>
           <button
             type="button"
-            onClick={() => setMode('manual')}
-            disabled={isLoading}
+            onClick={() => setAuto(false)}
             className={`px-6 py-2 font-label-caps text-label-caps rounded-md transition-all duration-200 ${
               mode === 'manual' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
             }`}
@@ -135,14 +133,17 @@ function PumpControlPanel({ pump }) {
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className={`transition-opacity duration-300 ${mode === 'auto' ? 'opacity-50 pointer-events-none' : ''}`}>
-          <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">MANUAL OVERRIDE</p>
+        <div>
+          <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">
+            {mode === 'auto' ? 'MANUAL OVERRIDE — EMERGENCY STOP ONLY' : 'MANUAL OVERRIDE'}
+          </p>
           <div className="flex flex-col gap-3">
             <button
               type="button"
               onClick={() => togglePump(true)}
               disabled={mode === 'auto' || isLoading}
-              className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-primary/10 hover:border-primary transition-all active:scale-95"
+              title={mode === 'auto' ? 'Switch to MANUAL to start the pump by hand' : undefined}
+              className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-primary/10 hover:border-primary transition-all active:scale-95 disabled:opacity-50 disabled:hover:bg-surface-container-low disabled:hover:border-outline-variant disabled:active:scale-100"
             >
               <span className="font-headline-sm text-on-surface">Pump ON</span>
               <span className="font-data-mono text-[10px] text-outline">CMD: 0x01</span>
@@ -150,8 +151,8 @@ function PumpControlPanel({ pump }) {
             <button
               type="button"
               onClick={() => togglePump(false)}
-              disabled={mode === 'auto' || isLoading}
-              className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-error/10 hover:border-error transition-all active:scale-95"
+              disabled={isLoading}
+              className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-error/10 hover:border-error transition-all active:scale-95 disabled:opacity-50"
             >
               <span className="font-headline-sm text-on-surface">Pump OFF</span>
               <span className="font-data-mono text-[10px] text-outline">CMD: 0x00</span>
@@ -159,29 +160,6 @@ function PumpControlPanel({ pump }) {
           </div>
         </div>
         <PumpVisual mode={mode} running={running} />
-      </div>
-    </div>
-  );
-}
-
-function ScheduleCard() {
-  return (
-    <div className="bg-surface-container p-5 border border-outline-variant">
-      <h4 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
-        <Clock size={14} />
-        Upcoming Schedule
-        <span className="ml-auto bg-surface-container-high px-2 py-0.5 text-[9px] text-on-surface-variant/70">PREVIEW</span>
-      </h4>
-      <div className="space-y-3">
-        {UPCOMING_SCHEDULE.map((s, i) => (
-          <div
-            key={s.label}
-            className={`flex justify-between items-center py-2 ${i < UPCOMING_SCHEDULE.length - 1 ? 'border-b border-outline-variant/30' : ''}`}
-          >
-            <span className="font-body-md text-on-surface">{s.label}</span>
-            <span className="font-data-mono text-on-surface-variant">{s.time}</span>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -332,10 +310,8 @@ export default function IrrigationPage() {
 
       <div className="md:col-span-8 space-y-gutter">
         <PumpControlPanel pump={pump} />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
-          <ScheduleCard />
-          <FlowMetricsCard node={node} flowPoints={flowPoints} />
-        </div>
+        <ScheduleEditor />
+        <FlowMetricsCard node={node} flowPoints={flowPoints} />
       </div>
 
       <div className="md:col-span-4 space-y-gutter">

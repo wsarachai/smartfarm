@@ -3,6 +3,7 @@ import { Power, Timer } from 'lucide-react';
 import Led from '../../components/Led';
 import { usePumpSettings } from './pumpSettings';
 import { useGetPumpStatusQuery, useSetPumpMutation } from './pumpApi';
+import { useGetSettingsQuery } from '../settings/settingsApi';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -33,6 +34,8 @@ function formatMs(ms) {
 
 export default function PumpControlCard() {
   const settings = usePumpSettings();
+  const { data: appSettings } = useGetSettingsQuery();
+  const auto = Boolean(appSettings?.irrigation?.auto);
   const { data } = useGetPumpStatusQuery(undefined, {
     pollingInterval: POLL_INTERVAL_MS,
   });
@@ -47,7 +50,9 @@ export default function PumpControlCard() {
 
   const command = (state) => setPump({ state });
 
-  const onDisabled = isLoading || isOn;
+  // In AUTO mode the schedule owns the pump: manual ON is disabled (server also
+  // refuses it with 409); manual OFF stays available as an emergency stop.
+  const onDisabled = isLoading || isOn || auto;
   const offDisabled = isLoading || (online && !isOn);
 
   return (
@@ -100,6 +105,12 @@ export default function PumpControlCard() {
           OFF
         </button>
       </div>
+
+      {auto ? (
+        <p className="mt-3 font-data-mono text-[11px] text-tertiary">
+          Auto mode on — the schedule controls the pump. Switch to Manual on the Irrigation page to run it by hand.
+        </p>
+      ) : null}
 
       {data && !online ? (
         <p className="mt-3 font-data-mono text-[11px] text-error">

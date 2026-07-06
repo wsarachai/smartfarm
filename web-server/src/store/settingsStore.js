@@ -21,6 +21,10 @@ const SETTINGS_PATH =
 
 const AUTO_OFF_MIN = 1;
 const AUTO_OFF_MAX = 60;
+// Scheduled-run duration shares the safety auto-off bound (the run ends via the
+// same auto-off timer), so an entry can't outlast the safety window.
+const DURATION_MIN = AUTO_OFF_MIN;
+const DURATION_MAX = AUTO_OFF_MAX;
 const SOURCE_MODES = ['relay', 'custom'];
 
 function defaults() {
@@ -37,6 +41,14 @@ function defaults() {
       label: process.env.PUMP_LABEL || 'Main Pump',
       autoOffMinutes: clampMinutes(process.env.PUMP_AUTO_OFF_MINUTES, 5),
     },
+    // Auto-mode irrigation: a server-run schedule + moisture guard. `auto` is the
+    // global mode flag (scheduler only acts when true). Empty entries by default.
+    irrigation: {
+      auto: false,
+      timezone: process.env.IRRIGATION_TZ || 'Asia/Bangkok',
+      moistureThreshold: clampPercent(process.env.IRRIGATION_MOISTURE_THRESHOLD, 60),
+      entries: [],
+    },
   };
 }
 
@@ -44,6 +56,56 @@ function clampMinutes(raw, fallback) {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(AUTO_OFF_MAX, Math.max(AUTO_OFF_MIN, Math.round(n)));
+}
+
+function clampPercent(raw, fallback) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function isValidTimezone(tz) {
+  if (typeof tz !== 'string' || !tz) return false;
+  try {
+    // Throws RangeError for an unknown IANA zone.
+    Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Validate + normalize one schedule entry. Returns { ok, value } | { ok, error }.
+function validateEntry(raw, index) {
+  const where = `entries[${index}]`;
+  if (!raw || typeof raw !== 'object') return { ok: false, error: `${where} must be an object` };
+  if (typeof raw.start !== 'string' || !HHMM_RE.test(raw.start))
+    return { ok: false, error: `${where}.start must be "HH:MM" (24h)` };
+  const durationMinutes = Number(raw.durationMinutes);
+  if (!Number.isFinite(durationMinutes) || durationMinutes < DURATION_MIN || durationMinutes > DURATION_MAX)
+    return { ok: false, error: `${where}.durationMinutes must be ${DURATION_MIN}..${DURATION_MAX}` };
+  if (!Array.isArray(raw.days) || raw.days.length === 0)
+    return { ok: false, error: `${where}.days must be a non-empty array of weekdays 0..6` };
+  const days = [];
+  for (const d of raw.days) {
+    const n = Number(d);
+    if (!Number.isInteger(n) || n < 0 || n > 6)
+      return { ok: false, error: `${where}.days entries must be integers 0..6 (Sun..Sat)` };
+    if (!days.includes(n)) days.push(n);
+  }
+  days.sort((a, b) => a - b);
+  const label = typeof raw.label === 'string' ? raw.label.trim().slice(0, 40) : '';
+  // Stable id so the client can key rows + the scheduler can dedup fires.
+  const id =
+    typeof raw.id === 'string' && raw.id.trim()
+      ? raw.id.trim().slice(0, 40)
+      : `e${Date.now().toString(36)}${index}${Math.random().toString(36).slice(2, 6)}`;
+  return {
+    ok: true,
+    value: { id, label, start: raw.start, durationMinutes: Math.round(durationMinutes), days, enabled: raw.enabled !== false },
+  };
 }
 
 function nonEmptyString(raw, fallback) {
@@ -73,6 +135,10 @@ function validate(patch) {
   const next = {
     cameraSource: { ...settings.cameraSource },
     pump: { ...settings.pump },
+    irrigation: {
+      ...settings.irrigation,
+      entries: settings.irrigation.entries.map((e) => ({ ...e })),
+    },
   };
   const p = patch || {};
 
@@ -115,6 +181,33 @@ function validate(patch) {
     }
   }
 
+  if ('irrigation' in p) {
+    const irr = p.irrigation || {};
+    if ('auto' in irr) next.irrigation.auto = Boolean(irr.auto);
+    if ('timezone' in irr) {
+      if (!isValidTimezone(irr.timezone))
+        return { ok: false, error: 'irrigation.timezone must be a valid IANA timezone' };
+      next.irrigation.timezone = irr.timezone;
+    }
+    if ('moistureThreshold' in irr) {
+      const n = Number(irr.moistureThreshold);
+      if (!Number.isFinite(n) || n < 0 || n > 100)
+        return { ok: false, error: 'irrigation.moistureThreshold must be 0..100' };
+      next.irrigation.moistureThreshold = Math.round(n);
+    }
+    if ('entries' in irr) {
+      if (!Array.isArray(irr.entries))
+        return { ok: false, error: 'irrigation.entries must be an array' };
+      const validated = [];
+      for (let i = 0; i < irr.entries.length; i++) {
+        const res = validateEntry(irr.entries[i], i);
+        if (!res.ok) return res;
+        validated.push(res.value);
+      }
+      next.irrigation.entries = validated; // whole-array replace
+    }
+  }
+
   return { ok: true, value: next };
 }
 
@@ -148,6 +241,10 @@ function get() {
   return {
     cameraSource: { ...settings.cameraSource },
     pump: { ...settings.pump },
+    irrigation: {
+      ...settings.irrigation,
+      entries: settings.irrigation.entries.map((e) => ({ ...e })),
+    },
   };
 }
 
