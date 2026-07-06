@@ -36,12 +36,20 @@ function RiskPanel({ current }) {
   const risk = current?.risk ?? 'unknown';
   const m = riskMeta(risk);
   const inputs = current?.inputs ?? {};
+  const aiOffline = current?.aiOnline === false;
   return (
     <div className="panel industrial-top p-5">
       <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
         <BrainCircuit size={14} />
         Water Stress Estimate
-        <span className="ml-auto font-label-caps text-[9px] text-primary/70 tracking-widest">RULE-BASED</span>
+        <span
+          className={`ml-auto inline-flex items-center gap-1.5 font-label-caps text-[9px] tracking-widest ${
+            aiOffline ? 'text-error' : 'text-primary/70'
+          }`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${aiOffline ? 'bg-error' : 'bg-primary'}`} />
+          {aiOffline ? 'AI OFFLINE — LAST KNOWN' : 'SMARTFARM-AI'}
+        </span>
       </h3>
 
       <div className="flex flex-wrap items-center gap-4 mb-5">

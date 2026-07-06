@@ -54,6 +54,10 @@ services:
       CAMERA_STREAM_URL: http://192.168.0.3:81/stream
       CAMERA_SNAPSHOT_URL: /api/v1/camera/frame.jpg
 
+      # AI decision service (smartfarm-ai container on the shared net). Water
+      # stress delegates the decision here; unreachable → graceful "AI offline".
+      AI_SERVICE_URL: http://smartfarm-ai:8000/water-stress
+
     healthcheck:
       test:
         - CMD

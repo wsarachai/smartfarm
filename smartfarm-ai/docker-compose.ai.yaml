@@ -1,0 +1,37 @@
+# smartfarm-ai — AI decision service overlay (Jetson-only: needs runtime: nvidia).
+#
+# Runs the stdlib HTTP decision service (ai_service.py) that the web-server calls
+# for AI decisions (water stress now; vision endpoints later). It is DLI-image
+# based so future GPU/torch endpoints work; JupyterLab is no longer the default
+# command — launch it ad-hoc for model dev (see README).
+#
+# Run AFTER the base compose (which creates the shared smartfarm-net) is up:
+#   (in web-server/)    docker compose -f docker-compose.yaml up -d
+#   (in smartfarm-ai/)  docker compose -f docker-compose.ai.yaml up -d
+services:
+  ai:
+    image: nvcr.io/nvidia/dli/dli-nano-ai:v2.0.2-r32.7.1
+    container_name: smartfarm-ai
+    runtime: nvidia
+    restart: unless-stopped
+    working_dir: /smartfarm-ai
+    # Override the image's default (JupyterLab) to run the decision service.
+    entrypoint: ["python3", "/smartfarm-ai/ai_service.py"]
+    networks:
+      - smartfarm-net
+    ports:
+      - "8000:8000" # AI decision service (web-server calls http://smartfarm-ai:8000)
+      # - "8888:8888"  # optional JupyterLab for model dev (run ad-hoc — see README)
+    environment:
+      AI_SERVICE_PORT: "8000"
+      # Where this service can reach the web-server (for future pull-style features).
+      WEB_SERVER_URL: http://web-server:3000
+    volumes:
+      # The whole AI app (service + decision modules + dev artifacts) mounts in.
+      - ./:/smartfarm-ai
+
+networks:
+  # Created by the base compose (web-server/docker-compose.yaml).
+  smartfarm-net:
+    external: true
+    name: smartfarm-net

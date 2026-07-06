@@ -48,21 +48,21 @@ first — it creates the `smartfarm-net` network — then the AI overlay attache
 it (it's declared `external`):
 
 ```bash
-cd web-server
-docker compose -f docker-compose.yaml up -d       # web-server + smartfarm-net
-docker compose -f docker-compose.ai.yaml up -d    # AI container
+cd web-server      && docker compose -f docker-compose.yaml up -d      # web-server + smartfarm-net
+cd ../smartfarm-ai && docker compose -f docker-compose.ai.yaml up -d   # AI service
 ```
 
 Order matters: the base creates `smartfarm-net`, which the overlay attaches to as
 an external network. Run the overlay first and you'll get *"network smartfarm-net
 declared as external, but could not be found"* — start the web-server first.
 
-That starts the DLI image (`nvcr.io/nvidia/dli/dli-nano-ai:v2.0.2-r32.7.1`) with
-JupyterLab on <http://JETSON:8888> (password `dlinano`). The reference artifacts
-mount in under **`data/smartfarm/`**:
+The container (DLI image `nvcr.io/nvidia/dli/dli-nano-ai:v2.0.2-r32.7.1`) runs the
+AI **decision service** (`smartfarm-ai/ai_service.py`) as its command — JupyterLab
+is no longer the default (launch it ad-hoc for model dev; see `smartfarm-ai/README.md`).
+The frame-pull reference artifacts live alongside it in `smartfarm-ai/`:
 
 - `smartfarm_inference.ipynb` — grab one frame + a continuous ETag-dedup loop.
-- `frame_poller.py` — the same loop as a headless script (`python3 data/smartfarm/frame_poller.py`).
+- `frame_poller.py` — the same loop as a headless script.
 
 Both read `WEB_SERVER_URL` (default `http://web-server:3000`) and call `infer()` —
 replace that with your model.

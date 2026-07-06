@@ -24,13 +24,21 @@ export default function WaterStressCard() {
   const m = riskMeta(risk);
   const inputs = data?.inputs ?? {};
   const why = data?.factors?.[data.factors.length - 1] || 'Estimating…';
+  const aiOffline = data?.aiOnline === false;
 
   return (
     <div className="panel p-6 flex flex-col justify-between min-h-[220px]">
       <div>
         <div className="flex items-center justify-between mb-4">
           <span className="font-label-caps text-label-caps text-on-surface-variant">Water Stress Risk</span>
-          <span className="font-label-caps text-label-caps text-primary/70">AI · RULE-BASED</span>
+          <span
+            className={`inline-flex items-center gap-1.5 font-label-caps text-label-caps ${
+              aiOffline ? 'text-error' : 'text-primary/70'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${aiOffline ? 'bg-error' : 'bg-primary'}`} />
+            {aiOffline ? 'AI OFFLINE' : 'SMARTFARM-AI'}
+          </span>
         </div>
 
         <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded border ${m.bg} ${m.border} mb-4`}>
@@ -45,6 +53,11 @@ export default function WaterStressCard() {
         </div>
 
         <p className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">{why}</p>
+        {aiOffline ? (
+          <p className="mt-2 font-data-mono text-[10px] text-error/90 leading-relaxed">
+            AI service unreachable — showing last known estimate.
+          </p>
+        ) : null}
       </div>
 
       <Link

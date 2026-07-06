@@ -3,22 +3,25 @@
 Three camera/sensor AI features, to be implemented **one at a time**. This is the
 checkpoint so the deferred ones aren't lost.
 
-Shared context: the app's "AI Analytics" page + insight card are currently a
-**simulator** (`src/routes/analytics.js`, fabricated telemetry). The AI container
-(NVIDIA DLI image) can pull frames via `GET /api/v1/camera/frame.jpg` (ETag/304,
-see `docs/ai-frame-pull.md`), but there is **no results-ingestion path** yet
-(AI → server → dashboard). The two vision features below need that path; the
-first one does not.
+Shared context: all AI **decision** logic now lives in the top-level
+**`smartfarm-ai/`** container (a stdlib HTTP service, `ai_service.py`); the
+web-server stays AI-agnostic and CALLS it (`AI_SERVICE_URL`). The AI container
+can also pull frames via `GET /api/v1/camera/frame.jpg` (ETag/304, see
+`docs/ai-frame-pull.md`). The vision features below add endpoints to `ai_service.py`
+and (for pushing results back) still need a results-ingestion path.
 
 ## 1. Water Stress Estimation — sensor-first, rule-based  ✅ DONE
 
 - **Approach:** a transparent rule engine over telemetry we ALREADY have
   (`soil_moisture` + `temperature` + `humidity`) → risk **Low / Medium / High /
-  Unknown**. No trained model, no dataset, no image pipeline. Runs server-side.
-- **Shipped:** `src/insights/waterStress.js` + `waterStressStore.js` (persisted
-  history) + `routes/waterStress.js`; thresholds in `settings.json` (Settings
-  page panel); dashboard `WaterStressCard`; the old analytics simulator was
-  removed and `/analytics` became the real **AI Insights** page (`/insights`).
+  Unknown**. No trained model, no dataset, no image pipeline.
+- **Decision moved to `smartfarm-ai`:** the rule now lives in
+  `smartfarm-ai/water_stress.py` (served by `ai_service.py`); the web-server
+  (`src/insights/waterStress.js`) aggregates telemetry, calls the AI service,
+  smooths, persists history, and degrades to "AI offline" when unreachable.
+- **Shipped:** `waterStressStore.js` (persisted history) + `routes/waterStress.js`;
+  thresholds in `settings.json` (Settings panel); `WaterStressCard` + a real
+  **AI Insights** page (`/insights`) replacing the removed analytics simulator.
 - Advisory only (no pump coupling). See CLAUDE.md for the full note.
 - A canopy-greenness image signal can be blended in later (depends on feature 2).
 
