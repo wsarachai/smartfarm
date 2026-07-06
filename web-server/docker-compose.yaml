@@ -1,6 +1,15 @@
 services:
   web-server:
-    build: .
+    build:
+      context: .
+      # Build metadata baked into the client bundle (shown on Settings > About).
+      # Sourced from host env — set by the deploy wrapper (`npm run deploy`) or a
+      # one-liner; a plain `docker compose up --build` leaves them empty and the
+      # bundle falls back to dev/unknown + build clock. See CLAUDE.md.
+      args:
+        BUILD_NUMBER: ${BUILD_NUMBER:-}
+        GIT_SHA: ${GIT_SHA:-}
+        BUILD_DATE: ${BUILD_DATE:-}
     image: wsarachai/smartfarm-web-server:latest
     container_name: smartfarm-web-server
     restart: unless-stopped

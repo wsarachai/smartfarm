@@ -11,6 +11,15 @@ RUN npm config set fetch-retries 5 \
 RUN npm ci --no-audit --no-fund || npm install --include=dev --no-audit --no-fund
 COPY client/ ./
 RUN test -x node_modules/.bin/vite
+# Build metadata baked into the bundle. The build context has no .git, so
+# vite.config.js reads these from env (passed as build args by the deploy
+# wrapper); a bare build omits them and falls back to dev/unknown + now().
+ARG BUILD_NUMBER
+ARG GIT_SHA
+ARG BUILD_DATE
+ENV BUILD_NUMBER=$BUILD_NUMBER \
+  GIT_SHA=$GIT_SHA \
+  BUILD_DATE=$BUILD_DATE
 RUN npm run build
 
 # ---- Stage 2: production runtime ----

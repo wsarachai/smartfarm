@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Save, RotateCcw, Video, Power, SlidersHorizontal } from 'lucide-react';
+import { Save, RotateCcw, Video, Power, SlidersHorizontal, Info } from 'lucide-react';
+import { buildInfo, formatBuildDate } from '../../lib/buildInfo';
 import { DEFAULT_CAMERA_SETTINGS } from './cameraSettings';
 import {
   DEFAULT_PUMP_SETTINGS,
@@ -465,6 +466,44 @@ export default function SettingsPage() {
               </div>
             </form>
           )}
+        </section>
+
+        <section className="panel rounded-lg border border-outline-variant p-6">
+          <div className="flex items-start gap-3 mb-6">
+            <div className="p-2 rounded bg-primary/15 text-primary">
+              <Info size={18} />
+            </div>
+            <div>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">About / System Info</h2>
+              <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
+                Build metadata baked into this dashboard at compile time.
+              </p>
+            </div>
+          </div>
+
+          <dl className="divide-y divide-outline-variant/40">
+            <div className="flex items-center justify-between py-2.5">
+              <dt className="font-label-caps text-label-caps text-on-surface-variant">Version</dt>
+              <dd className="font-data-mono text-sm text-on-surface">v{buildInfo.version}</dd>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <dt className="font-label-caps text-label-caps text-on-surface-variant">Build</dt>
+              <dd className="font-data-mono text-sm text-on-surface">#{buildInfo.buildNumber}</dd>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <dt className="font-label-caps text-label-caps text-on-surface-variant">Built</dt>
+              <dd
+                className="font-data-mono text-sm text-on-surface"
+                title={buildInfo.buildDate}
+              >
+                {formatBuildDate()}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <dt className="font-label-caps text-label-caps text-on-surface-variant">Commit</dt>
+              <dd className="font-data-mono text-sm text-on-surface">{buildInfo.gitSha}</dd>
+            </div>
+          </dl>
         </section>
       </div>
     </div>
