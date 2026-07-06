@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Clock, Plus, Trash2, Save } from 'lucide-react';
 import { useGetSettingsQuery, useUpdateSettingsMutation } from '../settings/settingsApi';
 import { useGetIrrigationStatusQuery } from './irrigationApi';
+import { TIMEZONE_OPTIONS, matchTimezone } from './timezones';
 
 const STATUS_POLL_MS = 5000;
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -100,6 +101,9 @@ export default function ScheduleEditor() {
   }
 
   const auto = Boolean(settings?.irrigation?.auto);
+  // The stored value is an IANA zone; find which dropdown option represents it
+  // (exact, else a zone whose group contains it). null => show a "Current:" row.
+  const tzMatched = matchTimezone(timezone);
 
   return (
     <div className="bg-surface-container p-5 border border-outline-variant">
@@ -239,14 +243,21 @@ export default function ScheduleEditor() {
           />
         </label>
         <label className="block">
-          <span className="font-label-caps text-label-caps text-on-surface-variant">Timezone (IANA)</span>
-          <input
-            type="text"
-            value={timezone}
+          <span className="font-label-caps text-label-caps text-on-surface-variant">Timezone</span>
+          <select
+            value={tzMatched ?? '__custom__'}
             onChange={(ev) => setTimezone(ev.target.value)}
-            placeholder="Asia/Bangkok"
             className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
-          />
+          >
+            {tzMatched === null && timezone ? (
+              <option value="__custom__" disabled>{`Current: ${timezone}`}</option>
+            ) : null}
+            {TIMEZONE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
 
