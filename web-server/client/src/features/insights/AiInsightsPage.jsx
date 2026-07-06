@@ -1,8 +1,10 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { BrainCircuit, Droplet, Thermometer, Waves, Info, Sprout } from 'lucide-react';
+import { BrainCircuit, Droplet, Thermometer, Waves, Info, Sprout, Bug, ScanSearch } from 'lucide-react';
 import { useGetWaterStressQuery, useGetWaterStressHistoryQuery } from './waterStressApi';
 import { useGetCanopyQuery, useGetCanopyHistoryQuery } from './canopyApi';
+import { useGetDiseaseQuery, useGetDiseaseHistoryQuery, useAnalyzeDiseaseMutation } from './diseaseApi';
 import { riskMeta } from './risk';
+import { diseaseMeta } from './diseaseMeta';
 
 const POLL_MS = 5000;
 const AXIS = '#bbcbbb';
@@ -219,6 +221,77 @@ function CanopyTrend({ history }) {
   );
 }
 
+function DiseasePanel() {
+  const { data: current } = useGetDiseaseQuery();
+  const { data: hist } = useGetDiseaseHistoryQuery(15);
+  const [analyze, { isLoading }] = useAnalyzeDiseaseMutation();
+  const status = current?.status ?? 'idle';
+  const m = diseaseMeta(status);
+  const busy = isLoading || current?.analyzing;
+  const history = hist?.entries ?? [];
+
+  return (
+    <div className="panel industrial-top p-5">
+      <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
+        <Bug size={14} />
+        Disease Detection
+        <span className="ml-auto font-label-caps text-[9px] text-primary/70 tracking-widest">PLANTVILLAGE · ON-DEMAND</span>
+      </h3>
+
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        <div className={`inline-flex items-center gap-3 px-4 py-2 rounded border ${m.bg} ${m.border}`}>
+          <span className={`w-2.5 h-2.5 rounded-full ${m.dot}`} />
+          <span className={`font-headline-sm text-headline-sm ${m.text}`}>{current?.headline ?? 'Not analyzed yet'}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => analyze()}
+          disabled={busy}
+          className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110 disabled:opacity-50"
+        >
+          <ScanSearch size={16} />
+          {busy ? 'Analyzing…' : 'Analyze latest frame'}
+        </button>
+      </div>
+
+      {current?.detail ? (
+        <p className="mb-3 font-data-mono text-[11px] text-error/90">{current.detail} — run smartfarm-ai/download_model.sh on the Jetson.</p>
+      ) : null}
+
+      {current?.top?.length ? (
+        <div className="rounded border border-outline-variant bg-surface-container-low p-3 mb-4">
+          <p className="font-label-caps text-[10px] text-on-surface-variant mb-2">Top predictions</p>
+          <ul className="space-y-1.5">
+            {current.top.map((t, i) => (
+              <li key={i} className="flex items-center gap-3">
+                <span className="font-data-mono text-[11px] text-on-surface flex-1 truncate">{t.label}</span>
+                <span className="font-data-mono text-[11px] text-on-surface-variant tabular-nums">{t.confidence}%</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {history.length ? (
+        <div>
+          <p className="font-label-caps text-[10px] text-on-surface-variant mb-2">Recent checks</p>
+          <ul className="max-h-40 overflow-y-auto divide-y divide-outline-variant/20">
+            {history.map((e) => (
+              <li key={e.id} className="flex items-center gap-3 py-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${diseaseMeta(e.status).dot}`} />
+                <span className="font-data-mono text-[11px] text-on-surface-variant flex-1 truncate">{e.headline}</span>
+                <span className="font-data-mono text-[10px] text-on-surface-variant/70 shrink-0">
+                  {new Date(e.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AiInsightsPage() {
   const { data: current } = useGetWaterStressQuery(undefined, { pollingInterval: POLL_MS });
   const { data: hist } = useGetWaterStressHistoryQuery(288, { pollingInterval: 30000 });
@@ -255,6 +328,10 @@ export default function AiInsightsPage() {
       </div>
       <div className="md:col-span-12">
         <CanopyTrend history={canopyHistory} />
+      </div>
+
+      <div className="md:col-span-12">
+        <DiseasePanel />
       </div>
     </div>
   );

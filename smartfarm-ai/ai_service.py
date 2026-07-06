@@ -23,6 +23,7 @@ from urllib.parse import urlparse, parse_qs
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from water_stress import decide  # noqa: E402
 from canopy import analyze as analyze_canopy  # noqa: E402
+from disease import classify as classify_disease  # noqa: E402
 
 PORT = int(os.environ.get("AI_SERVICE_PORT", "8000"))
 
@@ -59,6 +60,12 @@ class Handler(BaseHTTPRequestHandler):
                 q = parse_qs(urlparse(self.path).query)
                 params = {k: v[0] for k, v in q.items()}
                 self._send(200, analyze_canopy(body, params))
+            elif route == "/disease":
+                # Raw JPEG body -> PlantVillage top-k (lazy torch load).
+                if not body:
+                    self._send(400, {"error": "empty image body"})
+                    return
+                self._send(200, classify_disease(body))
             else:
                 self._send(404, {"error": "not found"})
         except Exception as exc:  # noqa: BLE001 - report any parse/decision error as 400

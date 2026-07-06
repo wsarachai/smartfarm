@@ -68,6 +68,10 @@ function defaults() {
       satMinPct: clampPercent(process.env.CANOPY_SAT_MIN_PCT, 20),
       valMinPct: clampPercent(process.env.CANOPY_VAL_MIN_PCT, 15),
     },
+    // Disease detection: below this top-1 confidence a result is "inconclusive".
+    disease: {
+      confidenceThreshold: clampPercent(process.env.DISEASE_CONFIDENCE_THRESHOLD, 60),
+    },
   };
 }
 
@@ -171,6 +175,7 @@ function validate(patch) {
     },
     waterStress: { ...settings.waterStress },
     canopy: { ...settings.canopy },
+    disease: { ...settings.disease },
   };
   const p = patch || {};
 
@@ -288,6 +293,16 @@ function validate(patch) {
       return { ok: false, error: 'canopy.hueMinDeg must be < hueMaxDeg' };
   }
 
+  if ('disease' in p) {
+    const ds = p.disease || {};
+    if ('confidenceThreshold' in ds) {
+      const n = Number(ds.confidenceThreshold);
+      if (!Number.isFinite(n) || n < 0 || n > 100)
+        return { ok: false, error: 'disease.confidenceThreshold must be 0..100' };
+      next.disease.confidenceThreshold = Math.round(n);
+    }
+  }
+
   return { ok: true, value: next };
 }
 
@@ -327,6 +342,7 @@ function get() {
     },
     waterStress: { ...settings.waterStress },
     canopy: { ...settings.canopy },
+    disease: { ...settings.disease },
   };
 }
 

@@ -1,0 +1,6 @@
+# Downloaded model artifacts — fetched by ../download_model.sh, never committed
+# (weights are large; this Jetson-local dir is populated at deploy time).
+*.pth
+*.pt
+*.onnx
+model_config.json

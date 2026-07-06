@@ -42,15 +42,24 @@ and (for pushing results back) still need a results-ingestion path.
   degrade (no fresh frame → unknown; AI down → AI OFFLINE).
 - Greenness could feed feature 1 (water stress) as an extra input later.
 
-## 3. Disease Detection — hardest  ⏳ LATER
+## 3. Disease Detection — hardest  ✅ DONE (model-drop-in)
 
-- **Approach:** image classification (healthy vs disease, e.g. leaf spot) with a
-  trained / transfer-learned model (the DLI image ships ResNet transfer-learning
-  notebooks).
-- **Blockers:** needs a labeled dataset, accuracy validation, and **close-up leaf
-  images** — the ESP32-CAM's ~1/min wide scene shots are poorly suited, so this
-  likely needs a camera-placement/framing change or a dedicated capture.
-- Reuses the results-ingestion path from feature 2.
+- **Approach:** a pretrained **PlantVillage** CNN (default **MobileNetV2**,
+  config-driven) classifies a frame healthy vs disease. **On-demand only** (heavy
+  inference): the UI triggers an analysis; there's no background tick.
+- **Decision in `smartfarm-ai`:** `smartfarm-ai/disease.py` (served by `POST /disease`,
+  raw JPEG) — config-driven loader (`models/model_config.json` + `disease.pth`),
+  **torch imported lazily** on first call, whole-frame → 224 + ImageNet norm →
+  softmax → top-k. Weights are **not committed** (gitignored `models/`, fetched by
+  `download_model.sh`); no weights → honest "model not loaded".
+- **Shipped:** web-server `src/insights/disease.js` (orchestrator: threshold +
+  healthy/disease headline), `diseaseStore.js` (persisted log), `routes/disease.js`
+  (`GET /`, `POST /analyze`, `GET /history`); `disease.confidenceThreshold` in
+  settings; a Disease panel on AI Insights + a dashboard DiseaseCard.
+- **Known limitation:** PlantVillage expects **single-leaf close-ups**; the
+  ESP32-CAM's wide scene shots yield low confidence (surfaced as "inconclusive").
+  Real accuracy needs close-up framing or a trained-on-your-crop model — both a
+  drop-in via `model_config.json`.
 
 ## Suggested order
 

@@ -17,6 +17,10 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
   adjust + factors), called by the service.
 - `canopy.py` — canopy-coverage **decision** (feature 2): % green pixels via HSV
   thresholding (PIL + numpy) + a mask-preview PNG.
+- `disease.py` — disease **decision** (feature 3): a config-driven PlantVillage
+  CNN (default MobileNetV2). Torch is imported lazily on first call.
+- `download_model.sh` + `models/` — fetch the weights (gitignored) + write
+  `model_config.json`. Set `DISEASE_WEIGHTS_URL` to your checkpoint.
 - `frame_poller.py` / `smartfarm_inference.ipynb` — dev artifacts for the camera
   frame-pull path (`../web-server/docs/ai-frame-pull.md`); used interactively.
 
@@ -27,6 +31,8 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
   thresholds:{…} }` → `{ band, risk, factors }`.
 - `POST /canopy?hueMinDeg=&hueMaxDeg=&satMinPct=&valMinPct=` → **raw JPEG body** →
   `{ canopyPercent, factors, maskPng (base64 PNG), width, height }`.
+- `POST /disease` → **raw JPEG body** → `{ modelLoaded, topK:[{label,confidence}] }`.
+  Needs a model — run `download_model.sh` first (else `modelLoaded:false`).
 
 The web-server sends already-averaged fresh inputs + the thresholds; this service
 holds no state. When it's unreachable the web-server degrades gracefully (shows

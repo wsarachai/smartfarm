@@ -8,6 +8,7 @@ import TrendChart from './TrendChart';
 import CameraStatusCard from '../camera/CameraStatusCard';
 import PumpControlCard from '../pump/PumpControlCard';
 import WaterStressCard from '../insights/WaterStressCard';
+import DiseaseCard from '../insights/DiseaseCard';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -55,12 +56,13 @@ export default function Dashboard() {
         <CameraStatusCard />
       </div>
 
-      {/* Live trend (client-buffered) + AI preview. */}
+      {/* Live trend (client-buffered) + AI insight cards. */}
       <div className="md:col-span-12 lg:col-span-8">
         <TrendChart />
       </div>
-      <div className="md:col-span-12 lg:col-span-4">
+      <div className="md:col-span-12 lg:col-span-4 space-y-gutter">
         <WaterStressCard />
+        <DiseaseCard />
       </div>
     </div>
   );

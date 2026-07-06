@@ -11,6 +11,7 @@ import { settingsApi } from '../features/settings/settingsApi';
 import { irrigationApi } from '../features/irrigation/irrigationApi';
 import { waterStressApi } from '../features/insights/waterStressApi';
 import { canopyApi } from '../features/insights/canopyApi';
+import { diseaseApi } from '../features/insights/diseaseApi';
 
 export const store = configureStore({
   reducer: {
@@ -25,6 +26,7 @@ export const store = configureStore({
     [irrigationApi.reducerPath]: irrigationApi.reducer,
     [waterStressApi.reducerPath]: waterStressApi.reducer,
     [canopyApi.reducerPath]: canopyApi.reducer,
+    [diseaseApi.reducerPath]: diseaseApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -35,7 +37,8 @@ export const store = configureStore({
       settingsApi.middleware,
       irrigationApi.middleware,
       waterStressApi.middleware,
-      canopyApi.middleware
+      canopyApi.middleware,
+      diseaseApi.middleware
     ),
 });
 

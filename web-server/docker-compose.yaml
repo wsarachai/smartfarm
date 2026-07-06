@@ -58,6 +58,7 @@ services:
       # stress + canopy delegate their decisions here; unreachable → "AI offline".
       AI_SERVICE_URL: http://smartfarm-ai:8000/water-stress
       CANOPY_SERVICE_URL: http://smartfarm-ai:8000/canopy
+      DISEASE_SERVICE_URL: http://smartfarm-ai:8000/disease
 
     healthcheck:
       test:

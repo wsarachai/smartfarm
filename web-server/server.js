@@ -11,11 +11,13 @@ const settingsRouter = require('./src/routes/settings');
 const irrigationRouter = require('./src/routes/irrigation');
 const waterStressRouter = require('./src/routes/waterStress');
 const canopyRouter = require('./src/routes/canopy');
+const diseaseRouter = require('./src/routes/disease');
 const cameraConfig = require('./src/store/cameraConfig');
 const settingsStore = require('./src/store/settingsStore');
 const pumpLog = require('./src/store/pumpLog');
 const waterStressStore = require('./src/store/waterStressStore');
 const canopyStore = require('./src/store/canopyStore');
+const diseaseStore = require('./src/store/diseaseStore');
 const irrigationScheduler = require('./src/scheduler/irrigationScheduler');
 const waterStress = require('./src/insights/waterStress');
 const canopy = require('./src/insights/canopy');
@@ -36,6 +38,7 @@ app.use('/api/v1/settings', settingsRouter);
 app.use('/api/v1/irrigation', irrigationRouter);
 app.use('/api/v1/water-stress', waterStressRouter);
 app.use('/api/v1/canopy', canopyRouter);
+app.use('/api/v1/disease', diseaseRouter);
 
 app.use(express.static(CLIENT_BUILD_DIR));
 
@@ -50,6 +53,7 @@ settingsStore.load();
 pumpLog.load(); // restore the pump action log so history survives restart
 waterStressStore.load(); // restore water-stress risk history
 canopyStore.load(); // restore canopy-coverage history
+diseaseStore.load(); // restore disease-analysis log
 
 // Start the AUTO-mode irrigation scheduler (reads the schedule from settings
 // each tick; idle until irrigation.auto is enabled).
