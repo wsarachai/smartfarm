@@ -94,24 +94,53 @@ def main():
     print("Loading %s" % SRC)
     sd = to_state_dict(torch.load(SRC, map_location="cpu"))
 
-    model = tvm.mobilenet_v2(pretrained=False)
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, len(labels))
+    # Infer the class count from the checkpoint's final Linear, and whether its
+    # head is nested (classifier.1.1.*, i.e. Sequential(Dropout, Linear)) or the
+    # flat torchvision default (classifier.1.*).
+    nested = "classifier.1.1.weight" in sd
+    lin_key = "classifier.1.1.weight" if nested else "classifier.1.weight"
+    if lin_key not in sd:
+        sys.exit("ERROR: no final Linear found in checkpoint (keys like %s)." % lin_key)
+    num = int(sd[lin_key].shape[0])
+    in_f = tvm.mobilenet_v2(pretrained=False).classifier[1].in_features
+    if num != len(labels):
+        print("WARNING: checkpoint has %d classes but class_names.json has %d — using %d; check label order." % (num, len(labels), num))
+        if len(labels) < num:
+            labels = labels + ["class_%d" % i for i in range(len(labels), num)]
+        else:
+            labels = labels[:num]
+
+    # Build a model whose head MATCHES the checkpoint, load it, then copy the
+    # trained Linear into a FLAT-head model so disease.py (flat loader) can read
+    # the output.
+    src = tvm.mobilenet_v2(pretrained=False)
+    if nested:
+        src.classifier[1] = nn.Sequential(nn.Dropout(0.2), nn.Linear(in_f, num))
+        get_linear = lambda m: m.classifier[1][1]  # noqa: E731
+    else:
+        src.classifier[1] = nn.Linear(in_f, num)
+        get_linear = lambda m: m.classifier[1]  # noqa: E731
     try:
-        model.load_state_dict(sd)
+        src.load_state_dict(sd)
     except Exception as exc:
         sys.exit(
-            "ERROR: state_dict didn't fit torchvision MobileNetV2 (%d classes): %s\n"
-            "  -> the checkpoint may use a different arch/head or class count." % (len(labels), exc)
+            "ERROR: state_dict didn't fit MobileNetV2 (%d classes, nested=%s): %s" % (num, nested, exc)
         )
-    model.eval()
 
-    print("Saving legacy-format state_dict -> %s" % OUT)
-    torch.save(model.state_dict(), OUT, _use_new_zipfile_serialization=False)
+    dst = tvm.mobilenet_v2(pretrained=False)
+    dst.classifier[1] = nn.Linear(in_f, num)
+    lin = get_linear(src)
+    dst.classifier[1].weight.data = lin.weight.data.clone()
+    dst.classifier[1].bias.data = lin.bias.data.clone()
+    dst.eval()
+
+    print("Saving legacy-format state_dict (flat head, %d classes) -> %s" % (num, OUT))
+    torch.save(dst.state_dict(), OUT, _use_new_zipfile_serialization=False)
 
     cfg = {
         "arch": "mobilenet_v2",
         "weights": "disease.pth",
-        "numClasses": len(labels),
+        "numClasses": num,
         "inputSize": 224,
         "mean": MEAN,
         "std": STD,
