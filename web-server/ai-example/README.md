@@ -8,9 +8,12 @@ Full contract: [`../docs/ai-frame-pull.md`](../docs/ai-frame-pull.md).
 
 ## Run (on the Jetson)
 
+Bring the base up first (creates the `smartfarm-net` network), then the overlay:
+
 ```bash
 cd web-server
-docker compose -f docker-compose.yaml -f docker-compose.ai.yaml up
+docker compose -f docker-compose.yaml up -d       # web-server + network
+docker compose -f docker-compose.ai.yaml up -d    # AI container
 ```
 
 Open JupyterLab at <http://JETSON:8888> (password `dlinano`). These files appear

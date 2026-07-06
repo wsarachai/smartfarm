@@ -43,12 +43,19 @@ protect the camera.
 The base compose puts the web-server on a bridge network `smartfarm-net`. The AI
 service joins it and reaches the server by name: **`http://web-server:3000`**.
 
-Run the AI overlay **on the Jetson** (it needs `runtime: nvidia`):
+Run **on the Jetson** (the AI service needs `runtime: nvidia`). Bring the base up
+first — it creates the `smartfarm-net` network — then the AI overlay attaches to
+it (it's declared `external`):
 
 ```bash
 cd web-server
-docker compose -f docker-compose.yaml -f docker-compose.ai.yaml up
+docker compose -f docker-compose.yaml up -d       # web-server + smartfarm-net
+docker compose -f docker-compose.ai.yaml up -d    # AI container
 ```
+
+Order matters: the base creates `smartfarm-net`, which the overlay attaches to as
+an external network. Run the overlay first and you'll get *"network smartfarm-net
+declared as external, but could not be found"* — start the web-server first.
 
 That starts the DLI image (`nvcr.io/nvidia/dli/dli-nano-ai:v2.0.2-r32.7.1`) with
 JupyterLab on <http://JETSON:8888> (password `dlinano`). The reference artifacts

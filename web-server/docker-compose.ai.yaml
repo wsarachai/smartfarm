@@ -1,9 +1,11 @@
 # AI inference overlay — Jetson-only (needs the NVIDIA container runtime).
 #
 # Kept out of the base compose so a plain `docker compose up` still works on a
-# dev PC (which has no `runtime: nvidia`). Run alongside the base ON THE JETSON:
+# dev PC (which has no `runtime: nvidia`). Bring the base up first (it creates
+# the smartfarm-net network), then this overlay ON THE JETSON:
 #
-#   docker compose -f docker-compose.yaml -f docker-compose.ai.yaml up
+#   docker compose -f docker-compose.yaml up -d       # web-server + network
+#   docker compose -f docker-compose.ai.yaml up -d    # AI container
 #
 # The AI container pulls camera frames from the web-server over the shared
 # network by service name (http://web-server:3000/api/v1/camera/frame.jpg),
@@ -31,3 +33,11 @@ services:
     volumes:
       # Reference notebook + poller appear in JupyterLab under data/smartfarm.
       - ./ai-example:/nvdli-nano/data/smartfarm
+
+networks:
+  # Created by the base compose (docker-compose.yaml). Marked external so this
+  # overlay runs on its own AFTER the base is up — bring the web-server up first
+  # so the network exists, then run this file.
+  smartfarm-net:
+    external: true
+    name: smartfarm-net

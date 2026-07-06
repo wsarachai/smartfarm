@@ -66,6 +66,10 @@ services:
       start_period: 10s
 
 networks:
-  # Named so the AI overlay (docker-compose.ai.yaml) can attach to the same net.
+  # Explicit name (not the default project-prefixed one) so the AI overlay can
+  # attach to it as an EXTERNAL network and be brought up/down independently:
+  #   docker compose -f docker-compose.yaml up -d       # creates smartfarm-net
+  #   docker compose -f docker-compose.ai.yaml up -d    # attaches to it
   smartfarm-net:
+    name: smartfarm-net
     driver: bridge
