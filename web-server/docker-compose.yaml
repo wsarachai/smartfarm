@@ -14,6 +14,12 @@ services:
     container_name: smartfarm-web-server
     restart: unless-stopped
 
+    # Shared bridge so the AI inference container can reach this server by name
+    # (http://web-server:3000) to pull camera frames. The AI service lives in the
+    # docker-compose.ai.yaml overlay (Jetson-only: it needs runtime: nvidia).
+    networks:
+      - smartfarm-net
+
     ports:
       - "3000:3000"
 
@@ -58,3 +64,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+networks:
+  # Named so the AI overlay (docker-compose.ai.yaml) can attach to the same net.
+  smartfarm-net:
+    driver: bridge

@@ -44,12 +44,21 @@ router.post(
   }
 );
 
-// Latest single frame — a cache-busted snapshot for the browser or other tools.
+// Latest single frame — snapshot for the browser AND the pull target for the AI
+// inference container (see docs/ai-frame-pull.md). Carries an ETag (= frame seq)
+// and Last-Modified so a consumer can send If-None-Match and get 304 Not Modified
+// when the frame hasn't changed — cheap dedup so the AI only infers on new frames.
 router.get('/frame.jpg', (req, res) => {
   const frame = getFrame();
   if (!frame) return res.status(503).json({ error: 'no frame received yet' });
+  const etag = `"${frame.seq}"`;
   res.set('Content-Type', 'image/jpeg');
   res.set('Cache-Control', 'no-store');
+  res.set('ETag', etag);
+  res.set('Last-Modified', new Date(frame.receivedAt).toUTCString());
+  res.set('X-Frame-Seq', String(frame.seq));
+  // Conditional GET: the caller echoes the last ETag it saw; unchanged -> 304.
+  if (req.headers['if-none-match'] === etag) return res.status(304).end();
   res.send(frame.buf);
 });
 

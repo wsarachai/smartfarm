@@ -69,6 +69,7 @@ function status(staleMs) {
     return {
       online: false,
       hasFrame: false,
+      seq: null,
       ageMs: null,
       bytes: 0,
       receivedAt: null,
@@ -81,6 +82,9 @@ function status(staleMs) {
   return {
     online: ageMs <= staleMs,
     hasFrame: true,
+    // Monotonic id of the latest frame — an AI consumer polls this to tell
+    // whether frame.jpg has changed without downloading the pixels.
+    seq: latest.seq,
     ageMs,
     bytes: latest.bytes,
     receivedAt: new Date(latest.receivedAt).toISOString(),
