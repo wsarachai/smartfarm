@@ -4,3 +4,4 @@
 *.pt
 *.onnx
 model_config.json
+class_names.json

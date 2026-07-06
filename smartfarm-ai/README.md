@@ -19,8 +19,9 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
   thresholding (PIL + numpy) + a mask-preview PNG.
 - `disease.py` — disease **decision** (feature 3): a config-driven PlantVillage
   CNN (default MobileNetV2). Torch is imported lazily on first call.
-- `download_model.sh` + `models/` — fetch the weights (gitignored) + write
-  `model_config.json`. Set `DISEASE_WEIGHTS_URL` to your checkpoint.
+- `download_model.sh` + `convert_weights.py` + `models/` — fetch the weights +
+  class names (gitignored), then normalize them into `models/disease.pth` +
+  `models/model_config.json`. See "Set up the disease model" below.
 - `frame_poller.py` / `smartfarm_inference.ipynb` — dev artifacts for the camera
   frame-pull path (`../web-server/docs/ai-frame-pull.md`); used interactively.
 
@@ -32,7 +33,27 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
 - `POST /canopy?hueMinDeg=&hueMaxDeg=&satMinPct=&valMinPct=` → **raw JPEG body** →
   `{ canopyPercent, factors, maskPng (base64 PNG), width, height }`.
 - `POST /disease` → **raw JPEG body** → `{ modelLoaded, topK:[{label,confidence}] }`.
-  Needs a model — run `download_model.sh` first (else `modelLoaded:false`).
+  Needs a model (see below) — else `modelLoaded:false`.
+
+## Set up the disease model
+
+Uses `Daksh159/plant-disease-mobilenetv2` by default (torchvision MobileNetV2,
+38 PlantVillage classes, ImageNet preprocessing). On the Jetson:
+
+```bash
+# 1. download the checkpoint + class names into models/ (host-side)
+cd smartfarm-ai && ./download_model.sh
+# 2. normalize -> models/disease.pth + model_config.json (needs torch -> in the container)
+docker exec smartfarm-ai python3 /smartfarm-ai/convert_weights.py
+```
+
+`convert_weights.py` loads the checkpoint into a torchvision MobileNetV2, re-saves
+a clean state_dict in **legacy format** (readable by the Jetson's old torch), and
+writes `model_config.json` with the **correct label order from `class_names.json`**.
+Then hit **Analyze** on the dashboard — the model lazy-loads. (Already downloaded
+the `.pth` manually into `models/`? Skip step 1; `convert_weights.py` fetches
+`class_names.json` itself if missing.) Override the source with
+`DISEASE_WEIGHTS_URL` / `DISEASE_CLASS_NAMES_URL`.
 
 The web-server sends already-averaged fresh inputs + the thresholds; this service
 holds no state. When it's unreachable the web-server degrades gracefully (shows
