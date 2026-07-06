@@ -5,7 +5,8 @@
   "description": "Unified Express server hosting the Smart Farm control API and static React dashboard.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --env-file=.env server.js"
   },
   "dependencies": {
     "express": "^4.19.2"

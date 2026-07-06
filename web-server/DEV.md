@@ -27,7 +27,7 @@ ssh -L 8080:192.168.0.4:80 <user>@192.168.1.124
 ```
 
 - `<user>` = your Jetson SSH login.
-- `8080` = local port on the PC (matches `VITE_PUMP_URL`).
+- `8080` = local port on the PC (matches the backend's `PUMP_URL`).
 - `192.168.0.4:80` = the pump, resolved from the Jetson's Wi-Fi side.
 
 Verify it's up (should reach the pump's relay API):
@@ -38,11 +38,20 @@ curl http://localhost:8080/api/v1/relay      # -> {"relay_status":"ON"|"OFF"}
 
 ## 2. Run the dev stack
 
+The pump target is now **server-owned** (persisted in `data/settings.json`, seeded
+from the backend's env), so the tunnel is configured on the **backend**, not the
+client. Copy the dev env template and set `PUMP_URL` to the tunnel:
+
+```bash
+cd web-server && cp .env.example .env    # PUMP_URL=http://localhost:8080 (default)
+```
+
 Two terminals (plus the tunnel above):
 
 ```bash
-# backend (Node relay + APIs) — the pump relay's fetch runs here, on the PC
-cd web-server && npm install && npm start        # http://localhost:3000
+# backend (Node relay + APIs) — the pump relay's fetch runs here, on the PC.
+# `npm run dev` loads .env via Node's native --env-file (Node >= 20.6).
+cd web-server && npm install && npm run dev        # http://localhost:3000
 
 # frontend (Vite dev server, proxies /api -> :3000)
 cd web-server/client && npm install && npm run dev
@@ -50,26 +59,23 @@ cd web-server/client && npm install && npm run dev
 
 ## 3. Point the pump at the tunnel
 
-`client/.env.development` sets:
+With `PUMP_URL=http://localhost:8080` in `web-server/.env`, the backend seeds
+`data/settings.json` with the tunnel URL on first boot, and the relay
+(`/api/v1/pump/control`) fetches the pump through it. Nothing to type in the UI.
 
-```
-VITE_PUMP_URL=http://localhost:8080
-```
-
-`vite dev` loads this so the default pump URL (`DEFAULT_PUMP_SETTINGS.url`)
-becomes the tunnel automatically. Nothing to type.
-
-> **Stale localStorage:** pump settings persist in the browser. If you'd
-> previously saved `http://192.168.0.4`, that saved value shadows the new dev
-> default. Fix: **Settings → Pump Control Settings → Reset Defaults**, or use a
-> fresh browser profile. Confirm the field reads `http://localhost:8080`.
+> **Already have a `data/settings.json`?** The persisted file wins over env, so a
+> stale `pump.url` shadows the new dev default. Fix: **Settings → Pump Control
+> Settings → Reset Defaults** (writes the env-seeded default back), edit the Pump
+> URL field directly, or delete `data/settings.json` and restart. Confirm the
+> field reads `http://localhost:8080`.
 
 Now the Dashboard pump card and the Irrigation page drive the **real** pump
 through the tunnel: browser → `/api/v1/pump/control` (Vite proxy → Node on the
-PC) → `fetch(http://localhost:8080/api/v1/relay)` → tunnel → pump.
+PC) → the relay reads `pump.url` from settings → `fetch(http://localhost:8080/api/v1/relay)`
+→ tunnel → pump.
 
 ## Production
 
-`vite build` does **not** load `.env.development`, so `VITE_PUMP_URL` is unset
-and `DEFAULT_PUMP_SETTINGS.url` falls back to the real pump IP `http://192.168.0.4`.
-No tunnel, no dev config ships in the container image.
+`docker-compose.yaml` sets `PUMP_URL` (default `http://192.168.0.5`, the deployed
+pump-zone-esp01 node) in the container env, which seeds `data/settings.json` on
+first boot. No tunnel, no `.env`, no dev config ships in the container image.

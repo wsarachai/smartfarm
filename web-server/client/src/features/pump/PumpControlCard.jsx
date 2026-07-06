@@ -33,7 +33,7 @@ function formatMs(ms) {
 
 export default function PumpControlCard() {
   const settings = usePumpSettings();
-  const { data } = useGetPumpStatusQuery(settings.url, {
+  const { data } = useGetPumpStatusQuery(undefined, {
     pollingInterval: POLL_INTERVAL_MS,
   });
   const [setPump, { isLoading }] = useSetPumpMutation();
@@ -45,8 +45,7 @@ export default function PumpControlCard() {
   const stateLabel = data == null ? '…' : !online ? 'OFFLINE' : isOn ? 'ON' : 'OFF';
   const ledStatus = isOn ? 'online' : 'offline';
 
-  const command = (state) =>
-    setPump({ target: settings.url, state, autoOffMinutes: settings.autoOffMinutes });
+  const command = (state) => setPump({ state });
 
   const onDisabled = isLoading || isOn;
   const offDisabled = isLoading || (online && !isOn);
