@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "description": "Unified Express server hosting the Smart Farm control API and static React dashboard.",
+  "author": "Watcharin Sarachai <sarachaii@gmail.com>",
+  "license": "UNLICENSED",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

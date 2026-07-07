@@ -2,6 +2,8 @@
   "name": "smartfarm-client",
   "version": "1.0.0",
   "private": true,
+  "author": "Watcharin Sarachai <sarachaii@gmail.com>",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",
