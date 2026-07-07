@@ -13,6 +13,7 @@ import { selectCameraStatus } from "./cameraSlice";
 import { useGetDevicesQuery } from "../devices/devicesApi";
 import { selectAllDevices } from "../devices/devicesSlice";
 import { metricMeta, formatMetricValue } from "../../lib/metricMeta";
+import { useT } from "../../i18n";
 import Led from "../../components/Led";
 import {
   RELAY_STREAM_URL,
@@ -30,8 +31,8 @@ function tsName() {
   return `esp32cam-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-function ageLabel(ms) {
-  return ms == null ? "—" : `${Math.round(ms / 1000)}s ago`;
+function ageLabel(ms, t) {
+  return ms == null ? "—" : t("common.secondsAgo", { n: Math.round(ms / 1000) });
 }
 
 function timeLabel(iso) {
@@ -61,13 +62,13 @@ function fmtUptime(s) {
   return `${sec}s`;
 }
 
-function sourceLabel(mode, streamUrl) {
-  if (mode === "relay") return "ESP32-CAM (relay)";
+function sourceLabel(mode, streamUrl, t) {
+  if (mode === "relay") return t("camera.relaySource");
   try {
     const parsed = new URL(streamUrl, window.location.href);
-    return parsed.host || "Custom Camera";
+    return parsed.host || t("camera.customSource");
   } catch {
-    return "Custom Camera";
+    return t("camera.customSource");
   }
 }
 
@@ -85,6 +86,7 @@ function LiveViewport({
   overrideSrc,
   forceStream,
 }) {
+  const t = useT();
   const [imgError, setImgError] = useState(false);
   const [activeStreamUrl, setActiveStreamUrl] = useState(streamUrl);
   const hasFrame = overrideSrc || forceStream || status !== "offline";
@@ -126,7 +128,7 @@ function LiveViewport({
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center text-on-surface-variant font-data-mono text-xs">
-          NO SIGNAL — waiting for frames
+          {t("status.noSignal")}
         </div>
       )}
 
@@ -149,7 +151,7 @@ function LiveViewport({
       <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-2 py-1 flex items-center gap-2">
         <Users size={14} className="text-white" />
         <span className="font-data-mono text-label-caps text-white">
-          {clients ?? 0} · {ageLabel(ageMs)}
+          {clients ?? 0} · {ageLabel(ageMs, t)}
         </span>
       </div>
     </div>
@@ -158,20 +160,21 @@ function LiveViewport({
 
 // --- Timeline scrubber (server-backed history over the RAM ring) ------------
 function HistoryScrubber({ frames, selectedSeq, isLive, onScrub, onLive }) {
+  const t = useT();
   const count = frames.length;
   if (count === 0) {
     return (
       <div className="panel rounded-lg p-4">
         <div className="flex justify-between items-center mb-1">
           <h3 className="font-headline-sm text-headline-sm text-on-surface">
-            History
+            {t("camera.history")}
           </h3>
           <span className="font-label-caps text-label-caps text-on-surface-variant">
             RING
           </span>
         </div>
         <p className="font-data-mono text-xs text-on-surface-variant">
-          No frames in history yet — waiting for the camera to push.
+          {t("camera.noFrames")}
         </p>
       </div>
     );
@@ -195,20 +198,20 @@ function HistoryScrubber({ frames, selectedSeq, isLive, onScrub, onLive }) {
     <div className="panel rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="font-headline-sm text-headline-sm text-on-surface">
-          History
+          {t("camera.history")}
         </h3>
         <div className="flex items-center gap-2">
-          <span className="font-data-mono text-xs text-on-surface-variant">
-            {isLive ? "LIVE" : `REPLAY · ${timeLabel(sel.receivedAt)}`}
+          <span className="font-data-mono text-xs text-on-surface-variant uppercase">
+            {isLive ? t("status.live") : t("camera.replayAt", { time: timeLabel(sel.receivedAt) })}
           </span>
           <button
             type="button"
             onClick={onLive}
             disabled={isLive}
-            className="flex items-center gap-1 border border-primary text-primary px-3 py-1 font-label-caps text-label-caps rounded hover:bg-primary/10 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1 border border-primary text-primary px-3 py-1 font-label-caps text-label-caps rounded hover:bg-primary/10 disabled:opacity-40 transition-colors uppercase"
           >
             <Radio size={12} />
-            LIVE
+            {t("status.live")}
           </button>
         </div>
       </div>
@@ -220,7 +223,7 @@ function HistoryScrubber({ frames, selectedSeq, isLive, onScrub, onLive }) {
         value={idx}
         onChange={(e) => onScrub(Number(e.target.value), frames)}
         className="w-full accent-primary"
-        aria-label="Scrub camera history"
+        aria-label={t("camera.scrubAria")}
       />
 
       <div className="flex gap-1 overflow-x-auto">
@@ -246,7 +249,7 @@ function HistoryScrubber({ frames, selectedSeq, isLive, onScrub, onLive }) {
 
       <div className="flex justify-between font-data-mono text-[10px] text-on-surface-variant">
         <span>{timeLabel(frames[0].receivedAt)}</span>
-        <span>{count} frames</span>
+        <span>{t("camera.frames", { n: count })}</span>
         <span>{timeLabel(frames[liveIdx].receivedAt)}</span>
       </div>
     </div>
@@ -255,10 +258,11 @@ function HistoryScrubber({ frames, selectedSeq, isLive, onScrub, onLive }) {
 
 // --- Node metrics (real fields only) ---------------------------------------
 function NodeMetrics({ status, ageMs, bytes, clients, health }) {
+  const t = useT();
   const rows = [
     {
-      k: "Status",
-      v: status.toUpperCase(),
+      k: t("camera.mStatus"),
+      v: t(`status.${status}`),
       cls:
         status === "online"
           ? "text-primary"
@@ -266,13 +270,13 @@ function NodeMetrics({ status, ageMs, bytes, clients, health }) {
             ? "text-tertiary"
             : "text-error",
     },
-    { k: "Last Frame", v: ageLabel(ageMs), cls: "text-on-surface" },
+    { k: t("camera.mLastFrame"), v: ageLabel(ageMs, t), cls: "text-on-surface" },
     {
-      k: "Frame Size",
+      k: t("camera.mFrameSize"),
       v: bytes ? `${(bytes / 1024).toFixed(0)} KB` : "—",
       cls: "text-on-surface",
     },
-    { k: "Viewers", v: String(clients ?? 0), cls: "text-on-surface" },
+    { k: t("camera.mViewers"), v: String(clients ?? 0), cls: "text-on-surface" },
   ];
 
   // Real firmware telemetry (esp32cam device card) — only rows the camera reports.
@@ -281,21 +285,21 @@ function NodeMetrics({ status, ageMs, bytes, clients, health }) {
     rows.push({ k: "RSSI", v: `${h.rssi} dBm`, cls: "text-on-surface" });
   if (h.free_heap != null)
     rows.push({
-      k: "Free Heap",
+      k: t("camera.mFreeHeap"),
       v: `${(Number(h.free_heap) / 1024).toFixed(0)} KB`,
       cls: "text-on-surface",
     });
   if (h.uptime_s != null)
-    rows.push({ k: "Uptime", v: fmtUptime(h.uptime_s), cls: "text-on-surface" });
+    rows.push({ k: t("camera.mUptime"), v: fmtUptime(h.uptime_s), cls: "text-on-surface" });
   if (h.fw_version)
-    rows.push({ k: "Firmware", v: String(h.fw_version), cls: "text-on-surface" });
+    rows.push({ k: t("camera.mFirmware"), v: String(h.fw_version), cls: "text-on-surface" });
 
   const hasTelemetry = h.rssi != null || h.free_heap != null;
 
   return (
     <div className="panel rounded-lg p-5 border-t-2 border-t-secondary">
       <h3 className="font-headline-sm text-headline-sm text-on-surface mb-4">
-        Node Metrics
+        {t("camera.nodeMetrics")}
       </h3>
       <div className="space-y-4">
         {rows.map((r, i) => (
@@ -314,7 +318,7 @@ function NodeMetrics({ status, ageMs, bytes, clients, health }) {
       </div>
       {!hasTelemetry && (
         <p className="mt-4 font-data-mono text-[10px] text-on-surface-variant/70">
-          Awaiting firmware health telemetry…
+          {t("camera.awaitingTelemetry")}
         </p>
       )}
     </div>
@@ -323,6 +327,7 @@ function NodeMetrics({ status, ageMs, bytes, clients, health }) {
 
 // --- Sensor chips (real devices) -------------------------------------------
 function SensorChips({ devices }) {
+  const t = useT();
   const chips = [];
   for (const d of devices.filter((x) => x.type !== "actuator")) {
     for (const [key, value] of Object.entries(d.metrics || {})) {
@@ -335,7 +340,7 @@ function SensorChips({ devices }) {
   return (
     <div className="space-y-2">
       {chips.slice(0, 4).map((c, i) => {
-        const { label, unit } = metricMeta(c.key);
+        const { label, labelKey, unit } = metricMeta(c.key);
         return (
           <div
             key={c.id}
@@ -344,7 +349,7 @@ function SensorChips({ devices }) {
             <div className={`w-1 h-8 ${colors[i % colors.length]}`} />
             <div className="min-w-0">
               <p className="font-label-caps text-label-caps text-on-surface-variant truncate">
-                {label}
+                {labelKey ? t(labelKey) : label}
               </p>
               <p className="font-data-mono text-data-mono text-on-surface">
                 {formatMetricValue(c.value)}
@@ -359,6 +364,7 @@ function SensorChips({ devices }) {
 }
 
 export default function CamerasPage() {
+  const t = useT();
   const cameraSettings = useCameraSettings();
   const usingRelay = cameraSettings.sourceMode !== "custom";
   const streamUrl = usingRelay ? RELAY_STREAM_URL : cameraSettings.streamUrl;
@@ -388,7 +394,7 @@ export default function CamerasPage() {
         ? "online"
         : "stale"
     : "online";
-  const sourceName = sourceLabel(cameraSettings.sourceMode, streamUrl);
+  const sourceName = sourceLabel(cameraSettings.sourceMode, streamUrl, t);
   const displayAgeMs = usingRelay ? ageMs : null;
   const displayBytes = usingRelay ? bytes : 0;
   const displayClients = usingRelay ? clients : null;
@@ -441,13 +447,13 @@ export default function CamerasPage() {
 
   const label = usingRelay
     ? !isLive
-      ? "REPLAY"
+      ? t("status.replay")
       : status === "online"
-        ? "LIVE"
+        ? t("status.live")
         : status === "stale"
-          ? "STALE"
-          : "OFFLINE"
-    : "EXTERNAL";
+          ? t("status.stale")
+          : t("status.offline")
+    : t("status.external");
 
   const viewportRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -487,13 +493,13 @@ export default function CamerasPage() {
           <div className="flex items-center gap-2">
             <Led status={status} />
             <span className="font-data-mono text-label-caps text-primary uppercase">
-              {status === "online" ? "System Live" : status}
+              {status === "online" ? t("status.systemLive") : t(`status.${status}`)}
             </span>
           </div>
           <div className="h-4 w-px bg-outline-variant" />
           <div className="flex flex-col">
             <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-              Source
+              {t("camera.source")}
             </span>
             <span className="font-data-mono text-data-mono text-primary">
               {sourceName}
@@ -505,7 +511,7 @@ export default function CamerasPage() {
               <div className="flex items-center gap-2 bg-error/15 border border-error/40 px-2 py-1 rounded">
                 <AlertTriangle size={14} className="text-error" />
                 <span className="font-label-caps text-label-caps text-error uppercase">
-                  Degrading
+                  {t("camera.degradingBadge")}
                 </span>
               </div>
             </>
@@ -514,7 +520,7 @@ export default function CamerasPage() {
         <div className="hidden md:flex items-center gap-6">
           <div className="text-right">
             <span className="font-label-caps text-label-caps text-on-surface-variant block uppercase">
-              Frame Size
+              {t("camera.mFrameSize")}
             </span>
             <span className="font-data-mono text-data-mono text-on-surface">
               {displayBytes ? `${(displayBytes / 1024).toFixed(0)} KB` : "—"}
@@ -522,7 +528,7 @@ export default function CamerasPage() {
           </div>
           <div className="text-right">
             <span className="font-label-caps text-label-caps text-on-surface-variant block uppercase">
-              Viewers
+              {t("camera.mViewers")}
             </span>
             <span className="font-data-mono text-data-mono text-on-surface">
               {displayClients ?? 0}
@@ -549,7 +555,7 @@ export default function CamerasPage() {
             <button
               type="button"
               onClick={goFullscreen}
-              title="Fullscreen"
+              title={t("camera.fullscreen")}
               className="absolute bottom-4 right-4 bg-black/60 hover:bg-black/80 text-white p-2 border border-white/20 rounded backdrop-blur-sm transition-colors"
             >
               <Maximize2 size={20} />
@@ -574,7 +580,7 @@ export default function CamerasPage() {
               className="flex-1 min-w-[200px] flex items-center justify-center gap-3 py-4 px-6 bg-primary text-on-primary font-headline-sm rounded hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
             >
               <Download size={20} />
-              <span>Download current frame</span>
+              <span>{t("camera.download")}</span>
             </button>
             <a
               href={snapshotUrl}
@@ -585,7 +591,7 @@ export default function CamerasPage() {
               }`}
             >
               <ExternalLink size={20} />
-              <span>Open Snapshot</span>
+              <span>{t("camera.openSnapshot")}</span>
             </a>
           </div>
         </div>
