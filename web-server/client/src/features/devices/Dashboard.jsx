@@ -30,9 +30,22 @@ export default function Dashboard() {
   // of the generic list so it isn't shown twice.
   const actuators = devices.filter((d) => d.type === 'actuator' && d.device_id !== 'main-pump');
 
+  // Widget blocks flow in reading order: pump -> camera -> sensors -> AI ->
+  // other. Each is a consistent grid cell so the responsive auto-flow stays
+  // clean (2-up on md, 3-up on lg); the live trend spans full width at the end.
   return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-gutter">
-      {/* Sensor telemetry cards — one per sensor device. */}
+      {/* 1. Pump — dedicated pump-zone control (configured in Settings). */}
+      <div className="md:col-span-6 lg:col-span-4">
+        <PumpControlCard />
+      </div>
+
+      {/* 2. Water Stress Risk (AI insight). */}
+      <div className="md:col-span-6 lg:col-span-4">
+        <WaterStressCard />
+      </div>
+
+      {/* 3. Sensor telemetry cards — one per sensor device. */}
       {sensors.length === 0 ? (
         <div className="md:col-span-6 lg:col-span-4">
           <EmptyPanel>NO SENSORS REPORTING</EmptyPanel>
@@ -45,25 +58,26 @@ export default function Dashboard() {
         ))
       )}
 
-      {/* Hardware controls column: actuators + camera status. */}
-      <div className="md:col-span-12 lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
-        {/* Dedicated pump-zone control (configured in Settings) stands in for the
-            generic actuator empty-state — the pump is the actuator operators see. */}
-        <PumpControlCard />
-        {actuators.map((device) => (
-          <ControlCard key={device.device_id} device={device} />
-        ))}
-        <CameraStatusCard />
-      </div>
-
-      {/* Live trend (client-buffered) + AI insight cards. */}
-      <div className="md:col-span-12 lg:col-span-8">
+      {/* 4. Live trend (client-buffered), full width — sits with the sensor
+          data it plots: "current readings -> their trend over time". */}
+      <div className="md:col-span-12">
         <TrendChart />
       </div>
-      <div className="md:col-span-12 lg:col-span-4 space-y-gutter">
-        <WaterStressCard />
+
+      {/* 5. Camera status + remaining AI insight. */}
+      <div className="md:col-span-6 lg:col-span-4">
+        <CameraStatusCard />
+      </div>
+      <div className="md:col-span-6 lg:col-span-4">
         <DiseaseCard />
       </div>
+
+      {/* 6. Other actuators. */}
+      {actuators.map((device) => (
+        <div key={device.device_id} className="md:col-span-6 lg:col-span-4">
+          <ControlCard device={device} />
+        </div>
+      ))}
     </div>
   );
 }
