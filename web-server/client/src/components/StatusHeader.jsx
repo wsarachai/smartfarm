@@ -2,6 +2,7 @@ import { useSelector } from 'react-redux';
 import { useGetHealthQuery } from '../features/health/healthApi';
 import { selectAllDevices } from '../features/devices/devicesSlice';
 import { freshness } from '../lib/freshness';
+import { useT } from '../i18n';
 import Led from './Led';
 
 const HEALTH_POLL_MS = 5000;
@@ -16,27 +17,28 @@ function formatUptime(seconds) {
 }
 
 export default function StatusHeader() {
+  const t = useT();
   const { data: health } = useGetHealthQuery(undefined, { pollingInterval: HEALTH_POLL_MS });
   const devices = useSelector(selectAllDevices);
 
   const online = health?.status === 'ok';
   const allFresh = devices.length > 0 && devices.every((d) => freshness(d.lastSeen) === 'online');
-  const systemStatus = !online ? 'OFFLINE' : devices.length === 0 ? 'STANDBY' : allFresh ? 'NOMINAL' : 'DEGRADED';
+  const sysKey = !online ? 'sysOffline' : devices.length === 0 ? 'sysStandby' : allFresh ? 'sysNominal' : 'sysDegraded';
   const nodeStatus = online ? 'online' : 'offline';
 
   return (
     <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
       <div>
-        <span className="font-label-caps text-label-caps text-secondary-container tracking-[0.2em] mb-1 block">
-          SYSTEM STATUS: {systemStatus}
+        <span className="font-label-caps text-label-caps text-secondary-container tracking-[0.2em] mb-1 block uppercase">
+          {t('systemHeader.statusLabel', { status: t(`systemHeader.${sysKey}`) })}
         </span>
-        <h2 className="font-display-lg text-display-lg text-on-background">Live Operations</h2>
+        <h2 className="font-display-lg text-display-lg text-on-background">{t('systemHeader.liveOperations')}</h2>
       </div>
       <div className="flex gap-2">
         <div className="panel px-4 py-2 flex items-center gap-3">
           <Led status={nodeStatus} />
           <span className="font-data-mono text-data-mono text-on-surface">
-            EDGE_NODE_01: {online ? 'ACTIVE' : 'DOWN'}
+            EDGE_NODE_01: {online ? t('systemHeader.nodeActive') : t('systemHeader.nodeDown')}
           </span>
           <span className="font-data-mono text-data-mono text-on-surface-variant">
             {formatUptime(health?.uptime)}

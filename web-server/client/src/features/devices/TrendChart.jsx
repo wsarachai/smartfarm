@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { selectHistory } from '../history/historySlice';
 import { metricMeta } from '../../lib/metricMeta';
+import { useT } from '../../i18n';
 
 const AXIS = '#bbcbbb'; // on-surface-variant
 const GRID = '#3d4a3e'; // outline-variant
@@ -15,14 +16,20 @@ function fmtTime(t) {
   ).padStart(2, '0')}`;
 }
 
-function seriesLabel(key) {
-  const [deviceId, metric] = key.split('::');
-  return `${deviceId} · ${metricMeta(metric).label}`;
+// Translate a metric-meta label (known keys carry a labelKey; unknown fall back
+// to the humanized English label).
+function metaLabel(t, meta) {
+  return meta.labelKey ? t(meta.labelKey) : meta.label;
 }
 
 export default function TrendChart() {
+  const t = useT();
   const points = useSelector(selectHistory);
   const [selected, setSelected] = useState(null);
+  const seriesLabel = (key) => {
+    const [deviceId, metric] = key.split('::');
+    return `${deviceId} · ${metaLabel(t, metricMeta(metric))}`;
+  };
 
   const seriesKeys = useMemo(() => {
     const keys = new Set();
@@ -48,7 +55,7 @@ export default function TrendChart() {
   return (
     <div className="panel industrial-top overflow-hidden relative min-h-[300px]">
       <div className="p-5 flex flex-wrap gap-2 justify-between items-center border-b border-outline-variant/30">
-        <h3 className="font-headline-sm text-headline-sm text-on-background">Live Telemetry Trend</h3>
+        <h3 className="font-headline-sm text-headline-sm text-on-background">{t('trend.title')}</h3>
         <div className="flex items-center gap-2">
           {seriesKeys.length > 0 && (
             <select
@@ -64,7 +71,7 @@ export default function TrendChart() {
             </select>
           )}
           <span className="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">
-            {data.length} SAMPLES
+            {t('trend.samples', { n: data.length })}
           </span>
         </div>
       </div>
@@ -72,7 +79,7 @@ export default function TrendChart() {
       <div className="h-64 w-full p-2">
         {data.length < 2 ? (
           <div className="h-full flex items-center justify-center text-on-surface-variant font-data-mono text-xs">
-            {seriesKeys.length === 0 ? 'Waiting for numeric telemetry…' : 'Collecting samples…'}
+            {seriesKeys.length === 0 ? t('trend.waitingNumeric') : t('trend.collecting')}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -99,7 +106,7 @@ export default function TrendChart() {
               />
               <Tooltip
                 labelFormatter={fmtTime}
-                formatter={(v) => [`${v}${unit ? ` ${unit}` : ''}`, metricMeta(metric).label]}
+                formatter={(v) => [`${v}${unit ? ` ${unit}` : ''}`, metaLabel(t, metricMeta(metric))]}
                 contentStyle={{
                   background: '#1e2023',
                   border: '1px solid #3d4a3e',

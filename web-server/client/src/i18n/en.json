@@ -34,6 +34,12 @@
     "flow_rate": "Flow Rate",
     "voltage": "Voltage"
   },
+  "risk": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "unknown": "Unknown"
+  },
   "dashboard": {
     "noSensors": "NO SENSORS REPORTING"
   },
@@ -53,5 +59,55 @@
     "autoOffIn": "Auto-off in",
     "autoNote": "Auto mode on — the schedule controls the pump. Switch to Manual on the Irrigation page to run it by hand.",
     "unreachable": "Pump unreachable at {url} — check the node is powered and joined the AP."
+  },
+  "trend": {
+    "title": "Live Telemetry Trend",
+    "samples": "{n} SAMPLES",
+    "waitingNumeric": "Waiting for numeric telemetry…",
+    "collecting": "Collecting samples…"
+  },
+  "systemHeader": {
+    "statusLabel": "SYSTEM STATUS: {status}",
+    "sysOffline": "OFFLINE",
+    "sysStandby": "STANDBY",
+    "sysNominal": "NOMINAL",
+    "sysDegraded": "DEGRADED",
+    "liveOperations": "Live Operations",
+    "nodeActive": "ACTIVE",
+    "nodeDown": "DOWN"
+  },
+  "disease": {
+    "title": "Disease Detection",
+    "notAnalyzed": "Not analyzed yet",
+    "analyze": "Analyze",
+    "analyzeFrame": "Analyze latest frame",
+    "analyzing": "Analyzing…",
+    "details": "Details",
+    "topPredictions": "Top predictions",
+    "recentChecks": "Recent checks",
+    "modelHint": "{detail} — run smartfarm-ai/download_model.sh on the Jetson."
+  },
+  "waterStress": {
+    "riskTitle": "Water Stress Risk",
+    "estimateTitle": "Water Stress Estimate",
+    "soil": "Soil",
+    "temp": "Temp",
+    "humidity": "Humidity",
+    "why": "Why",
+    "estimating": "Estimating…",
+    "aiOffline": "AI OFFLINE",
+    "aiOfflineLastKnown": "AI OFFLINE — LAST KNOWN",
+    "aiOfflineNote": "AI service unreachable — showing last known estimate."
+  },
+  "insights": {
+    "pageTitle": "Crop Intelligence",
+    "pageIntro": "Three advisory signals derived from your live sensors and camera: Water Stress — a rule-based risk estimate combining soil moisture with temperature & humidity (evaporative demand); Canopy Coverage — green-pixel cover measured from the latest frame by classical HSV vision; and Disease Detection — an on-demand PlantVillage CNN that classifies the current frame. All are advisory only and never actuate the pump.",
+    "riskTrend": "Risk Trend",
+    "points": "{n} POINTS",
+    "collectingHistory": "Collecting history…",
+    "canopyTitle": "Canopy Coverage",
+    "canopyCover": "Green-pixel cover",
+    "canopyNoPreview": "no preview",
+    "canopyTrend": "Canopy Trend"
   }
 }

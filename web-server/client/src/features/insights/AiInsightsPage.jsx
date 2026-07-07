@@ -5,6 +5,7 @@ import { useGetCanopyQuery, useGetCanopyHistoryQuery } from './canopyApi';
 import { useGetDiseaseQuery, useGetDiseaseHistoryQuery, useAnalyzeDiseaseMutation } from './diseaseApi';
 import { riskMeta } from './risk';
 import { diseaseMeta } from './diseaseMeta';
+import { useT } from '../../i18n';
 
 const POLL_MS = 5000;
 const AXIS = '#bbcbbb';
@@ -19,14 +20,13 @@ function fmtTime(t) {
   const d = new Date(t);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
-const BAND_LABEL = { 1: 'Low', 2: 'Medium', 3: 'High' };
 
 function StatChip({ Icon, label, value, unit }) {
   return (
     <div className="bg-surface-container-low px-4 py-2 border border-outline-variant flex items-center gap-3">
       <Icon size={18} className="text-primary shrink-0" />
       <div>
-        <p className="font-label-caps text-[10px] text-on-surface-variant leading-none mb-1">{label}</p>
+        <p className="font-label-caps text-[10px] text-on-surface-variant leading-none mb-1 uppercase">{label}</p>
         <p className="font-data-mono text-headline-sm leading-none text-on-surface">
           {value == null ? '—' : `${value}${unit}`}
         </p>
@@ -36,6 +36,7 @@ function StatChip({ Icon, label, value, unit }) {
 }
 
 function RiskPanel({ current }) {
+  const t = useT();
   const risk = current?.risk ?? 'unknown';
   const m = riskMeta(risk);
   const inputs = current?.inputs ?? {};
@@ -44,32 +45,32 @@ function RiskPanel({ current }) {
     <div className="panel industrial-top p-5">
       <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
         <BrainCircuit size={14} />
-        Water Stress Estimate
+        {t('waterStress.estimateTitle')}
         <span
           className={`ml-auto inline-flex items-center gap-1.5 font-label-caps text-[9px] tracking-widest ${
             aiOffline ? 'text-error' : 'text-primary/70'
           }`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${aiOffline ? 'bg-error' : 'bg-primary'}`} />
-          {aiOffline ? 'AI OFFLINE — LAST KNOWN' : 'SMARTFARM-AI'}
+          {aiOffline ? t('waterStress.aiOfflineLastKnown') : 'SMARTFARM-AI'}
         </span>
       </h3>
 
       <div className="flex flex-wrap items-center gap-4 mb-5">
         <div className={`inline-flex items-center gap-3 px-4 py-2 rounded border ${m.bg} ${m.border}`}>
           <span className={`w-3 h-3 rounded-full ${m.dot}`} />
-          <span className={`font-display-lg text-[28px] leading-none ${m.text}`}>{m.label}</span>
+          <span className={`font-display-lg text-[28px] leading-none ${m.text}`}>{t(m.labelKey)}</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatChip Icon={Droplet} label="SOIL" value={inputs.soilMoisture} unit="%" />
-          <StatChip Icon={Thermometer} label="TEMP" value={inputs.temperature} unit="°C" />
-          <StatChip Icon={Waves} label="HUMIDITY" value={inputs.humidity} unit="%" />
+          <StatChip Icon={Droplet} label={t('waterStress.soil')} value={inputs.soilMoisture} unit="%" />
+          <StatChip Icon={Thermometer} label={t('waterStress.temp')} value={inputs.temperature} unit="°C" />
+          <StatChip Icon={Waves} label={t('waterStress.humidity')} value={inputs.humidity} unit="%" />
         </div>
       </div>
 
       <div className="rounded border border-outline-variant bg-surface-container-low p-3">
         <p className="font-label-caps text-[10px] text-on-surface-variant mb-2 flex items-center gap-1.5">
-          <Info size={12} /> Why
+          <Info size={12} /> {t('waterStress.why')}
         </p>
         <ul className="space-y-1">
           {(current?.factors ?? []).map((f, i) => (
@@ -84,19 +85,21 @@ function RiskPanel({ current }) {
 }
 
 function TrendPanel({ history }) {
+  const t = useT();
+  const bandLabel = { 1: t('risk.low'), 2: t('risk.medium'), 3: t('risk.high') };
   const data = history.map((p) => ({ t: new Date(p.at).getTime(), value: bandOf(p) }));
   return (
     <div className="panel industrial-top overflow-hidden relative min-h-[300px]">
       <div className="p-5 flex flex-wrap gap-2 justify-between items-center border-b border-outline-variant/30">
-        <h3 className="font-headline-sm text-headline-sm text-on-background">Risk Trend</h3>
+        <h3 className="font-headline-sm text-headline-sm text-on-background">{t('insights.riskTrend')}</h3>
         <span className="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">
-          {data.length} POINTS
+          {t('insights.points', { n: data.length })}
         </span>
       </div>
       <div className="h-64 w-full p-2">
         {data.length < 2 ? (
           <div className="h-full flex items-center justify-center text-on-surface-variant font-data-mono text-xs">
-            Collecting history…
+            {t('insights.collectingHistory')}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -115,11 +118,11 @@ function TrendPanel({ history }) {
                 width={64}
                 domain={[1, 3]}
                 ticks={[1, 2, 3]}
-                tickFormatter={(v) => BAND_LABEL[v] || ''}
+                tickFormatter={(v) => bandLabel[v] || ''}
               />
               <Tooltip
                 labelFormatter={fmtTime}
-                formatter={(v) => [BAND_LABEL[v] || '—', 'Risk']}
+                formatter={(v) => [bandLabel[v] || '—', t('waterStress.riskTitle')]}
                 contentStyle={{ background: '#1e2023', border: '1px solid #3d4a3e', fontFamily: 'JetBrains Mono', fontSize: 12, color: '#e2e2e6' }}
               />
               <Area type="stepAfter" dataKey="value" stroke={SERIES} strokeWidth={2} fill="url(#wsFill)" isAnimationActive={false} connectNulls={false} />
@@ -132,6 +135,7 @@ function TrendPanel({ history }) {
 }
 
 function CanopyPanel({ current }) {
+  const t = useT();
   const pct = current?.canopyPercent;
   const aiOffline = current?.aiOnline === false;
   const hasValue = typeof pct === 'number';
@@ -141,14 +145,14 @@ function CanopyPanel({ current }) {
     <div className="panel industrial-top p-5">
       <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
         <Sprout size={14} />
-        Canopy Coverage
+        {t('insights.canopyTitle')}
         <span
           className={`ml-auto inline-flex items-center gap-1.5 font-label-caps text-[9px] tracking-widest ${
             aiOffline ? 'text-error' : 'text-primary/70'
           }`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${aiOffline ? 'bg-error' : 'bg-primary'}`} />
-          {aiOffline ? 'AI OFFLINE — LAST KNOWN' : 'SMARTFARM-AI'}
+          {aiOffline ? t('waterStress.aiOfflineLastKnown') : 'SMARTFARM-AI'}
         </span>
       </h3>
 
@@ -157,7 +161,7 @@ function CanopyPanel({ current }) {
           <p className="font-display-lg text-[44px] leading-none text-primary">
             {hasValue ? `${pct}%` : <span className="text-on-surface-variant text-[28px]">n/a</span>}
           </p>
-          <p className="font-body-md text-outline mt-2">Green-pixel cover</p>
+          <p className="font-body-md text-outline mt-2">{t('insights.canopyCover')}</p>
           <div className="mt-4 rounded border border-outline-variant bg-surface-container-low p-3">
             <ul className="space-y-1">
               {(current?.factors ?? []).map((f, i) => (
@@ -172,7 +176,7 @@ function CanopyPanel({ current }) {
           {previewSrc ? (
             <img src={previewSrc} alt="Canopy detection mask" className="w-full h-full object-contain" />
           ) : (
-            <span className="font-data-mono text-[11px] text-on-surface-variant">no preview</span>
+            <span className="font-data-mono text-[11px] text-on-surface-variant">{t('insights.canopyNoPreview')}</span>
           )}
         </div>
       </div>
@@ -181,19 +185,20 @@ function CanopyPanel({ current }) {
 }
 
 function CanopyTrend({ history }) {
+  const t = useT();
   const data = history.map((p) => ({ t: new Date(p.at).getTime(), value: p.canopyPercent }));
   return (
     <div className="panel industrial-top overflow-hidden relative min-h-[280px]">
       <div className="p-5 flex flex-wrap gap-2 justify-between items-center border-b border-outline-variant/30">
-        <h3 className="font-headline-sm text-headline-sm text-on-background">Canopy Trend</h3>
+        <h3 className="font-headline-sm text-headline-sm text-on-background">{t('insights.canopyTrend')}</h3>
         <span className="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">
-          {data.length} POINTS
+          {t('insights.points', { n: data.length })}
         </span>
       </div>
       <div className="h-56 w-full p-2">
         {data.length < 2 ? (
           <div className="h-full flex items-center justify-center text-on-surface-variant font-data-mono text-xs">
-            Collecting history…
+            {t('insights.collectingHistory')}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -209,7 +214,7 @@ function CanopyTrend({ history }) {
               <YAxis stroke={AXIS} tick={{ fontSize: 10, fontFamily: 'JetBrains Mono' }} width={40} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
               <Tooltip
                 labelFormatter={fmtTime}
-                formatter={(v) => [`${v}%`, 'Canopy']}
+                formatter={(v) => [`${v}%`, t('insights.canopyTitle')]}
                 contentStyle={{ background: '#1e2023', border: '1px solid #3d4a3e', fontFamily: 'JetBrains Mono', fontSize: 12, color: '#e2e2e6' }}
               />
               <Area type="monotone" dataKey="value" stroke={SERIES} strokeWidth={2} fill="url(#canopyFill)" isAnimationActive={false} connectNulls={false} />
@@ -222,6 +227,7 @@ function CanopyTrend({ history }) {
 }
 
 function DiseasePanel() {
+  const t = useT();
   const { data: current } = useGetDiseaseQuery();
   const { data: hist } = useGetDiseaseHistoryQuery(15);
   const [analyze, { isLoading }] = useAnalyzeDiseaseMutation();
@@ -234,14 +240,14 @@ function DiseasePanel() {
     <div className="panel industrial-top p-5">
       <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
         <Bug size={14} />
-        Disease Detection
+        {t('disease.title')}
         <span className="ml-auto font-label-caps text-[9px] text-primary/70 tracking-widest">PLANTVILLAGE · ON-DEMAND</span>
       </h3>
 
       <div className="flex flex-wrap items-center gap-4 mb-4">
         <div className={`inline-flex items-center gap-3 px-4 py-2 rounded border ${m.bg} ${m.border}`}>
           <span className={`w-2.5 h-2.5 rounded-full ${m.dot}`} />
-          <span className={`font-headline-sm text-headline-sm ${m.text}`}>{current?.headline ?? 'Not analyzed yet'}</span>
+          <span className={`font-headline-sm text-headline-sm ${m.text}`}>{current?.headline ?? t('disease.notAnalyzed')}</span>
         </div>
         <button
           type="button"
@@ -250,17 +256,17 @@ function DiseasePanel() {
           className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110 disabled:opacity-50"
         >
           <ScanSearch size={16} />
-          {busy ? 'Analyzing…' : 'Analyze latest frame'}
+          {busy ? t('disease.analyzing') : t('disease.analyzeFrame')}
         </button>
       </div>
 
       {current?.detail ? (
-        <p className="mb-3 font-data-mono text-[11px] text-error/90">{current.detail} — run smartfarm-ai/download_model.sh on the Jetson.</p>
+        <p className="mb-3 font-data-mono text-[11px] text-error/90">{t('disease.modelHint', { detail: current.detail })}</p>
       ) : null}
 
       {current?.top?.length ? (
         <div className="rounded border border-outline-variant bg-surface-container-low p-3 mb-4">
-          <p className="font-label-caps text-[10px] text-on-surface-variant mb-2">Top predictions</p>
+          <p className="font-label-caps text-[10px] text-on-surface-variant mb-2">{t('disease.topPredictions')}</p>
           <ul className="space-y-1.5">
             {current.top.map((t, i) => (
               <li key={i} className="flex items-center gap-3">
@@ -274,7 +280,7 @@ function DiseasePanel() {
 
       {history.length ? (
         <div>
-          <p className="font-label-caps text-[10px] text-on-surface-variant mb-2">Recent checks</p>
+          <p className="font-label-caps text-[10px] text-on-surface-variant mb-2">{t('disease.recentChecks')}</p>
           <ul className="max-h-40 overflow-y-auto divide-y divide-outline-variant/20">
             {history.map((e) => (
               <li key={e.id} className="flex items-center gap-3 py-1.5">
@@ -293,6 +299,7 @@ function DiseasePanel() {
 }
 
 export default function AiInsightsPage() {
+  const t = useT();
   const { data: current } = useGetWaterStressQuery(undefined, { pollingInterval: POLL_MS });
   const { data: hist } = useGetWaterStressHistoryQuery(288, { pollingInterval: 30000 });
   const history = hist?.points ?? [];
@@ -306,19 +313,11 @@ export default function AiInsightsPage() {
         <div className="flex items-center gap-2 mb-1">
           <span className="flex items-center gap-2 bg-primary/10 border border-primary/40 text-primary px-3 py-1 font-data-mono text-[12px] uppercase tracking-widest">
             <BrainCircuit size={13} />
-            AI Insights
+            {t('nav.insights')}
           </span>
         </div>
-        <h2 className="font-display-lg text-display-lg text-on-background">Crop Intelligence</h2>
-        <p className="font-body-md text-on-surface-variant text-sm mt-1">
-          Three advisory signals derived from your live sensors and camera:{' '}
-          <span className="text-on-surface">Water Stress</span> — a rule-based risk estimate combining soil
-          moisture with temperature &amp; humidity (evaporative demand);{' '}
-          <span className="text-on-surface">Canopy Coverage</span> — green-pixel cover measured from the latest
-          frame by classical HSV vision; and <span className="text-on-surface">Disease Detection</span> — an
-          on-demand PlantVillage CNN that classifies the current frame. All are advisory only and never actuate
-          the pump.
-        </p>
+        <h2 className="font-display-lg text-display-lg text-on-background">{t('insights.pageTitle')}</h2>
+        <p className="font-body-md text-on-surface-variant text-sm mt-1">{t('insights.pageIntro')}</p>
       </section>
 
       <div className="md:col-span-12">
