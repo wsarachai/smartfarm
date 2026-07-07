@@ -4,6 +4,11 @@
 // string. The Settings page's About panel renders it localized.
 export const buildInfo = __BUILD_INFO__;
 
+// Proprietary copyright shown in the UI (footer + Settings → About). Matches the
+// repo-root LICENSE (all rights reserved).
+export const COPYRIGHT =
+  '© 2026 Watcharin Sarachai and Maejo University. All rights reserved.';
+
 // Localized, human-readable build timestamp (e.g. "Jul 6, 2026, 2:32 PM").
 // Falls back to the raw string if it isn't a parseable date.
 export function formatBuildDate(iso = buildInfo.buildDate) {

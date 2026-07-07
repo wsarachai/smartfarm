@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Save, RotateCcw, Video, Power, SlidersHorizontal, Info, Droplets, Bug } from 'lucide-react';
-import { buildInfo, formatBuildDate } from '../../lib/buildInfo';
+import { buildInfo, formatBuildDate, COPYRIGHT } from '../../lib/buildInfo';
 import { DEFAULT_CAMERA_SETTINGS } from './cameraSettings';
 import {
   DEFAULT_PUMP_SETTINGS,
@@ -760,6 +760,9 @@ export default function SettingsPage() {
               <dd className="font-data-mono text-sm text-on-surface">{buildInfo.gitSha}</dd>
             </div>
           </dl>
+          <p className="mt-4 pt-4 border-t border-outline-variant/40 font-data-mono text-[11px] text-on-surface-variant/80">
+            {COPYRIGHT}
+          </p>
         </section>
       </div>
     </div>
