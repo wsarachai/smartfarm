@@ -7,6 +7,7 @@ import { selectAllDevices } from '../devices/devicesSlice';
 import { selectHistory } from '../history/historySlice';
 import { freshness } from '../../lib/freshness';
 import { metricMeta, formatMetricValue } from '../../lib/metricMeta';
+import { useT } from '../../i18n';
 import Led from '../../components/Led';
 import ScheduleEditor from './ScheduleEditor';
 import ActivityLog from './ActivityLog';
@@ -45,13 +46,14 @@ function HeaderChip({ label, value, unit, colorClass }) {
 }
 
 function PumpVisual({ mode, running }) {
+  const t = useT();
   const spinning = mode === 'manual' && running;
   const state =
     mode === 'auto'
-      ? { label: 'Standby', sub: 'System controlling…', color: 'text-outline-variant', hw: 'IDLE', hwClass: 'bg-outline' }
+      ? { label: t('pumpPanel.standby'), sub: t('pumpPanel.standbySub'), color: 'text-outline-variant', hw: 'IDLE', hwClass: 'bg-outline' }
       : running
-        ? { label: 'Running', sub: 'Fluid transport active', color: 'text-primary', hw: 'RUN', hwClass: 'bg-primary' }
-        : { label: 'Stopped', sub: 'Manual hold engaged', color: 'text-error', hw: 'IDLE', hwClass: 'bg-error' };
+        ? { label: t('pumpPanel.running'), sub: t('pumpPanel.runningSub'), color: 'text-primary', hw: 'RUN', hwClass: 'bg-primary' }
+        : { label: t('pumpPanel.stopped'), sub: t('pumpPanel.stoppedSub'), color: 'text-error', hw: 'IDLE', hwClass: 'bg-error' };
 
   return (
     <div className="bg-surface-container-lowest border border-outline-variant p-6 flex flex-col items-center justify-center relative overflow-hidden">
@@ -75,6 +77,7 @@ function PumpVisual({ mode, running }) {
 }
 
 function PumpControlPanel({ pump }) {
+  const t = useT();
   const [setPump, { isLoading }] = useSetPumpMutation();
   // AUTO/MANUAL is now a server-global mode (settings.irrigation.auto): the
   // scheduler runs in AUTO; MANUAL pauses it. Persisted so every client agrees.
@@ -85,7 +88,7 @@ function PumpControlPanel({ pump }) {
   const setAuto = (on) => updateSettings({ irrigation: { auto: on } });
 
   if (!pump) {
-    return <EmptyPanel>NO PUMP REPORTING (device_id: {PUMP_ID})</EmptyPanel>;
+    return <EmptyPanel>{t('pumpPanel.noReporting', { id: PUMP_ID })}</EmptyPanel>;
   }
 
   const running = Boolean(pump.metrics?.running);
@@ -105,7 +108,7 @@ function PumpControlPanel({ pump }) {
             <Fan size={28} className="text-primary" />
           </div>
           <div>
-            <h3 className="font-headline-md text-headline-md text-on-surface">Pump Control</h3>
+            <h3 className="font-headline-md text-headline-md text-on-surface">{t('pumpPanel.control')}</h3>
             <div className="flex items-center gap-2">
               <Led status={status} size="w-2 h-2" />
               <p className="font-body-md text-on-surface-variant text-sm">{pump.device_id}</p>
@@ -116,37 +119,37 @@ function PumpControlPanel({ pump }) {
           <button
             type="button"
             onClick={() => setAuto(true)}
-            className={`px-6 py-2 font-label-caps text-label-caps rounded-md transition-all duration-200 ${
+            className={`px-6 py-2 font-label-caps text-label-caps rounded-md transition-all duration-200 uppercase ${
               mode === 'auto' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
             }`}
           >
-            AUTO
+            {t('pumpPanel.auto')}
           </button>
           <button
             type="button"
             onClick={() => setAuto(false)}
-            className={`px-6 py-2 font-label-caps text-label-caps rounded-md transition-all duration-200 ${
+            className={`px-6 py-2 font-label-caps text-label-caps rounded-md transition-all duration-200 uppercase ${
               mode === 'manual' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
             }`}
           >
-            MANUAL
+            {t('pumpPanel.manual')}
           </button>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>
           <p className="font-label-caps text-label-caps text-on-surface-variant mb-4">
-            {mode === 'auto' ? 'MANUAL OVERRIDE — EMERGENCY STOP ONLY' : 'MANUAL OVERRIDE'}
+            {mode === 'auto' ? t('pumpPanel.overrideEmergency') : t('pumpPanel.override')}
           </p>
           <div className="flex flex-col gap-3">
             <button
               type="button"
               onClick={() => togglePump(true)}
               disabled={mode === 'auto' || isLoading}
-              title={mode === 'auto' ? 'Switch to MANUAL to start the pump by hand' : undefined}
+              title={mode === 'auto' ? t('pumpPanel.switchToManual') : undefined}
               className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-primary/10 hover:border-primary transition-all active:scale-95 disabled:opacity-50 disabled:hover:bg-surface-container-low disabled:hover:border-outline-variant disabled:active:scale-100"
             >
-              <span className="font-headline-sm text-on-surface">Pump ON</span>
+              <span className="font-headline-sm text-on-surface">{t('pumpPanel.pumpOn')}</span>
               <span className="font-data-mono text-[10px] text-outline">CMD: 0x01</span>
             </button>
             <button
@@ -155,7 +158,7 @@ function PumpControlPanel({ pump }) {
               disabled={isLoading}
               className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-error/10 hover:border-error transition-all active:scale-95 disabled:opacity-50"
             >
-              <span className="font-headline-sm text-on-surface">Pump OFF</span>
+              <span className="font-headline-sm text-on-surface">{t('pumpPanel.pumpOff')}</span>
               <span className="font-data-mono text-[10px] text-outline">CMD: 0x00</span>
             </button>
           </div>
@@ -186,13 +189,14 @@ function FlowSparkline({ points }) {
 }
 
 function FlowMetricsCard({ node, flowPoints }) {
+  const t = useT();
   const flowRate = node?.metrics?.flow_rate;
   const isNum = typeof flowRate === 'number';
   return (
     <div className="bg-surface-container p-5 border border-outline-variant">
       <h4 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
         <Activity size={14} />
-        Flow Metrics
+        {t('flow.title')}
       </h4>
       <div className="flex items-end justify-between">
         <div>
@@ -205,7 +209,7 @@ function FlowMetricsCard({ node, flowPoints }) {
               <span className="text-on-surface-variant">n/a</span>
             )}
           </p>
-          <p className="font-body-md text-outline mt-2">Current Throughput</p>
+          <p className="font-body-md text-outline mt-2">{t('flow.throughput')}</p>
         </div>
         <FlowSparkline points={flowPoints} />
       </div>
@@ -214,11 +218,12 @@ function FlowMetricsCard({ node, flowPoints }) {
 }
 
 function NodeCameraPreview() {
+  const t = useT();
   return (
     <div className="aspect-video bg-surface-container border border-outline-variant relative overflow-hidden group">
       <img
         src={STREAM_URL}
-        alt="Live feed near the irrigation node"
+        alt={t('node.cameraAlt')}
         className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
@@ -230,6 +235,7 @@ function NodeCameraPreview() {
 }
 
 function NodeSensorsTable({ node }) {
+  const t = useT();
   // This node has no onboard sensors — always list the known keys, showing the
   // real reading if one is ever reported, otherwise "n/a". Never blank out.
   const rows = NODE_SENSOR_KEYS.map((k) => {
@@ -238,7 +244,7 @@ function NodeSensorsTable({ node }) {
     const isNum = typeof v === 'number';
     return {
       key: k,
-      label: meta.label,
+      label: meta.labelKey ? t(meta.labelKey) : meta.label,
       display: isNum ? `${formatMetricValue(v)}${meta.unit ? ` ${meta.unit}` : ''}` : 'n/a',
       na: !isNum,
     };
@@ -247,13 +253,13 @@ function NodeSensorsTable({ node }) {
   return (
     <div className="bg-surface-container border border-outline-variant">
       <div className="px-5 py-4 border-b border-outline-variant bg-surface-container-high">
-        <h3 className="font-label-caps text-label-caps text-on-surface">Node Sensors</h3>
+        <h3 className="font-label-caps text-label-caps text-on-surface">{t('node.sensors')}</h3>
       </div>
       <table className="w-full text-left border-collapse">
         <thead>
           <tr className="bg-surface-container-lowest">
-            <th className="px-5 py-3 font-label-caps text-[10px] text-outline">SENSOR</th>
-            <th className="px-5 py-3 font-label-caps text-[10px] text-outline text-right">VALUE</th>
+            <th className="px-5 py-3 font-label-caps text-[10px] text-outline">{t('node.colSensor')}</th>
+            <th className="px-5 py-3 font-label-caps text-[10px] text-outline text-right">{t('node.colValue')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-outline-variant/20">
@@ -275,6 +281,7 @@ function NodeSensorsTable({ node }) {
 }
 
 export default function IrrigationPage() {
+  const t = useT();
   useGetDevicesQuery(undefined, { pollingInterval: POLL_INTERVAL_MS });
   // Poll the real pump so its state stays mirrored into the store (as main-pump)
   // while this page is open — even when the dashboard's pump card isn't mounted.
@@ -299,13 +306,13 @@ export default function IrrigationPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Led status="online" size="w-2.5 h-2.5" />
-            <span className="font-data-mono text-primary text-[12px] uppercase tracking-widest">System Live</span>
+            <span className="font-data-mono text-primary text-[12px] uppercase tracking-widest">{t('status.systemLive')}</span>
           </div>
-          <h2 className="font-display-lg text-display-lg text-on-background">Irrigation Control</h2>
+          <h2 className="font-display-lg text-display-lg text-on-background">{t('irrigation.pageTitle')}</h2>
         </div>
         <div className="flex gap-2">
-          <HeaderChip label="SOIL MOISTURE" value={avgSoilMoisture} unit="%" colorClass="text-secondary" />
-          <HeaderChip label="AMBIENT TEMP" value={avgTemp} unit="°C" colorClass="text-tertiary" />
+          <HeaderChip label={t('irrigation.soilMoisture')} value={avgSoilMoisture} unit="%" colorClass="text-secondary" />
+          <HeaderChip label={t('irrigation.ambientTemp')} value={avgTemp} unit="°C" colorClass="text-tertiary" />
         </div>
       </section>
 

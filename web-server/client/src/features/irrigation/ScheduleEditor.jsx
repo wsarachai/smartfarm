@@ -3,9 +3,9 @@ import { Clock, Plus, Trash2, Save } from 'lucide-react';
 import { useGetSettingsQuery, useUpdateSettingsMutation } from '../settings/settingsApi';
 import { useGetIrrigationStatusQuery } from './irrigationApi';
 import { TIMEZONE_OPTIONS, matchTimezone } from './timezones';
+import { useT } from '../../i18n';
 
 const STATUS_POLL_MS = 5000;
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DUR_MIN = 1;
 const DUR_MAX = 60;
 
@@ -20,15 +20,17 @@ function newEntry() {
   };
 }
 
-function formatIn(minutes) {
+function formatIn(minutes, t) {
   if (minutes == null) return '—';
-  if (minutes <= 0) return 'now';
+  if (minutes <= 0) return t('schedule.now');
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 export default function ScheduleEditor() {
+  const t = useT();
+  const DAYS = [0, 1, 2, 3, 4, 5, 6].map((i) => t(`schedule.day${i}`));
   const { data: settings } = useGetSettingsQuery();
   const [updateSettings, { isLoading: saving }] = useUpdateSettingsMutation();
   const { data: status } = useGetIrrigationStatusQuery(undefined, { pollingInterval: STATUS_POLL_MS });
@@ -88,14 +90,14 @@ export default function ScheduleEditor() {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
     } catch (e) {
-      setErr(e?.data?.error || 'Save failed — check the entries and try again.');
+      setErr(e?.data?.error || t('schedule.saveFailed'));
     }
   };
 
   if (entries === null) {
     return (
       <div className="bg-surface-container p-5 border border-outline-variant">
-        <p className="font-data-mono text-xs text-on-surface-variant">Loading schedule…</p>
+        <p className="font-data-mono text-xs text-on-surface-variant">{t('schedule.loading')}</p>
       </div>
     );
   }
@@ -110,36 +112,40 @@ export default function ScheduleEditor() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h4 className="font-label-caps text-label-caps text-on-surface-variant flex items-center gap-2">
           <Clock size={14} />
-          Watering Schedule
+          {t('schedule.title')}
         </h4>
         <span
           className={`px-2 py-0.5 font-data-mono text-[9px] rounded ${
             auto ? 'bg-primary/20 text-primary' : 'bg-surface-container-high text-on-surface-variant/70'
           }`}
         >
-          {auto ? 'AUTO ACTIVE' : 'AUTO OFF'}
+          {auto ? t('schedule.autoActive') : t('schedule.autoOff')}
         </span>
       </div>
 
       {/* Scheduler status readout */}
       <div className="mb-4 rounded border border-outline-variant bg-surface-container-low p-3 space-y-1">
         <p className="font-data-mono text-[11px] text-on-surface-variant">
-          Next run:{' '}
+          {t('schedule.nextRun')}{' '}
           <span className="text-on-surface">
             {status?.nextRun
-              ? `${status.nextRun.label || status.nextRun.start} @ ${status.nextRun.start} (in ${formatIn(status.nextRun.inMinutes)})`
+              ? t('schedule.nextRunValue', {
+                  label: status.nextRun.label || status.nextRun.start,
+                  start: status.nextRun.start,
+                  in: formatIn(status.nextRun.inMinutes, t),
+                })
               : auto
-                ? 'no enabled entries'
-                : 'auto mode off'}
+                ? t('schedule.noEnabled')
+                : t('schedule.autoModeOff')}
           </span>
         </p>
         {status?.lastSkip ? (
-          <p className="font-data-mono text-[11px] text-tertiary">Last skip: {status.lastSkip.reason}</p>
+          <p className="font-data-mono text-[11px] text-tertiary">{t('schedule.lastSkip', { reason: status.lastSkip.reason })}</p>
         ) : null}
         {status?.lastRun ? (
           <p className="font-data-mono text-[11px] text-on-surface-variant">
-            Last run: {status.lastRun.label || status.lastRun.entryId} ({status.lastRun.durationMinutes}m)
-            {status.lastRun.ok ? '' : ' — FAILED'}
+            {t('schedule.lastRun', { label: status.lastRun.label || status.lastRun.entryId, min: status.lastRun.durationMinutes })}
+            {status.lastRun.ok ? '' : ` — ${t('schedule.failed')}`}
           </p>
         ) : null}
       </div>
@@ -148,7 +154,7 @@ export default function ScheduleEditor() {
       <div className="space-y-3">
         {entries.length === 0 ? (
           <p className="font-data-mono text-[11px] text-on-surface-variant py-2">
-            No schedule entries yet. Add one below.
+            {t('schedule.noEntries')}
           </p>
         ) : (
           entries.map((e) => (
@@ -169,11 +175,11 @@ export default function ScheduleEditor() {
                     onChange={(ev) => patchEntry(e.id, { durationMinutes: ev.target.value })}
                     className="w-16 bg-surface-container-lowest border border-outline-variant rounded px-2 py-1 font-data-mono text-sm text-on-surface"
                   />
-                  <span className="font-data-mono text-[11px] text-on-surface-variant">min</span>
+                  <span className="font-data-mono text-[11px] text-on-surface-variant">{t('schedule.min')}</span>
                 </div>
                 <input
                   type="text"
-                  placeholder="Label (optional)"
+                  placeholder={t('schedule.labelPlaceholder')}
                   value={e.label}
                   onChange={(ev) => patchEntry(e.id, { label: ev.target.value })}
                   className="flex-1 min-w-[8rem] bg-surface-container-lowest border border-outline-variant rounded px-2 py-1 font-data-mono text-sm text-on-surface"
@@ -185,13 +191,13 @@ export default function ScheduleEditor() {
                     checked={e.enabled}
                     onChange={(ev) => patchEntry(e.id, { enabled: ev.target.checked })}
                   />
-                  on
+                  {t('schedule.on')}
                 </label>
                 <button
                   type="button"
                   onClick={() => removeEntry(e.id)}
                   className="p-1.5 rounded text-on-surface-variant hover:text-error hover:bg-error/10"
-                  aria-label="Delete entry"
+                  aria-label={t('schedule.deleteEntry')}
                 >
                   <Trash2 size={15} />
                 </button>
@@ -226,13 +232,13 @@ export default function ScheduleEditor() {
         className="mt-3 inline-flex items-center gap-2 bg-surface-container-high border border-outline-variant text-on-surface px-3 py-2 rounded font-label-caps text-label-caps hover:bg-surface-container-highest"
       >
         <Plus size={15} />
-        Add Entry
+        {t('schedule.addEntry')}
       </button>
 
       {/* Guard + timezone */}
       <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
         <label className="block">
-          <span className="font-label-caps text-label-caps text-on-surface-variant">Skip if soil moisture ≥ (%)</span>
+          <span className="font-label-caps text-label-caps text-on-surface-variant">{t('schedule.skipThreshold')}</span>
           <input
             type="number"
             min={0}
@@ -243,14 +249,14 @@ export default function ScheduleEditor() {
           />
         </label>
         <label className="block">
-          <span className="font-label-caps text-label-caps text-on-surface-variant">Timezone</span>
+          <span className="font-label-caps text-label-caps text-on-surface-variant">{t('schedule.timezone')}</span>
           <select
             value={tzMatched ?? '__custom__'}
             onChange={(ev) => setTimezone(ev.target.value)}
             className="mt-1 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
           >
             {tzMatched === null && timezone ? (
-              <option value="__custom__" disabled>{`Current: ${timezone}`}</option>
+              <option value="__custom__" disabled>{t('schedule.currentTz', { tz: timezone })}</option>
             ) : null}
             {TIMEZONE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -275,9 +281,9 @@ export default function ScheduleEditor() {
           className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110 disabled:opacity-50"
         >
           <Save size={15} />
-          Save Schedule
+          {t('schedule.save')}
         </button>
-        {saved ? <span className="font-data-mono text-xs text-primary">Saved</span> : null}
+        {saved ? <span className="font-data-mono text-xs text-primary">{t('schedule.saved')}</span> : null}
       </div>
     </div>
   );
