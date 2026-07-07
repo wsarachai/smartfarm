@@ -309,10 +309,15 @@ export default function AiInsightsPage() {
             AI Insights
           </span>
         </div>
-        <h2 className="font-display-lg text-display-lg text-on-background">Water Stress</h2>
+        <h2 className="font-display-lg text-display-lg text-on-background">Crop Intelligence</h2>
         <p className="font-body-md text-on-surface-variant text-sm mt-1">
-          A rule-based estimate combining soil moisture with temperature &amp; humidity (evaporative demand).
-          Plant growth &amp; disease detection will join this page as they come online.
+          Three advisory signals derived from your live sensors and camera:{' '}
+          <span className="text-on-surface">Water Stress</span> — a rule-based risk estimate combining soil
+          moisture with temperature &amp; humidity (evaporative demand);{' '}
+          <span className="text-on-surface">Canopy Coverage</span> — green-pixel cover measured from the latest
+          frame by classical HSV vision; and <span className="text-on-surface">Disease Detection</span> — an
+          on-demand PlantVillage CNN that classifies the current frame. All are advisory only and never actuate
+          the pump.
         </p>
       </section>
 
