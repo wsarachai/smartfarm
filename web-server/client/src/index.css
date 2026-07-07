@@ -4,6 +4,12 @@
 @import '@fontsource/hanken-grotesk/700.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
+/* Thai script — neither font above has Thai glyphs. Added as a per-glyph
+   fallback in every Tailwind font stack so Latin renders in the fonts above and
+   Thai renders here (self-hosted, offline-friendly). */
+@import '@fontsource/noto-sans-thai/400.css';
+@import '@fontsource/noto-sans-thai/600.css';
+@import '@fontsource/noto-sans-thai/700.css';
 
 @tailwind base;
 @tailwind components;

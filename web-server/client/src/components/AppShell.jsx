@@ -8,18 +8,47 @@ import {
   BrainCircuit,
 } from "lucide-react";
 import { COPYRIGHT } from "../lib/buildInfo";
+import { useI18n, LANGS, LANG_LABEL } from "../i18n";
 
 // Routable pages have a `to`; any entry without one renders as visible-but-inert
-// chrome until its page is implemented.
+// chrome until its page is implemented. `tKey` indexes the i18n dictionary.
 const NAV = [
-  { label: "DASHBOARD", Icon: LayoutDashboard, to: "/" },
-  { label: "CAMERAS", Icon: Video, to: "/cameras" },
-  { label: "IRRIGATION", Icon: Droplet, to: "/irrigation" },
-  { label: "AI INSIGHTS", Icon: BrainCircuit, to: "/insights" },
+  { tKey: "nav.dashboard", Icon: LayoutDashboard, to: "/" },
+  { tKey: "nav.cameras", Icon: Video, to: "/cameras" },
+  { tKey: "nav.irrigation", Icon: Droplet, to: "/irrigation" },
+  { tKey: "nav.insights", Icon: BrainCircuit, to: "/insights" },
 ];
+
+function LanguageToggle() {
+  const { lang, setLang, t } = useI18n();
+  return (
+    <div
+      role="group"
+      aria-label={t("common.language")}
+      className="flex items-center rounded-full border border-outline-variant overflow-hidden"
+    >
+      {LANGS.map((l) => (
+        <button
+          key={l}
+          type="button"
+          onClick={() => setLang(l)}
+          aria-pressed={lang === l}
+          className={`px-2.5 py-1 font-label-caps text-[11px] transition-colors ${
+            lang === l
+              ? "bg-primary/15 text-primary"
+              : "text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          {LANG_LABEL[l]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function AppShell({ children }) {
   const { pathname } = useLocation();
+  const { t } = useI18n();
   const isActive = (to) =>
     to === "/" ? pathname === "/" : pathname.startsWith(to);
   const settingsActive = pathname.startsWith("/settings");
@@ -35,24 +64,24 @@ export default function AppShell({ children }) {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">
-          {NAV.map(({ label, to }) => {
+          {NAV.map(({ tKey, to }) => {
             if (!to) {
               return (
                 <button
-                  key={label}
+                  key={tKey}
                   type="button"
                   disabled
-                  title="Coming soon"
+                  title={t("nav.comingSoon")}
                   className="font-label-caps text-label-caps text-on-surface-variant/60 cursor-not-allowed"
                 >
-                  {label}
+                  {t(tKey)}
                 </button>
               );
             }
             const active = isActive(to);
             return (
               <Link
-                key={label}
+                key={tKey}
                 to={to}
                 className={`font-label-caps text-label-caps px-3 py-2 transition-colors ${
                   active
@@ -60,23 +89,26 @@ export default function AppShell({ children }) {
                     : "text-on-surface-variant hover:text-primary"
                 }`}
               >
-                {label}
+                {t(tKey)}
               </Link>
             );
           })}
         </nav>
 
-        <Link
-          to="/settings"
-          title="Settings"
-          className={`p-2 rounded-full transition-transform active:scale-95 ${
-            settingsActive
-              ? "text-primary bg-primary/10"
-              : "text-on-surface-variant hover:bg-surface-container-high"
-          }`}
-        >
-          <SlidersHorizontal size={20} />
-        </Link>
+        <div className="flex items-center gap-2">
+          <LanguageToggle />
+          <Link
+            to="/settings"
+            title={t("nav.settings")}
+            className={`p-2 rounded-full transition-transform active:scale-95 ${
+              settingsActive
+                ? "text-primary bg-primary/10"
+                : "text-on-surface-variant hover:bg-surface-container-high"
+            }`}
+          >
+            <SlidersHorizontal size={20} />
+          </Link>
+        </div>
       </header>
 
       <main className="max-w-container-max mx-auto p-margin-mobile md:p-margin-desktop pb-24 md:pb-8">
@@ -90,27 +122,27 @@ export default function AppShell({ children }) {
 
       {/* Mobile bottom nav. */}
       <nav className="md:hidden fixed bottom-0 z-50 w-full h-16 px-2 bg-surface-container border-t border-outline-variant flex justify-around items-center">
-        {NAV.map(({ label, Icon, to }) => {
+        {NAV.map(({ tKey, Icon, to }) => {
           const active = to && isActive(to);
           const content = (
             <>
               <Icon size={22} />
-              <span className="font-label-caps text-label-caps">{label}</span>
+              <span className="font-label-caps text-label-caps">{t(tKey)}</span>
             </>
           );
           const cls = `flex flex-col items-center justify-center ${
             active ? "text-primary font-bold" : "text-on-surface-variant/60"
           }`;
           return to ? (
-            <Link key={label} to={to} className={cls}>
+            <Link key={tKey} to={to} className={cls}>
               {content}
             </Link>
           ) : (
             <button
-              key={label}
+              key={tKey}
               type="button"
               disabled
-              title="Coming soon"
+              title={t("nav.comingSoon")}
               className={`${cls} cursor-not-allowed`}
             >
               {content}

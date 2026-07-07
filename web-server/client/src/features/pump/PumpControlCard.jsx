@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Power, Timer } from 'lucide-react';
 import Led from '../../components/Led';
+import { useT } from '../../i18n';
 import { usePumpSettings } from './pumpSettings';
 import { useGetPumpStatusQuery, useSetPumpMutation } from './pumpApi';
 import { useGetSettingsQuery } from '../settings/settingsApi';
@@ -33,6 +34,7 @@ function formatMs(ms) {
 }
 
 export default function PumpControlCard() {
+  const t = useT();
   const settings = usePumpSettings();
   const { data: appSettings } = useGetSettingsQuery();
   const auto = Boolean(appSettings?.irrigation?.auto);
@@ -45,7 +47,7 @@ export default function PumpControlCard() {
   const isOn = online && data?.relay_status === 'ON';
   const remainingMs = useCountdown(isOn ? data?.autoOffAt : null);
 
-  const stateLabel = data == null ? '…' : !online ? 'OFFLINE' : isOn ? 'ON' : 'OFF';
+  const stateLabel = data == null ? '…' : !online ? t('status.offline') : isOn ? 'ON' : 'OFF';
   const ledStatus = isOn ? 'online' : 'offline';
 
   const command = (state) => setPump({ state });
@@ -69,7 +71,7 @@ export default function PumpControlCard() {
             <div className="flex items-center gap-2">
               <Led status={ledStatus} size="w-2 h-2" />
               <span
-                className={`font-label-caps text-label-caps ${
+                className={`font-label-caps text-label-caps uppercase ${
                   isOn ? 'text-primary' : 'text-on-surface-variant'
                 }`}
               >
@@ -80,7 +82,7 @@ export default function PumpControlCard() {
         </div>
 
         {isOn && data?.autoOffAt ? (
-          <div className="flex items-center gap-1.5 text-tertiary shrink-0" title="Auto-off in">
+          <div className="flex items-center gap-1.5 text-tertiary shrink-0" title={t('pump.autoOffIn')}>
             <Timer size={14} />
             <span className="font-data-mono text-sm tabular-nums">{formatMs(remainingMs)}</span>
           </div>
@@ -108,13 +110,13 @@ export default function PumpControlCard() {
 
       {auto ? (
         <p className="mt-3 font-data-mono text-[11px] text-tertiary">
-          Auto mode on — the schedule controls the pump. Switch to Manual on the Irrigation page to run it by hand.
+          {t('pump.autoNote')}
         </p>
       ) : null}
 
       {data && !online ? (
         <p className="mt-3 font-data-mono text-[11px] text-error">
-          Pump unreachable at {settings.url} — check the node is powered and joined the AP.
+          {t('pump.unreachable', { url: settings.url })}
         </p>
       ) : null}
     </div>

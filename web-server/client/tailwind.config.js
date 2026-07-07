@@ -54,12 +54,14 @@ export default {
         'surface-tint': '#4ae183',
       },
       fontFamily: {
-        'display-lg': ['Hanken Grotesk', 'system-ui', 'sans-serif'],
-        'headline-md': ['Hanken Grotesk', 'system-ui', 'sans-serif'],
-        'headline-sm': ['Hanken Grotesk', 'system-ui', 'sans-serif'],
-        'body-md': ['Hanken Grotesk', 'system-ui', 'sans-serif'],
-        'data-mono': ['JetBrains Mono', 'ui-monospace', 'monospace'],
-        'label-caps': ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        // 'Noto Sans Thai' is the trailing fallback so Thai glyphs render there
+        // per-glyph while Latin stays in Hanken Grotesk / JetBrains Mono.
+        'display-lg': ['Hanken Grotesk', 'Noto Sans Thai', 'system-ui', 'sans-serif'],
+        'headline-md': ['Hanken Grotesk', 'Noto Sans Thai', 'system-ui', 'sans-serif'],
+        'headline-sm': ['Hanken Grotesk', 'Noto Sans Thai', 'system-ui', 'sans-serif'],
+        'body-md': ['Hanken Grotesk', 'Noto Sans Thai', 'system-ui', 'sans-serif'],
+        'data-mono': ['JetBrains Mono', 'Noto Sans Thai', 'ui-monospace', 'monospace'],
+        'label-caps': ['JetBrains Mono', 'Noto Sans Thai', 'ui-monospace', 'monospace'],
       },
       fontSize: {
         'display-lg': ['48px', { lineHeight: '56px', letterSpacing: '-0.02em', fontWeight: '700' }],

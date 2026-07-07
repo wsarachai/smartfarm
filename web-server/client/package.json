@@ -14,6 +14,7 @@
   "dependencies": {
     "@fontsource/hanken-grotesk": "^5.0.8",
     "@fontsource/jetbrains-mono": "^5.0.19",
+    "@fontsource/noto-sans-thai": "^5.2.8",
     "@reduxjs/toolkit": "^2.2.7",
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",

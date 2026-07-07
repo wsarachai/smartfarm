@@ -1,0 +1,57 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "cameras": "Cameras",
+    "irrigation": "Irrigation",
+    "insights": "AI Insights",
+    "settings": "Settings",
+    "comingSoon": "Coming soon"
+  },
+  "common": {
+    "language": "Language",
+    "secondsAgo": "{n}s ago"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "stale": "Stale",
+    "live": "Live",
+    "systemLive": "System Live",
+    "replay": "Replay",
+    "external": "External",
+    "noSignal": "No signal — waiting for frames"
+  },
+  "metric": {
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "soil_moisture": "Soil Moisture",
+    "moisture": "Moisture",
+    "ph": "pH",
+    "pressure": "Pressure",
+    "co2": "CO₂",
+    "light": "Light",
+    "water_level": "Water Level",
+    "flow_rate": "Flow Rate",
+    "voltage": "Voltage"
+  },
+  "dashboard": {
+    "noSensors": "NO SENSORS REPORTING"
+  },
+  "sensor": {
+    "tag": "SENSOR",
+    "noMetrics": "No metrics reported."
+  },
+  "control": {
+    "toggle": "TOGGLE"
+  },
+  "camera": {
+    "view": "VIEW",
+    "degrading": "⚠ Degrading",
+    "openLive": "Open the live camera feed"
+  },
+  "pump": {
+    "autoOffIn": "Auto-off in",
+    "autoNote": "Auto mode on — the schedule controls the pump. Switch to Manual on the Irrigation page to run it by hand.",
+    "unreachable": "Pump unreachable at {url} — check the node is powered and joined the AP."
+  }
+}

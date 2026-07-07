@@ -1,5 +1,6 @@
 import { Power } from 'lucide-react';
 import Led from '../../components/Led';
+import { useT } from '../../i18n';
 import { useSendCommandMutation } from './devicesApi';
 import { freshness } from '../../lib/freshness';
 
@@ -7,6 +8,7 @@ import { freshness } from '../../lib/freshness';
 // switchable channels; TOGGLE flips them all. Works for a single-relay pump or
 // a multi-channel actuator alike.
 export default function ControlCard({ device }) {
+  const t = useT();
   const [sendCommand, { isLoading }] = useSendCommandMutation();
   const status = freshness(device.lastSeen);
 
@@ -43,7 +45,7 @@ export default function ControlCard({ device }) {
         disabled={bools.length === 0 || isLoading}
         className="bg-primary text-on-primary px-4 py-2 font-label-caps text-label-caps font-bold transition-transform active:scale-95 disabled:opacity-40 disabled:active:scale-100"
       >
-        TOGGLE
+        {t('control.toggle')}
       </button>
     </div>
   );

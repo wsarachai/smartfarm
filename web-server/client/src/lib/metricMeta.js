@@ -35,9 +35,15 @@ function humanize(key) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// `labelKey` indexes the i18n dictionary (metric.*). Known keys get one so the
+// consumer can translate via t(); unknown keys keep null and fall back to the
+// humanized English label (stays hardware-agnostic — new sensor types still
+// render, just untranslated).
 export function metricMeta(key) {
   const norm = String(key).toLowerCase().replace(/[\s-]+/g, '_');
-  return META[norm] || { label: humanize(key), unit: '', Icon: null };
+  const known = META[norm];
+  if (known) return { ...known, labelKey: `metric.${norm}` };
+  return { label: humanize(key), unit: '', Icon: null, labelKey: null };
 }
 
 export function formatMetricValue(value) {

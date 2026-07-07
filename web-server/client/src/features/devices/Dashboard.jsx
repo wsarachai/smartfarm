@@ -1,4 +1,5 @@
 import { useSelector } from 'react-redux';
+import { useT } from '../../i18n';
 import { useGetDevicesQuery } from './devicesApi';
 import { selectAllDevices } from './devicesSlice';
 import SensorCard from './SensorCard';
@@ -21,6 +22,7 @@ function EmptyPanel({ children }) {
 }
 
 export default function Dashboard() {
+  const t = useT();
   useGetDevicesQuery(undefined, { pollingInterval: POLL_INTERVAL_MS });
   const devices = useSelector(selectAllDevices);
   // Order the widgets by category (sensor -> pump -> camera -> other), stable by
@@ -48,7 +50,7 @@ export default function Dashboard() {
       {/* 3. Sensor telemetry cards — one per sensor device. */}
       {sensors.length === 0 ? (
         <div className="md:col-span-6 lg:col-span-4">
-          <EmptyPanel>NO SENSORS REPORTING</EmptyPanel>
+          <EmptyPanel>{t('dashboard.noSensors')}</EmptyPanel>
         </div>
       ) : (
         sensors.map((device) => (
