@@ -18,7 +18,11 @@ const SENSORS = [
   { device_id: 'zone-a', base: { temperature: 30.8, humidity: 72, soil_moisture: 45 } },
   { device_id: 'zone-b', base: { temperature: 30.5, humidity: 70, soil_moisture: 35 } },
 ];
-const ACTUATORS = [{ device_id: 'main-pump', action: { running: true, mode: 'auto' } }];
+// AUTO/MANUAL is now server-global (settings.irrigation.auto) — the UI no longer
+// reads a per-device `mode`, so only `running` is meaningful here. Note: any open
+// tab polling GET /api/v1/pump/status mirrors real hardware state into main-pump
+// and can override this seeded value.
+const ACTUATORS = [{ device_id: 'main-pump', action: { running: true } }];
 
 // The irrigation pump's hardware node has NO onboard sensors, so it reports but
 // every reading is "n/a" (not a fabricated number). Feeds the Irrigation page's
