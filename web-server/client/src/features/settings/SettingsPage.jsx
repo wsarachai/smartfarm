@@ -8,8 +8,10 @@ import {
   AUTO_OFF_MAX,
 } from '../pump/pumpSettings';
 import { useGetSettingsQuery, useUpdateSettingsMutation } from './settingsApi';
+import { useT } from '../../i18n';
 
 export default function SettingsPage() {
+  const t = useT();
   // Server-owned settings (camera source + pump). Loaded once; a save invalidates
   // the cache so every open client re-reads. Local form state is seeded from the
   // server once it arrives, then edited freely until saved.
@@ -66,7 +68,7 @@ export default function SettingsPage() {
       setDsSaved(true);
       window.setTimeout(() => setDsSaved(false), 2000);
     } catch (err) {
-      setDsErr(err?.data?.error || 'Save failed — check the value and try again.');
+      setDsErr(err?.data?.error || t('settings.common.errValue'));
     }
   };
 
@@ -86,7 +88,7 @@ export default function SettingsPage() {
       setCySaved(true);
       window.setTimeout(() => setCySaved(false), 2000);
     } catch (err) {
-      setCyErr(err?.data?.error || 'Save failed — check the values and try again.');
+      setCyErr(err?.data?.error || t('settings.common.errValues'));
     }
   };
 
@@ -108,7 +110,7 @@ export default function SettingsPage() {
       setWsSaved(true);
       window.setTimeout(() => setWsSaved(false), 2000);
     } catch (err) {
-      setWsErr(err?.data?.error || 'Save failed — check the values and try again.');
+      setWsErr(err?.data?.error || t('settings.common.errValues'));
     }
   };
 
@@ -121,7 +123,7 @@ export default function SettingsPage() {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      setCameraErr(err?.data?.error || 'Save failed — is the web-server reachable?');
+      setCameraErr(err?.data?.error || t('settings.common.errReachable'));
     }
   };
 
@@ -132,7 +134,7 @@ export default function SettingsPage() {
       setSettings(next.cameraSource);
       setSaved(false);
     } catch (err) {
-      setCameraErr(err?.data?.error || 'Reset failed — is the web-server reachable?');
+      setCameraErr(err?.data?.error || t('settings.common.errResetReachable'));
     }
   };
 
@@ -151,7 +153,7 @@ export default function SettingsPage() {
       setPumpSaved(true);
       window.setTimeout(() => setPumpSaved(false), 2000);
     } catch (err) {
-      setPumpErr(err?.data?.error || 'Save failed — is the web-server reachable?');
+      setPumpErr(err?.data?.error || t('settings.common.errReachable'));
     }
   };
 
@@ -162,7 +164,7 @@ export default function SettingsPage() {
       setPumpSettings(next.pump);
       setPumpSaved(false);
     } catch (err) {
-      setPumpErr(err?.data?.error || 'Reset failed — is the web-server reachable?');
+      setPumpErr(err?.data?.error || t('settings.common.errResetReachable'));
     }
   };
 
@@ -215,7 +217,7 @@ export default function SettingsPage() {
       setDeviceSaved(true);
       window.setTimeout(() => setDeviceSaved(false), 2000);
     } catch {
-      setDeviceErr('Network error — is the web-server reachable?');
+      setDeviceErr(t('settings.cameraDevice.networkError'));
     }
   };
 
@@ -228,32 +230,31 @@ export default function SettingsPage() {
               <Video size={18} />
             </div>
             <div>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">Camera Source Settings</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">{t('settings.cameraSource.title')}</h2>
               <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
-                Configure where the Cameras page reads live stream and snapshot frames. Saved
-                server-side and shared by every client.
+                {t('settings.cameraSource.desc')}
               </p>
             </div>
           </div>
 
           {settings === null ? (
-            <p className="font-data-mono text-xs text-on-surface-variant">Loading settings…</p>
+            <p className="font-data-mono text-xs text-on-surface-variant">{t('settings.common.loading')}</p>
           ) : (
             <form className="space-y-5" onSubmit={onSave}>
               <label className="block">
-                <span className="font-label-caps text-label-caps text-on-surface-variant">Source Mode</span>
+                <span className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.cameraSource.sourceMode')}</span>
                 <select
                   className="mt-2 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
                   value={settings.sourceMode}
                   onChange={(e) => setSettings((prev) => ({ ...prev, sourceMode: e.target.value }))}
                 >
-                  <option value="relay">Web-server relay (/api/v1/camera/*)</option>
-                  <option value="custom">Custom camera URL</option>
+                  <option value="relay">{t('settings.cameraSource.sourceRelay')}</option>
+                  <option value="custom">{t('settings.cameraSource.sourceCustom')}</option>
                 </select>
               </label>
 
               <label className="block">
-                <span className="font-label-caps text-label-caps text-on-surface-variant">Stream URL</span>
+                <span className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.cameraSource.streamUrl')}</span>
                 <input
                   type="text"
                   className="mt-2 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
@@ -264,7 +265,7 @@ export default function SettingsPage() {
               </label>
 
               <label className="block">
-                <span className="font-label-caps text-label-caps text-on-surface-variant">Snapshot URL</span>
+                <span className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.cameraSource.snapshotUrl')}</span>
                 <input
                   type="text"
                   className="mt-2 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
@@ -276,13 +277,12 @@ export default function SettingsPage() {
 
               <div className="rounded border border-outline-variant bg-surface-container-low p-3">
                 <p className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
-                  Relay mode works best for this project. Use custom mode when you want to read directly from
-                  ESP32-CAM endpoints.
+                  {t('settings.cameraSource.help')}
                 </p>
                 <p className="mt-2 font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
                   {usingRelay
-                    ? 'Current mode: relay. Dashboard status comes from /api/v1/camera/status.'
-                    : 'Current mode: custom. Dashboard status is based on stream availability only.'}
+                    ? t('settings.cameraSource.modeRelay')
+                    : t('settings.cameraSource.modeCustom')}
                 </p>
               </div>
 
@@ -298,7 +298,7 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110"
                 >
                   <Save size={16} />
-                  Save Settings
+                  {t('settings.common.save')}
                 </button>
                 <button
                   type="button"
@@ -306,10 +306,10 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 bg-surface-container-high border border-outline-variant text-on-surface px-4 py-2 rounded font-label-caps text-label-caps hover:bg-surface-container-highest"
                 >
                   <RotateCcw size={16} />
-                  Reset Defaults
+                  {t('settings.common.reset')}
                 </button>
                 {saved ? (
-                  <span className="inline-flex items-center font-data-mono text-xs text-primary">Saved</span>
+                  <span className="inline-flex items-center font-data-mono text-xs text-primary">{t('settings.common.saved')}</span>
                 ) : null}
               </div>
             </form>
@@ -322,22 +322,21 @@ export default function SettingsPage() {
               <SlidersHorizontal size={18} />
             </div>
             <div>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">Camera Control (Device)</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">{t('settings.cameraDevice.title')}</h2>
               <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
-                Behavior the ESP32-CAM pulls each cycle. Persisted server-side; changes apply within
-                one snapshot interval.
+                {t('settings.cameraDevice.desc')}
               </p>
             </div>
           </div>
 
           {device === null ? (
-            <p className="font-data-mono text-xs text-on-surface-variant">Loading camera config…</p>
+            <p className="font-data-mono text-xs text-on-surface-variant">{t('settings.cameraDevice.loading')}</p>
           ) : (
             <form className="space-y-5" onSubmit={onSaveDevice}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <label className="block">
                   <span className="font-label-caps text-label-caps text-on-surface-variant">
-                    Snapshot interval (seconds)
+                    {t('settings.cameraDevice.snapshotInterval')}
                   </span>
                   <input
                     type="number"
@@ -355,7 +354,7 @@ export default function SettingsPage() {
                 </label>
 
                 <label className="block">
-                  <span className="font-label-caps text-label-caps text-on-surface-variant">Resolution</span>
+                  <span className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.cameraDevice.resolution')}</span>
                   <select
                     className="mt-2 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
                     value={device.framesize}
@@ -371,7 +370,7 @@ export default function SettingsPage() {
 
                 <label className="block">
                   <span className="font-label-caps text-label-caps text-on-surface-variant">
-                    JPEG quality (4–63, lower = better)
+                    {t('settings.cameraDevice.jpegQuality')}
                   </span>
                   <input
                     type="number"
@@ -387,7 +386,7 @@ export default function SettingsPage() {
 
                 <label className="block">
                   <span className="font-label-caps text-label-caps text-on-surface-variant">
-                    Local reboot fallback (hours, 0 = off)
+                    {t('settings.cameraDevice.rebootFallback')}
                   </span>
                   <input
                     type="number"
@@ -403,7 +402,7 @@ export default function SettingsPage() {
 
                 <label className="block">
                   <span className="font-label-caps text-label-caps text-on-surface-variant">
-                    History ring size (frames)
+                    {t('settings.cameraDevice.ringSize')}
                   </span>
                   <input
                     type="number"
@@ -422,7 +421,7 @@ export default function SettingsPage() {
                     onChange={(e) => setDevice((prev) => ({ ...prev, enabled: e.target.checked }))}
                   />
                   <span className="font-label-caps text-label-caps text-on-surface-variant">
-                    Snapshots enabled
+                    {t('settings.cameraDevice.snapshotsEnabled')}
                   </span>
                 </label>
               </div>
@@ -439,10 +438,10 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110"
                 >
                   <Save size={16} />
-                  Save Camera Config
+                  {t('settings.cameraDevice.save')}
                 </button>
                 {deviceSaved ? (
-                  <span className="inline-flex items-center font-data-mono text-xs text-primary">Saved</span>
+                  <span className="inline-flex items-center font-data-mono text-xs text-primary">{t('settings.common.saved')}</span>
                 ) : null}
               </div>
             </form>
@@ -455,20 +454,19 @@ export default function SettingsPage() {
               <Power size={18} />
             </div>
             <div>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">Pump Control Settings</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">{t('settings.pump.title')}</h2>
               <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
-                Configure the pump-zone node the dashboard commands via the web-server relay. Saved
-                server-side and shared by every client.
+                {t('settings.pump.desc')}
               </p>
             </div>
           </div>
 
           {pump === null ? (
-            <p className="font-data-mono text-xs text-on-surface-variant">Loading settings…</p>
+            <p className="font-data-mono text-xs text-on-surface-variant">{t('settings.common.loading')}</p>
           ) : (
             <form className="space-y-5" onSubmit={onSavePump}>
               <label className="block">
-                <span className="font-label-caps text-label-caps text-on-surface-variant">Pump URL</span>
+                <span className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.pump.url')}</span>
                 <input
                   type="text"
                   className="mt-2 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
@@ -479,7 +477,7 @@ export default function SettingsPage() {
               </label>
 
               <label className="block">
-                <span className="font-label-caps text-label-caps text-on-surface-variant">Label</span>
+                <span className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.pump.label')}</span>
                 <input
                   type="text"
                   className="mt-2 w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 font-data-mono text-sm text-on-surface"
@@ -491,7 +489,7 @@ export default function SettingsPage() {
 
               <label className="block">
                 <span className="font-label-caps text-label-caps text-on-surface-variant">
-                  Auto-off timeout (minutes)
+                  {t('settings.pump.autoOff')}
                 </span>
                 <input
                   type="number"
@@ -507,12 +505,10 @@ export default function SettingsPage() {
 
               <div className="rounded border border-outline-variant bg-surface-container-low p-3">
                 <p className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
-                  Safety: turning the pump ON arms a server-side auto-off. The web-server switches the
-                  pump off after this timeout even if the dashboard is closed. Clamped to {AUTO_OFF_MIN}
-                  –{AUTO_OFF_MAX} minutes.
+                  {t('settings.pump.safety', { min: AUTO_OFF_MIN, max: AUTO_OFF_MAX })}
                 </p>
                 <p className="mt-2 font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
-                  Reserve this node&apos;s MAC in ap-server for a stable address in the .2&ndash;.99 band.
+                  {t('settings.pump.reserveMac')}
                 </p>
               </div>
 
@@ -528,7 +524,7 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110"
                 >
                   <Save size={16} />
-                  Save Settings
+                  {t('settings.common.save')}
                 </button>
                 <button
                   type="button"
@@ -536,10 +532,10 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 bg-surface-container-high border border-outline-variant text-on-surface px-4 py-2 rounded font-label-caps text-label-caps hover:bg-surface-container-highest"
                 >
                   <RotateCcw size={16} />
-                  Reset Defaults
+                  {t('settings.common.reset')}
                 </button>
                 {pumpSaved ? (
-                  <span className="inline-flex items-center font-data-mono text-xs text-primary">Saved</span>
+                  <span className="inline-flex items-center font-data-mono text-xs text-primary">{t('settings.common.saved')}</span>
                 ) : null}
               </div>
             </form>
@@ -552,29 +548,28 @@ export default function SettingsPage() {
               <Droplets size={18} />
             </div>
             <div>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">Water Stress Thresholds</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">{t('settings.waterStress.title')}</h2>
               <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
-                Tune the rule-based water-stress estimate (AI Insights). Soil bands set the base risk; the
-                hot/dry and cool/humid pairs adjust it by evaporative demand.
+                {t('settings.waterStress.desc')}
               </p>
             </div>
           </div>
 
           {ws === null ? (
-            <p className="font-data-mono text-xs text-on-surface-variant">Loading thresholds…</p>
+            <p className="font-data-mono text-xs text-on-surface-variant">{t('settings.common.loadingThresholds')}</p>
           ) : (
             <form className="space-y-5" onSubmit={onSaveWs}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 {[
-                  ['soilMediumBelow', 'Soil % below → Medium', 0, 100],
-                  ['soilHighBelow', 'Soil % below → High', 0, 100],
-                  ['hotAtOrAbove', 'Hot at/above (°C)', -20, 60],
-                  ['dryAtOrBelow', 'Dry at/below (%RH)', 0, 100],
-                  ['coolAtOrBelow', 'Cool at/below (°C)', -20, 60],
-                  ['humidAtOrAbove', 'Humid at/above (%RH)', 0, 100],
-                ].map(([key, label, min, max]) => (
+                  ['soilMediumBelow', 0, 100],
+                  ['soilHighBelow', 0, 100],
+                  ['hotAtOrAbove', -20, 60],
+                  ['dryAtOrBelow', 0, 100],
+                  ['coolAtOrBelow', -20, 60],
+                  ['humidAtOrAbove', 0, 100],
+                ].map(([key, min, max]) => (
                   <label key={key} className="block">
-                    <span className="font-label-caps text-label-caps text-on-surface-variant">{label}</span>
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">{t(`settings.waterStress.${key}`)}</span>
                     <input
                       type="number"
                       min={min}
@@ -599,10 +594,10 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110"
                 >
                   <Save size={16} />
-                  Save Thresholds
+                  {t('settings.waterStress.save')}
                 </button>
                 {wsSaved ? (
-                  <span className="inline-flex items-center font-data-mono text-xs text-primary">Saved</span>
+                  <span className="inline-flex items-center font-data-mono text-xs text-primary">{t('settings.common.saved')}</span>
                 ) : null}
               </div>
             </form>
@@ -615,27 +610,26 @@ export default function SettingsPage() {
               <Droplets size={18} />
             </div>
             <div>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">Canopy Detection (HSV)</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">{t('settings.canopy.title')}</h2>
               <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
-                Which pixels count as green canopy (AI Insights → Canopy). Watch the mask preview there
-                while tuning. Hue in degrees (green ≈ 120°); saturation/value as %.
+                {t('settings.canopy.desc')}
               </p>
             </div>
           </div>
 
           {cy === null ? (
-            <p className="font-data-mono text-xs text-on-surface-variant">Loading thresholds…</p>
+            <p className="font-data-mono text-xs text-on-surface-variant">{t('settings.common.loadingThresholds')}</p>
           ) : (
             <form className="space-y-5" onSubmit={onSaveCy}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 {[
-                  ['hueMinDeg', 'Hue min (°)', 0, 360],
-                  ['hueMaxDeg', 'Hue max (°)', 0, 360],
-                  ['satMinPct', 'Saturation min (%)', 0, 100],
-                  ['valMinPct', 'Value/brightness min (%)', 0, 100],
-                ].map(([key, label, min, max]) => (
+                  ['hueMinDeg', 'hueMin', 0, 360],
+                  ['hueMaxDeg', 'hueMax', 0, 360],
+                  ['satMinPct', 'satMin', 0, 100],
+                  ['valMinPct', 'valMin', 0, 100],
+                ].map(([key, labelKey, min, max]) => (
                   <label key={key} className="block">
-                    <span className="font-label-caps text-label-caps text-on-surface-variant">{label}</span>
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">{t(`settings.canopy.${labelKey}`)}</span>
                     <input
                       type="number"
                       min={min}
@@ -660,10 +654,10 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110"
                 >
                   <Save size={16} />
-                  Save Thresholds
+                  {t('settings.waterStress.save')}
                 </button>
                 {cySaved ? (
-                  <span className="inline-flex items-center font-data-mono text-xs text-primary">Saved</span>
+                  <span className="inline-flex items-center font-data-mono text-xs text-primary">{t('settings.common.saved')}</span>
                 ) : null}
               </div>
             </form>
@@ -676,21 +670,20 @@ export default function SettingsPage() {
               <Bug size={18} />
             </div>
             <div>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">Disease Detection</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">{t('settings.disease.title')}</h2>
               <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
-                On-demand PlantVillage classifier (AI Insights → Disease). Below this top-1 confidence a
-                result is reported as “inconclusive”. Requires the model on smartfarm-ai.
+                {t('settings.disease.desc')}
               </p>
             </div>
           </div>
 
           {ds === null ? (
-            <p className="font-data-mono text-xs text-on-surface-variant">Loading…</p>
+            <p className="font-data-mono text-xs text-on-surface-variant">{t('settings.common.loadingShort')}</p>
           ) : (
             <form className="space-y-5" onSubmit={onSaveDs}>
               <label className="block max-w-xs">
                 <span className="font-label-caps text-label-caps text-on-surface-variant">
-                  Confidence threshold (%)
+                  {t('settings.disease.confidence')}
                 </span>
                 <input
                   type="number"
@@ -714,10 +707,10 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110"
                 >
                   <Save size={16} />
-                  Save
+                  {t('settings.common.saveGeneric')}
                 </button>
                 {dsSaved ? (
-                  <span className="inline-flex items-center font-data-mono text-xs text-primary">Saved</span>
+                  <span className="inline-flex items-center font-data-mono text-xs text-primary">{t('settings.common.saved')}</span>
                 ) : null}
               </div>
             </form>
@@ -730,24 +723,24 @@ export default function SettingsPage() {
               <Info size={18} />
             </div>
             <div>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">About / System Info</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">{t('settings.about.title')}</h2>
               <p className="mt-1 font-data-mono text-xs text-on-surface-variant">
-                Build metadata baked into this dashboard at compile time.
+                {t('settings.about.desc')}
               </p>
             </div>
           </div>
 
           <dl className="divide-y divide-outline-variant/40">
             <div className="flex items-center justify-between py-2.5">
-              <dt className="font-label-caps text-label-caps text-on-surface-variant">Version</dt>
+              <dt className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.about.version')}</dt>
               <dd className="font-data-mono text-sm text-on-surface">v{buildInfo.version}</dd>
             </div>
             <div className="flex items-center justify-between py-2.5">
-              <dt className="font-label-caps text-label-caps text-on-surface-variant">Build</dt>
+              <dt className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.about.build')}</dt>
               <dd className="font-data-mono text-sm text-on-surface">#{buildInfo.buildNumber}</dd>
             </div>
             <div className="flex items-center justify-between py-2.5">
-              <dt className="font-label-caps text-label-caps text-on-surface-variant">Built</dt>
+              <dt className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.about.built')}</dt>
               <dd
                 className="font-data-mono text-sm text-on-surface"
                 title={buildInfo.buildDate}
@@ -756,7 +749,7 @@ export default function SettingsPage() {
               </dd>
             </div>
             <div className="flex items-center justify-between py-2.5">
-              <dt className="font-label-caps text-label-caps text-on-surface-variant">Commit</dt>
+              <dt className="font-label-caps text-label-caps text-on-surface-variant">{t('settings.about.commit')}</dt>
               <dd className="font-data-mono text-sm text-on-surface">{buildInfo.gitSha}</dd>
             </div>
           </dl>

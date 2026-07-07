@@ -214,5 +214,86 @@
     "autoOffEnded": "Auto-off — {label} ended",
     "autoOffSafety": "Auto-off (safety window)",
     "manualOff": "Manual OFF"
+  },
+  "settings": {
+    "common": {
+      "save": "Save Settings",
+      "reset": "Reset Defaults",
+      "saved": "Saved",
+      "saveGeneric": "Save",
+      "loading": "Loading settings…",
+      "loadingThresholds": "Loading thresholds…",
+      "loadingShort": "Loading…",
+      "errValue": "Save failed — check the value and try again.",
+      "errValues": "Save failed — check the values and try again.",
+      "errReachable": "Save failed — is the web-server reachable?",
+      "errResetReachable": "Reset failed — is the web-server reachable?"
+    },
+    "cameraSource": {
+      "title": "Camera Source Settings",
+      "desc": "Configure where the Cameras page reads live stream and snapshot frames. Saved server-side and shared by every client.",
+      "sourceMode": "Source Mode",
+      "sourceRelay": "Web-server relay (/api/v1/camera/*)",
+      "sourceCustom": "Custom camera URL",
+      "streamUrl": "Stream URL",
+      "snapshotUrl": "Snapshot URL",
+      "help": "Relay mode works best for this project. Use custom mode when you want to read directly from ESP32-CAM endpoints.",
+      "modeRelay": "Current mode: relay. Dashboard status comes from /api/v1/camera/status.",
+      "modeCustom": "Current mode: custom. Dashboard status is based on stream availability only."
+    },
+    "cameraDevice": {
+      "title": "Camera Control (Device)",
+      "desc": "Behavior the ESP32-CAM pulls each cycle. Persisted server-side; changes apply within one snapshot interval.",
+      "loading": "Loading camera config…",
+      "snapshotInterval": "Snapshot interval (seconds)",
+      "resolution": "Resolution",
+      "jpegQuality": "JPEG quality (4–63, lower = better)",
+      "rebootFallback": "Local reboot fallback (hours, 0 = off)",
+      "ringSize": "History ring size (frames)",
+      "snapshotsEnabled": "Snapshots enabled",
+      "save": "Save Camera Config",
+      "networkError": "Network error — is the web-server reachable?"
+    },
+    "pump": {
+      "title": "Pump Control Settings",
+      "desc": "Configure the pump-zone node the dashboard commands via the web-server relay. Saved server-side and shared by every client.",
+      "url": "Pump URL",
+      "label": "Label",
+      "autoOff": "Auto-off timeout (minutes)",
+      "safety": "Safety: turning the pump ON arms a server-side auto-off. The web-server switches the pump off after this timeout even if the dashboard is closed. Clamped to {min}–{max} minutes.",
+      "reserveMac": "Reserve this node's MAC in ap-server for a stable address in the .2–.99 band."
+    },
+    "waterStress": {
+      "title": "Water Stress Thresholds",
+      "desc": "Tune the rule-based water-stress estimate (AI Insights). Soil bands set the base risk; the hot/dry and cool/humid pairs adjust it by evaporative demand.",
+      "soilMediumBelow": "Soil % below → Medium",
+      "soilHighBelow": "Soil % below → High",
+      "hotAtOrAbove": "Hot at/above (°C)",
+      "dryAtOrBelow": "Dry at/below (%RH)",
+      "coolAtOrBelow": "Cool at/below (°C)",
+      "humidAtOrAbove": "Humid at/above (%RH)",
+      "save": "Save Thresholds"
+    },
+    "canopy": {
+      "title": "Canopy Detection (HSV)",
+      "desc": "Which pixels count as green canopy (AI Insights → Canopy). Watch the mask preview there while tuning. Hue in degrees (green ≈ 120°); saturation/value as %.",
+      "hueMin": "Hue min (°)",
+      "hueMax": "Hue max (°)",
+      "satMin": "Saturation min (%)",
+      "valMin": "Value/brightness min (%)"
+    },
+    "disease": {
+      "title": "Disease Detection",
+      "desc": "On-demand PlantVillage classifier (AI Insights → Disease). Below this top-1 confidence a result is reported as \"inconclusive\". Requires the model on smartfarm-ai.",
+      "confidence": "Confidence threshold (%)"
+    },
+    "about": {
+      "title": "About / System Info",
+      "desc": "Build metadata baked into this dashboard at compile time.",
+      "version": "Version",
+      "build": "Build",
+      "built": "Built",
+      "commit": "Commit"
+    }
   }
 }
