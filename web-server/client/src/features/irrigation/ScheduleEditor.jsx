@@ -115,7 +115,7 @@ export default function ScheduleEditor() {
           {t('schedule.title')}
         </h4>
         <span
-          className={`px-2 py-0.5 font-data-mono text-[9px] rounded ${
+          className={`px-2 py-0.5 font-data-mono text-[11px] rounded ${
             auto ? 'bg-primary/20 text-primary' : 'bg-surface-container-high text-on-surface-variant/70'
           }`}
         >
@@ -125,7 +125,7 @@ export default function ScheduleEditor() {
 
       {/* Scheduler status readout */}
       <div className="mb-4 rounded border border-outline-variant bg-surface-container-low p-3 space-y-1">
-        <p className="font-data-mono text-[11px] text-on-surface-variant">
+        <p className="font-data-mono text-[13px] text-on-surface-variant">
           {t('schedule.nextRun')}{' '}
           <span className="text-on-surface">
             {status?.nextRun
@@ -140,10 +140,10 @@ export default function ScheduleEditor() {
           </span>
         </p>
         {status?.lastSkip ? (
-          <p className="font-data-mono text-[11px] text-tertiary">{t('schedule.lastSkip', { reason: status.lastSkip.reason })}</p>
+          <p className="font-data-mono text-[13px] text-tertiary">{t('schedule.lastSkip', { reason: status.lastSkip.reason })}</p>
         ) : null}
         {status?.lastRun ? (
-          <p className="font-data-mono text-[11px] text-on-surface-variant">
+          <p className="font-data-mono text-[13px] text-on-surface-variant">
             {t('schedule.lastRun', { label: status.lastRun.label || status.lastRun.entryId, min: status.lastRun.durationMinutes })}
             {status.lastRun.ok ? '' : ` — ${t('schedule.failed')}`}
           </p>
@@ -153,7 +153,7 @@ export default function ScheduleEditor() {
       {/* Entries */}
       <div className="space-y-3">
         {entries.length === 0 ? (
-          <p className="font-data-mono text-[11px] text-on-surface-variant py-2">
+          <p className="font-data-mono text-[13px] text-on-surface-variant py-2">
             {t('schedule.noEntries')}
           </p>
         ) : (
@@ -175,7 +175,7 @@ export default function ScheduleEditor() {
                     onChange={(ev) => patchEntry(e.id, { durationMinutes: ev.target.value })}
                     className="w-16 bg-surface-container-lowest border border-outline-variant rounded px-2 py-1 font-data-mono text-sm text-on-surface"
                   />
-                  <span className="font-data-mono text-[11px] text-on-surface-variant">{t('schedule.min')}</span>
+                  <span className="font-data-mono text-[13px] text-on-surface-variant">{t('schedule.min')}</span>
                 </div>
                 <input
                   type="text"
@@ -184,7 +184,7 @@ export default function ScheduleEditor() {
                   onChange={(ev) => patchEntry(e.id, { label: ev.target.value })}
                   className="flex-1 min-w-[8rem] bg-surface-container-lowest border border-outline-variant rounded px-2 py-1 font-data-mono text-sm text-on-surface"
                 />
-                <label className="flex items-center gap-1.5 font-data-mono text-[11px] text-on-surface-variant">
+                <label className="flex items-center gap-1.5 font-data-mono text-[13px] text-on-surface-variant">
                   <input
                     type="checkbox"
                     className="h-3.5 w-3.5 accent-primary"
@@ -210,7 +210,7 @@ export default function ScheduleEditor() {
                       key={d}
                       type="button"
                       onClick={() => toggleDay(e.id, i)}
-                      className={`px-2 py-1 rounded font-data-mono text-[10px] border transition-colors ${
+                      className={`px-2 py-1 rounded font-data-mono text-[12px] border transition-colors ${
                         active
                           ? 'bg-primary text-on-primary border-primary'
                           : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:border-primary/50'
@@ -269,7 +269,7 @@ export default function ScheduleEditor() {
 
       {err ? (
         <div className="mt-4 rounded border border-error/40 bg-error/10 p-3">
-          <p className="font-data-mono text-[11px] text-error">{err}</p>
+          <p className="font-data-mono text-[13px] text-error">{err}</p>
         </div>
       ) : null}
 

@@ -33,7 +33,7 @@ function LanguageToggle() {
           type="button"
           onClick={() => setLang(l)}
           aria-pressed={lang === l}
-          className={`px-2.5 py-1 font-label-caps text-[11px] transition-colors ${
+          className={`px-2.5 py-1 font-label-caps text-[13px] transition-colors ${
             lang === l
               ? "bg-primary/15 text-primary"
               : "text-on-surface-variant hover:text-on-surface"
@@ -114,7 +114,7 @@ export default function AppShell({ children }) {
       <main className="max-w-container-max mx-auto p-margin-mobile md:p-margin-desktop pb-24 md:pb-8">
         {children}
         <footer className="mt-12 pt-4 border-t border-outline-variant/40 text-center">
-          <p className="font-data-mono text-[10px] text-on-surface-variant/70">
+          <p className="font-data-mono text-[12px] text-on-surface-variant/70">
             {COPYRIGHT}
           </p>
         </footer>

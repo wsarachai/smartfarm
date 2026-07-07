@@ -64,12 +64,18 @@ export default {
         'label-caps': ['JetBrains Mono', 'Noto Sans Thai', 'ui-monospace', 'monospace'],
       },
       fontSize: {
+        // Built-in scale bumped up for older users (xs 12->13, sm 14->15).
+        xs: ['13px', { lineHeight: '18px' }],
+        sm: ['15px', { lineHeight: '22px' }],
         'display-lg': ['48px', { lineHeight: '56px', letterSpacing: '-0.02em', fontWeight: '700' }],
         'headline-md': ['24px', { lineHeight: '32px', fontWeight: '600' }],
         'headline-sm': ['18px', { lineHeight: '24px', fontWeight: '600' }],
         'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
-        'data-mono': ['14px', { lineHeight: '20px', letterSpacing: '0.02em', fontWeight: '500' }],
-        'label-caps': ['11px', { lineHeight: '16px', letterSpacing: '0.08em', fontWeight: '700' }],
+        // Bumped for readability (many users are older): data-mono 14->15,
+        // label-caps 11->13. label-caps is the ubiquitous small-caps label (73+
+        // uses), so this one change lifts most of the small text at once.
+        'data-mono': ['15px', { lineHeight: '22px', letterSpacing: '0.02em', fontWeight: '500' }],
+        'label-caps': ['13px', { lineHeight: '18px', letterSpacing: '0.06em', fontWeight: '700' }],
       },
       borderRadius: {
         DEFAULT: '0.125rem',

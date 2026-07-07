@@ -32,7 +32,7 @@ export default function CameraStatusCard() {
             <span className={`font-label-caps text-label-caps uppercase ${status === 'online' ? 'text-primary' : status === 'stale' ? 'text-tertiary' : 'text-error'}`}>
               {label}
             </span>
-            <span className="font-data-mono text-[10px] text-on-surface-variant">{age}</span>
+            <span className="font-data-mono text-[12px] text-on-surface-variant">{age}</span>
           </div>
           {degrading ? (
             <span className="mt-1 inline-block font-label-caps text-label-caps text-error uppercase">

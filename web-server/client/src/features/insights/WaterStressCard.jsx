@@ -10,8 +10,8 @@ function Metric({ Icon, label, value, unit }) {
   return (
     <div className="flex items-center gap-2">
       <Icon size={14} className="text-on-surface-variant shrink-0" />
-      <span className="font-data-mono text-[11px] text-on-surface-variant">{label}</span>
-      <span className="font-data-mono text-[11px] text-on-surface ml-auto">
+      <span className="font-data-mono text-[13px] text-on-surface-variant">{label}</span>
+      <span className="font-data-mono text-[13px] text-on-surface ml-auto">
         {value == null ? 'n/a' : `${value}${unit}`}
       </span>
     </div>
@@ -54,9 +54,9 @@ export default function WaterStressCard() {
           <Metric Icon={Waves} label={t('waterStress.humidity')} value={inputs.humidity} unit="%" />
         </div>
 
-        <p className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">{why}</p>
+        <p className="font-data-mono text-[13px] text-on-surface-variant leading-relaxed">{why}</p>
         {aiOffline ? (
-          <p className="mt-2 font-data-mono text-[10px] text-error/90 leading-relaxed">
+          <p className="mt-2 font-data-mono text-[12px] text-error/90 leading-relaxed">
             {t('waterStress.aiOfflineNote')}
           </p>
         ) : null}

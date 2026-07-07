@@ -247,7 +247,7 @@ function HistoryScrubber({ frames, selectedSeq, isLive, onScrub, onLive }) {
         ))}
       </div>
 
-      <div className="flex justify-between font-data-mono text-[10px] text-on-surface-variant">
+      <div className="flex justify-between font-data-mono text-[12px] text-on-surface-variant">
         <span>{timeLabel(frames[0].receivedAt)}</span>
         <span>{t("camera.frames", { n: count })}</span>
         <span>{timeLabel(frames[liveIdx].receivedAt)}</span>
@@ -317,7 +317,7 @@ function NodeMetrics({ status, ageMs, bytes, clients, health }) {
         ))}
       </div>
       {!hasTelemetry && (
-        <p className="mt-4 font-data-mono text-[10px] text-on-surface-variant/70">
+        <p className="mt-4 font-data-mono text-[12px] text-on-surface-variant/70">
           {t("camera.awaitingTelemetry")}
         </p>
       )}

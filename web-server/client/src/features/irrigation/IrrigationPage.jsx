@@ -36,7 +36,7 @@ function HeaderChip({ label, value, unit, colorClass }) {
   return (
     <div className="bg-surface-container-low px-4 py-2 border border-outline-variant flex items-center gap-3">
       <div>
-        <p className="font-label-caps text-[10px] text-on-surface-variant leading-none mb-1">{label}</p>
+        <p className="font-label-caps text-[12px] text-on-surface-variant leading-none mb-1">{label}</p>
         <p className={`font-data-mono text-headline-sm leading-none ${colorClass}`}>
           {value == null ? '—' : `${formatMetricValue(value)}${unit ? ` ${unit}` : ''}`}
         </p>
@@ -66,11 +66,11 @@ function PumpVisual({ mode, running }) {
       </div>
       <div className="mt-6 text-center z-10">
         <p className={`font-headline-md text-headline-md uppercase tracking-tighter ${state.color}`}>{state.label}</p>
-        <p className="font-data-mono text-[12px] text-outline mt-1 italic">{state.sub}</p>
+        <p className="font-data-mono text-[14px] text-outline mt-1 italic">{state.sub}</p>
       </div>
       <div className="absolute bottom-4 right-4 flex items-center bg-surface-container-high border border-outline-variant rounded overflow-hidden">
         <div className={`w-1 self-stretch ${state.hwClass}`} />
-        <span className="px-2 py-1 font-data-mono text-[10px] text-on-surface-variant">HW_ST: {state.hw}</span>
+        <span className="px-2 py-1 font-data-mono text-[12px] text-on-surface-variant">HW_ST: {state.hw}</span>
       </div>
     </div>
   );
@@ -150,7 +150,7 @@ function PumpControlPanel({ pump }) {
               className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-primary/10 hover:border-primary transition-all active:scale-95 disabled:opacity-50 disabled:hover:bg-surface-container-low disabled:hover:border-outline-variant disabled:active:scale-100"
             >
               <span className="font-headline-sm text-on-surface">{t('pumpPanel.pumpOn')}</span>
-              <span className="font-data-mono text-[10px] text-outline">CMD: 0x01</span>
+              <span className="font-data-mono text-[12px] text-outline">CMD: 0x01</span>
             </button>
             <button
               type="button"
@@ -159,7 +159,7 @@ function PumpControlPanel({ pump }) {
               className="group flex items-center justify-between px-6 py-4 border border-outline-variant bg-surface-container-low hover:bg-error/10 hover:border-error transition-all active:scale-95 disabled:opacity-50"
             >
               <span className="font-headline-sm text-on-surface">{t('pumpPanel.pumpOff')}</span>
-              <span className="font-data-mono text-[10px] text-outline">CMD: 0x00</span>
+              <span className="font-data-mono text-[12px] text-outline">CMD: 0x00</span>
             </button>
           </div>
         </div>
@@ -171,7 +171,7 @@ function PumpControlPanel({ pump }) {
 
 function FlowSparkline({ points }) {
   if (points.length < 2) {
-    return <div className="w-24 h-12 flex items-center justify-center font-data-mono text-[9px] text-on-surface-variant">…</div>;
+    return <div className="w-24 h-12 flex items-center justify-center font-data-mono text-[11px] text-on-surface-variant">…</div>;
   }
   const recent = points.slice(-8);
   const values = recent.map((p) => p.value);
@@ -228,7 +228,7 @@ function NodeCameraPreview() {
       />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
       <div className="absolute bottom-4 left-4">
-        <span className="bg-primary/20 text-primary px-2 py-1 font-data-mono text-[10px] border border-primary/30">CAM_LIVE</span>
+        <span className="bg-primary/20 text-primary px-2 py-1 font-data-mono text-[12px] border border-primary/30">CAM_LIVE</span>
       </div>
     </div>
   );
@@ -258,8 +258,8 @@ function NodeSensorsTable({ node }) {
       <table className="w-full text-left border-collapse">
         <thead>
           <tr className="bg-surface-container-lowest">
-            <th className="px-5 py-3 font-label-caps text-[10px] text-outline">{t('node.colSensor')}</th>
-            <th className="px-5 py-3 font-label-caps text-[10px] text-outline text-right">{t('node.colValue')}</th>
+            <th className="px-5 py-3 font-label-caps text-[12px] text-outline">{t('node.colSensor')}</th>
+            <th className="px-5 py-3 font-label-caps text-[12px] text-outline text-right">{t('node.colValue')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-outline-variant/20">
@@ -306,7 +306,7 @@ export default function IrrigationPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Led status="online" size="w-2.5 h-2.5" />
-            <span className="font-data-mono text-primary text-[12px] uppercase tracking-widest">{t('status.systemLive')}</span>
+            <span className="font-data-mono text-primary text-[14px] uppercase tracking-widest">{t('status.systemLive')}</span>
           </div>
           <h2 className="font-display-lg text-display-lg text-on-background">{t('irrigation.pageTitle')}</h2>
         </div>

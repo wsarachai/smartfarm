@@ -109,13 +109,13 @@ export default function PumpControlCard() {
       </div>
 
       {auto ? (
-        <p className="mt-3 font-data-mono text-[11px] text-tertiary">
+        <p className="mt-3 font-data-mono text-[13px] text-tertiary">
           {t('pump.autoNote')}
         </p>
       ) : null}
 
       {data && !online ? (
-        <p className="mt-3 font-data-mono text-[11px] text-error">
+        <p className="mt-3 font-data-mono text-[13px] text-error">
           {t('pump.unreachable', { url: settings.url })}
         </p>
       ) : null}

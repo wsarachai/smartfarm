@@ -68,13 +68,13 @@ export default function ActivityLog() {
       <h4 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
         <ScrollText size={14} />
         {t('activity.title')}
-        <span className="ml-auto font-data-mono text-[10px] text-on-surface-variant/60">
+        <span className="ml-auto font-data-mono text-[12px] text-on-surface-variant/60">
           {t('activity.recent', { n: entries.length })}
         </span>
       </h4>
 
       {entries.length === 0 ? (
-        <p className="font-data-mono text-[11px] text-on-surface-variant py-2">
+        <p className="font-data-mono text-[13px] text-on-surface-variant py-2">
           {t('activity.none')}
         </p>
       ) : (
@@ -85,8 +85,8 @@ export default function ActivityLog() {
               <li key={e.id} className="flex items-start gap-3 py-2.5">
                 <Icon size={15} className={`mt-0.5 shrink-0 ${color}`} />
                 <div className="min-w-0 flex-1">
-                  <p className={`font-data-mono text-[12px] leading-snug ${color}`}>{text}</p>
-                  <p className="font-data-mono text-[10px] text-on-surface-variant/70 mt-0.5">
+                  <p className={`font-data-mono text-[14px] leading-snug ${color}`}>{text}</p>
+                  <p className="font-data-mono text-[12px] text-on-surface-variant/70 mt-0.5">
                     {formatWhen(e.at)}
                   </p>
                 </div>

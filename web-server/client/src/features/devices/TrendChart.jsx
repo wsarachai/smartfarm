@@ -70,7 +70,7 @@ export default function TrendChart() {
               ))}
             </select>
           )}
-          <span className="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">
+          <span className="bg-surface-container-highest px-3 py-1 text-[12px] font-data-mono text-on-surface-variant">
             {t('trend.samples', { n: data.length })}
           </span>
         </div>

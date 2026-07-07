@@ -26,7 +26,7 @@ function StatChip({ Icon, label, value, unit }) {
     <div className="bg-surface-container-low px-4 py-2 border border-outline-variant flex items-center gap-3">
       <Icon size={18} className="text-primary shrink-0" />
       <div>
-        <p className="font-label-caps text-[10px] text-on-surface-variant leading-none mb-1 uppercase">{label}</p>
+        <p className="font-label-caps text-[12px] text-on-surface-variant leading-none mb-1 uppercase">{label}</p>
         <p className="font-data-mono text-headline-sm leading-none text-on-surface">
           {value == null ? '—' : `${value}${unit}`}
         </p>
@@ -47,7 +47,7 @@ function RiskPanel({ current }) {
         <BrainCircuit size={14} />
         {t('waterStress.estimateTitle')}
         <span
-          className={`ml-auto inline-flex items-center gap-1.5 font-label-caps text-[9px] tracking-widest ${
+          className={`ml-auto inline-flex items-center gap-1.5 font-label-caps text-[11px] tracking-widest ${
             aiOffline ? 'text-error' : 'text-primary/70'
           }`}
         >
@@ -69,12 +69,12 @@ function RiskPanel({ current }) {
       </div>
 
       <div className="rounded border border-outline-variant bg-surface-container-low p-3">
-        <p className="font-label-caps text-[10px] text-on-surface-variant mb-2 flex items-center gap-1.5">
+        <p className="font-label-caps text-[12px] text-on-surface-variant mb-2 flex items-center gap-1.5">
           <Info size={12} /> {t('waterStress.why')}
         </p>
         <ul className="space-y-1">
           {(current?.factors ?? []).map((f, i) => (
-            <li key={i} className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
+            <li key={i} className="font-data-mono text-[13px] text-on-surface-variant leading-relaxed">
               • {f}
             </li>
           ))}
@@ -92,7 +92,7 @@ function TrendPanel({ history }) {
     <div className="panel industrial-top overflow-hidden relative min-h-[300px]">
       <div className="p-5 flex flex-wrap gap-2 justify-between items-center border-b border-outline-variant/30">
         <h3 className="font-headline-sm text-headline-sm text-on-background">{t('insights.riskTrend')}</h3>
-        <span className="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">
+        <span className="bg-surface-container-highest px-3 py-1 text-[12px] font-data-mono text-on-surface-variant">
           {t('insights.points', { n: data.length })}
         </span>
       </div>
@@ -147,7 +147,7 @@ function CanopyPanel({ current }) {
         <Sprout size={14} />
         {t('insights.canopyTitle')}
         <span
-          className={`ml-auto inline-flex items-center gap-1.5 font-label-caps text-[9px] tracking-widest ${
+          className={`ml-auto inline-flex items-center gap-1.5 font-label-caps text-[11px] tracking-widest ${
             aiOffline ? 'text-error' : 'text-primary/70'
           }`}
         >
@@ -165,7 +165,7 @@ function CanopyPanel({ current }) {
           <div className="mt-4 rounded border border-outline-variant bg-surface-container-low p-3">
             <ul className="space-y-1">
               {(current?.factors ?? []).map((f, i) => (
-                <li key={i} className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
+                <li key={i} className="font-data-mono text-[13px] text-on-surface-variant leading-relaxed">
                   • {f}
                 </li>
               ))}
@@ -176,7 +176,7 @@ function CanopyPanel({ current }) {
           {previewSrc ? (
             <img src={previewSrc} alt="Canopy detection mask" className="w-full h-full object-contain" />
           ) : (
-            <span className="font-data-mono text-[11px] text-on-surface-variant">{t('insights.canopyNoPreview')}</span>
+            <span className="font-data-mono text-[13px] text-on-surface-variant">{t('insights.canopyNoPreview')}</span>
           )}
         </div>
       </div>
@@ -191,7 +191,7 @@ function CanopyTrend({ history }) {
     <div className="panel industrial-top overflow-hidden relative min-h-[280px]">
       <div className="p-5 flex flex-wrap gap-2 justify-between items-center border-b border-outline-variant/30">
         <h3 className="font-headline-sm text-headline-sm text-on-background">{t('insights.canopyTrend')}</h3>
-        <span className="bg-surface-container-highest px-3 py-1 text-[10px] font-data-mono text-on-surface-variant">
+        <span className="bg-surface-container-highest px-3 py-1 text-[12px] font-data-mono text-on-surface-variant">
           {t('insights.points', { n: data.length })}
         </span>
       </div>
@@ -241,7 +241,7 @@ function DiseasePanel() {
       <h3 className="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
         <Bug size={14} />
         {t('disease.title')}
-        <span className="ml-auto font-label-caps text-[9px] text-primary/70 tracking-widest">PLANTVILLAGE · ON-DEMAND</span>
+        <span className="ml-auto font-label-caps text-[11px] text-primary/70 tracking-widest">PLANTVILLAGE · ON-DEMAND</span>
       </h3>
 
       <div className="flex flex-wrap items-center gap-4 mb-4">
@@ -261,17 +261,17 @@ function DiseasePanel() {
       </div>
 
       {current?.detail ? (
-        <p className="mb-3 font-data-mono text-[11px] text-error/90">{t('disease.modelHint', { detail: current.detail })}</p>
+        <p className="mb-3 font-data-mono text-[13px] text-error/90">{t('disease.modelHint', { detail: current.detail })}</p>
       ) : null}
 
       {current?.top?.length ? (
         <div className="rounded border border-outline-variant bg-surface-container-low p-3 mb-4">
-          <p className="font-label-caps text-[10px] text-on-surface-variant mb-2">{t('disease.topPredictions')}</p>
+          <p className="font-label-caps text-[12px] text-on-surface-variant mb-2">{t('disease.topPredictions')}</p>
           <ul className="space-y-1.5">
             {current.top.map((t, i) => (
               <li key={i} className="flex items-center gap-3">
-                <span className="font-data-mono text-[11px] text-on-surface flex-1 truncate">{t.label}</span>
-                <span className="font-data-mono text-[11px] text-on-surface-variant tabular-nums">{t.confidence}%</span>
+                <span className="font-data-mono text-[13px] text-on-surface flex-1 truncate">{t.label}</span>
+                <span className="font-data-mono text-[13px] text-on-surface-variant tabular-nums">{t.confidence}%</span>
               </li>
             ))}
           </ul>
@@ -280,13 +280,13 @@ function DiseasePanel() {
 
       {history.length ? (
         <div>
-          <p className="font-label-caps text-[10px] text-on-surface-variant mb-2">{t('disease.recentChecks')}</p>
+          <p className="font-label-caps text-[12px] text-on-surface-variant mb-2">{t('disease.recentChecks')}</p>
           <ul className="max-h-40 overflow-y-auto divide-y divide-outline-variant/20">
             {history.map((e) => (
               <li key={e.id} className="flex items-center gap-3 py-1.5">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${diseaseMeta(e.status).dot}`} />
-                <span className="font-data-mono text-[11px] text-on-surface-variant flex-1 truncate">{e.headline}</span>
-                <span className="font-data-mono text-[10px] text-on-surface-variant/70 shrink-0">
+                <span className="font-data-mono text-[13px] text-on-surface-variant flex-1 truncate">{e.headline}</span>
+                <span className="font-data-mono text-[12px] text-on-surface-variant/70 shrink-0">
                   {new Date(e.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </span>
               </li>
@@ -311,7 +311,7 @@ export default function AiInsightsPage() {
     <div className="grid grid-cols-1 md:grid-cols-12 gap-gutter">
       <section className="md:col-span-12 mb-4">
         <div className="flex items-center gap-2 mb-1">
-          <span className="flex items-center gap-2 bg-primary/10 border border-primary/40 text-primary px-3 py-1 font-data-mono text-[12px] uppercase tracking-widest">
+          <span className="flex items-center gap-2 bg-primary/10 border border-primary/40 text-primary px-3 py-1 font-data-mono text-[14px] uppercase tracking-widest">
             <BrainCircuit size={13} />
             {t('nav.insights')}
           </span>

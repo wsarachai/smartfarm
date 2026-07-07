@@ -276,10 +276,10 @@ export default function SettingsPage() {
               </label>
 
               <div className="rounded border border-outline-variant bg-surface-container-low p-3">
-                <p className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
+                <p className="font-data-mono text-[13px] text-on-surface-variant leading-relaxed">
                   {t('settings.cameraSource.help')}
                 </p>
-                <p className="mt-2 font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
+                <p className="mt-2 font-data-mono text-[13px] text-on-surface-variant leading-relaxed">
                   {usingRelay
                     ? t('settings.cameraSource.modeRelay')
                     : t('settings.cameraSource.modeCustom')}
@@ -288,7 +288,7 @@ export default function SettingsPage() {
 
               {cameraErr ? (
                 <div className="rounded border border-error/40 bg-error/10 p-3">
-                  <p className="font-data-mono text-[11px] text-error">{cameraErr}</p>
+                  <p className="font-data-mono text-[13px] text-error">{cameraErr}</p>
                 </div>
               ) : null}
 
@@ -428,7 +428,7 @@ export default function SettingsPage() {
 
               {deviceErr ? (
                 <div className="rounded border border-error/40 bg-error/10 p-3">
-                  <p className="font-data-mono text-[11px] text-error">{deviceErr}</p>
+                  <p className="font-data-mono text-[13px] text-error">{deviceErr}</p>
                 </div>
               ) : null}
 
@@ -504,17 +504,17 @@ export default function SettingsPage() {
               </label>
 
               <div className="rounded border border-outline-variant bg-surface-container-low p-3">
-                <p className="font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
+                <p className="font-data-mono text-[13px] text-on-surface-variant leading-relaxed">
                   {t('settings.pump.safety', { min: AUTO_OFF_MIN, max: AUTO_OFF_MAX })}
                 </p>
-                <p className="mt-2 font-data-mono text-[11px] text-on-surface-variant leading-relaxed">
+                <p className="mt-2 font-data-mono text-[13px] text-on-surface-variant leading-relaxed">
                   {t('settings.pump.reserveMac')}
                 </p>
               </div>
 
               {pumpErr ? (
                 <div className="rounded border border-error/40 bg-error/10 p-3">
-                  <p className="font-data-mono text-[11px] text-error">{pumpErr}</p>
+                  <p className="font-data-mono text-[13px] text-error">{pumpErr}</p>
                 </div>
               ) : null}
 
@@ -584,7 +584,7 @@ export default function SettingsPage() {
 
               {wsErr ? (
                 <div className="rounded border border-error/40 bg-error/10 p-3">
-                  <p className="font-data-mono text-[11px] text-error">{wsErr}</p>
+                  <p className="font-data-mono text-[13px] text-error">{wsErr}</p>
                 </div>
               ) : null}
 
@@ -644,7 +644,7 @@ export default function SettingsPage() {
 
               {cyErr ? (
                 <div className="rounded border border-error/40 bg-error/10 p-3">
-                  <p className="font-data-mono text-[11px] text-error">{cyErr}</p>
+                  <p className="font-data-mono text-[13px] text-error">{cyErr}</p>
                 </div>
               ) : null}
 
@@ -697,7 +697,7 @@ export default function SettingsPage() {
 
               {dsErr ? (
                 <div className="rounded border border-error/40 bg-error/10 p-3">
-                  <p className="font-data-mono text-[11px] text-error">{dsErr}</p>
+                  <p className="font-data-mono text-[13px] text-error">{dsErr}</p>
                 </div>
               ) : null}
 
@@ -753,7 +753,7 @@ export default function SettingsPage() {
               <dd className="font-data-mono text-sm text-on-surface">{buildInfo.gitSha}</dd>
             </div>
           </dl>
-          <p className="mt-4 pt-4 border-t border-outline-variant/40 font-data-mono text-[11px] text-on-surface-variant/80">
+          <p className="mt-4 pt-4 border-t border-outline-variant/40 font-data-mono text-[13px] text-on-surface-variant/80">
             {COPYRIGHT}
           </p>
         </section>
