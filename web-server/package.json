@@ -1,6 +1,6 @@
 {
   "name": "smartfarm-web-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Unified Express server hosting the Smart Farm control API and static React dashboard.",
   "author": "Watcharin Sarachai <sarachaii@gmail.com>",
