@@ -10,6 +10,99 @@ import {
 import { useGetSettingsQuery, useUpdateSettingsMutation } from './settingsApi';
 import { useT } from '../../i18n';
 
+// HSV (h 0-360, s/v 0-100) -> "rgb(r, g, b)". The canopy detector works in HSV,
+// so the swatch chip is computed exactly rather than approximated via CSS HSL.
+function hsvToRgb(h, s, v) {
+  const sn = s / 100;
+  const vn = v / 100;
+  const c = vn * sn;
+  const hp = ((((h % 360) + 360) % 360) / 60);
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (hp < 1) [r, g, b] = [c, x, 0];
+  else if (hp < 2) [r, g, b] = [x, c, 0];
+  else if (hp < 3) [r, g, b] = [0, c, x];
+  else if (hp < 4) [r, g, b] = [0, x, c];
+  else if (hp < 5) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const m = vn - c;
+  const to255 = (n) => Math.round((n + m) * 255);
+  return `rgb(${to255(r)}, ${to255(g)}, ${to255(b)})`;
+}
+
+// Live example of the HSV window the four canopy inputs select. Reactive to the
+// unsaved form values (`cy`). Top: full-spectrum hue bar with the [min,max]
+// window bracketed. Bottom: the same hue range drawn at the chosen sat/val floor
+// (the palest/darkest greens that still count). No camera frame needed.
+function CanopyRangePreview({ cy, t }) {
+  const hueMin = Number(cy.hueMinDeg);
+  const hueMax = Number(cy.hueMaxDeg);
+  const satMin = Number(cy.satMinPct);
+  const valMin = Number(cy.valMinPct);
+  const valid =
+    [hueMin, hueMax, satMin, valMin].every(Number.isFinite) && hueMin < hueMax;
+
+  // Reference spectrum: HSV(h,100,100) === hsl(h,100%,50%), so CSS is exact here.
+  const spectrum = `linear-gradient(to right, ${Array.from(
+    { length: 13 },
+    (_, i) => `hsl(${i * 30}, 100%, 50%)`,
+  ).join(', ')})`;
+
+  const leftPct = valid ? (hueMin / 360) * 100 : 0;
+  const widthPct = valid ? ((hueMax - hueMin) / 360) * 100 : 0;
+
+  // Accepted-floor strip across [hueMin,hueMax] at (satMin,valMin).
+  const floorGradient = valid
+    ? `linear-gradient(to right, ${Array.from({ length: 9 }, (_, i) => {
+        const h = hueMin + ((hueMax - hueMin) * i) / 8;
+        return `${hsvToRgb(h, satMin, valMin)} ${((i / 8) * 100).toFixed(0)}%`;
+      }).join(', ')})`
+    : null;
+
+  return (
+    <div className="rounded border border-outline-variant bg-surface-container-low p-3 space-y-3">
+      <p className="font-label-caps text-label-caps text-on-surface-variant">
+        {t('settings.canopy.previewLabel')}
+      </p>
+
+      <div>
+        <div className="relative h-6 rounded overflow-hidden" style={{ background: spectrum }}>
+          {valid ? (
+            <>
+              <div className="absolute inset-y-0 left-0 bg-black/60" style={{ width: `${leftPct}%` }} />
+              <div className="absolute inset-y-0 right-0 bg-black/60" style={{ left: `${leftPct + widthPct}%` }} />
+              <div className="absolute inset-y-0 border-x-2 border-white" style={{ left: `${leftPct}%`, width: `${widthPct}%` }} />
+            </>
+          ) : null}
+        </div>
+        <div className="flex justify-between mt-1 font-data-mono text-[11px] text-on-surface-variant">
+          <span>0°</span>
+          <span>{t('settings.canopy.spectrumHint')}</span>
+          <span>360°</span>
+        </div>
+      </div>
+
+      {valid ? (
+        <div>
+          <div className="h-6 rounded" style={{ background: floorGradient }} />
+          <p className="mt-1 font-data-mono text-[11px] text-on-surface-variant">
+            {t('settings.canopy.floorHint', {
+              hueMin: Math.round(hueMin),
+              hueMax: Math.round(hueMax),
+              sat: Math.round(satMin),
+              val: Math.round(valMin),
+            })}
+          </p>
+        </div>
+      ) : (
+        <p className="font-data-mono text-[11px] text-error">{t('settings.canopy.invalidRange')}</p>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const t = useT();
   // Server-owned settings (camera source + pump). Loaded once; a save invalidates
@@ -641,6 +734,8 @@ export default function SettingsPage() {
                   </label>
                 ))}
               </div>
+
+              <CanopyRangePreview cy={cy} t={t} />
 
               {cyErr ? (
                 <div className="rounded border border-error/40 bg-error/10 p-3">

@@ -280,7 +280,11 @@
       "hueMin": "Hue min (°)",
       "hueMax": "Hue max (°)",
       "satMin": "Saturation min (%)",
-      "valMin": "Value/brightness min (%)"
+      "valMin": "Value/brightness min (%)",
+      "previewLabel": "Selected range preview",
+      "spectrumHint": "hues counted as canopy",
+      "floorHint": "Accepted greens at hue {hueMin}–{hueMax}°, S≥{sat}%, V≥{val}%",
+      "invalidRange": "Hue min must be below hue max."
     },
     "disease": {
       "title": "Disease Detection",
