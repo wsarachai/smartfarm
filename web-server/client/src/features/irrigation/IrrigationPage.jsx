@@ -47,13 +47,14 @@ function HeaderChip({ label, value, unit, colorClass }) {
 
 function PumpVisual({ mode, running }) {
   const t = useT();
-  const spinning = mode === 'manual' && running;
-  const state =
-    mode === 'auto'
+  // Spin whenever the pump is actually running — including scheduled (auto-mode)
+  // runs, not just manual ones. `running` mirrors the real relay state.
+  const spinning = running;
+  const state = running
+    ? { label: t('pumpPanel.running'), sub: t('pumpPanel.runningSub'), color: 'text-primary', hw: 'RUN', hwClass: 'bg-primary' }
+    : mode === 'auto'
       ? { label: t('pumpPanel.standby'), sub: t('pumpPanel.standbySub'), color: 'text-outline-variant', hw: 'IDLE', hwClass: 'bg-outline' }
-      : running
-        ? { label: t('pumpPanel.running'), sub: t('pumpPanel.runningSub'), color: 'text-primary', hw: 'RUN', hwClass: 'bg-primary' }
-        : { label: t('pumpPanel.stopped'), sub: t('pumpPanel.stoppedSub'), color: 'text-error', hw: 'IDLE', hwClass: 'bg-error' };
+      : { label: t('pumpPanel.stopped'), sub: t('pumpPanel.stoppedSub'), color: 'text-error', hw: 'IDLE', hwClass: 'bg-error' };
 
   return (
     <div className="bg-surface-container-lowest border border-outline-variant p-6 flex flex-col items-center justify-center relative overflow-hidden">
