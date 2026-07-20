@@ -1,0 +1,79 @@
+# jetson-ctrl
+
+Host daemon that runs the SmartFarm enclosure's **external fan** as a second
+cooling stage on the Jetson Nano, reports thermal telemetry to the Node
+web-server, and self-heals under systemd. See **[DESIGN.md](DESIGN.md)** for the
+full rationale and decision record.
+
+> Not ESP firmware and not the Node server — this is a native C++17 Linux daemon
+> that runs on the Jetson itself.
+
+## What it controls
+- **Reads:** on-die thermal zones (`/sys/class/thermal`, the safety anchor) + a
+  DHT22 enclosure-air sensor (secondary/telemetry).
+- **Writes:** exactly one GPIO — the external fan relay/MOSFET. The Nano's
+  built-in PWM fan is left to NVIDIA's governor.
+
+## Build (on the Jetson)
+
+```bash
+sudo apt install build-essential cmake pkg-config libcurl4-openssl-dev libgpiod-dev
+# fetch the JSON header (see third_party/nlohmann/README.md), or install nlohmann-json3-dev
+curl -L -o third_party/nlohmann/json.hpp \
+  https://github.com/nlohmann/json/releases/latest/download/json.hpp
+
+cmake -S . -B build
+cmake --build build -j
+```
+
+## Install
+
+```bash
+sudo cmake --install build                      # binary + unit + doc
+sudo mkdir -p /etc/jetson-ctrl
+sudo cp config.example.json /etc/jetson-ctrl/config.json   # edit before first run!
+sudo systemctl daemon-reload
+sudo systemctl enable --now jetson-ctrl
+journalctl -u jetson-ctrl -f
+```
+
+## Before first run — you MUST set the GPIO line offsets
+
+The `line_offset` values in the config are placeholders. Map your physical 40-pin
+header pins to their `gpiochip` lines and update `dht22.line_offset` and
+`external_fan.line_offset`:
+
+```bash
+sudo gpioinfo            # list every line on every gpiochip
+# or, if you know a line's label:
+sudo gpiofind <LABEL>
+```
+
+Also **bench-test the relay polarity** (`external_fan.active_high`) so the fan is
+OFF at rest, and confirm NVIDIA's governor owns the built-in fan
+(`systemctl status nvfancontrol`).
+
+## Config
+
+Live config: `/etc/jetson-ctrl/config.json` (schema in `config.example.json`).
+**Hot-reloaded** on file change — edit and save; a bad edit is rejected and the
+last-known-good config keeps running. Full field reference in
+[DESIGN.md](DESIGN.md#config-schema-etcjetson-ctrlconfigjson).
+
+## Remote override
+
+Set from the dashboard (`POST /api/v1/control`, `device_id: jetson_ctrl_01`):
+
+```json
+{ "external_fan_override": "force_on", "until": "2026-07-20T15:30:00Z" }
+```
+
+`force_on` runs the external fan early; it auto-expires at `until`. There is **no
+force-off** — an override can only *add* cooling, and the autonomous thermal-zone
+safety trigger always wins.
+
+## Status
+
+Scaffold. Hardware-touching paths (`dht22.cpp` bit-bang, `fan.cpp`/thermal GPIO)
+are structured and commented but **not yet verified on real hardware** — build and
+bench-test on the target Jetson before trusting it.

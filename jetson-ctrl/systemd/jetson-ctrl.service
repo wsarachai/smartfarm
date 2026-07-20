@@ -1,0 +1,33 @@
+[Unit]
+Description=SmartFarm Jetson enclosure fan controller (jetson-ctrl)
+Documentation=file:/usr/share/doc/jetson-ctrl/DESIGN.md
+# Cooling must start at boot regardless of network. Deliberately NOT gated on
+# network-online.target — telemetry is best-effort, cooling is not.
+After=local-fs.target
+Wants=local-fs.target
+
+[Service]
+Type=notify
+# Runs as root (v1): unrestricted /dev/gpiochip* + sysfs thermal access.
+User=root
+ExecStart=/usr/sbin/jetson-ctrl --config /etc/jetson-ctrl/config.json
+
+# Self-healing.
+Restart=always
+RestartSec=2
+
+# Watchdog: the loop calls sd_notify(WATCHDOG=1) every tick (~2 s). If it hangs,
+# systemd kills and restarts it. Set comfortably above the tick period.
+WatchdogSec=15
+
+# Modest hardening that does NOT break GPIO/sysfs access.
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+# The live config is the only writable path the daemon needs (it only reads it,
+# but keep /etc reachable). Everything else stays read-only where possible.
+ReadOnlyPaths=/etc/jetson-ctrl
+
+[Install]
+WantedBy=multi-user.target

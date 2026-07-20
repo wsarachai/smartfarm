@@ -1,0 +1,9 @@
+# Build output
+/build/
+*.o
+
+# Vendored single header (fetch per third_party/nlohmann/README.md)
+third_party/nlohmann/json.hpp
+
+# Live config is machine-local (installed to /etc/jetson-ctrl/), never committed
+config.json
