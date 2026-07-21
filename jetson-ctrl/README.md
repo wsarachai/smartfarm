@@ -40,17 +40,23 @@ curl -L -o third_party/nlohmann/json.hpp \
   https://github.com/nlohmann/json/releases/latest/download/json.hpp
 
 cmake -S . -B build
-cmake --build build -j
+cmake --build build -- -j$(nproc)
+
 # for debug
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j
-
+cmake --build build -- -j$(nproc)
 ```
+
+> **CMake on JetPack 4.x is 3.10.2**, which is old enough to matter. `cmake
+> --build -j <N>` (3.12), `cmake --install` (3.15) and `ctest --test-dir` (3.20)
+> do not exist there — hence the `-- -j$(nproc)` passthrough above and `make
+> install` below. Keep newer CMake features out of `CMakeLists.txt`: the daemon
+> is compiled on the target, so 3.10 is a hard floor, not a preference.
 
 ## Install
 
 ```bash
-sudo cmake --install build                      # binary + unit + doc
+sudo make -C build install                      # binary + unit + doc
 sudo mkdir -p /etc/jetson-ctrl
 sudo cp config.example.json /etc/jetson-ctrl/config.json   # edit before first run!
 sudo systemctl daemon-reload

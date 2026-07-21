@@ -12,7 +12,8 @@
       "label": "build (Debug)",
       "type": "shell",
       "command": "cmake",
-      "args": ["--build", "build", "-j"],
+      "comment": "'--' passthrough, not 'cmake --build -j': the -j flag is CMake 3.12+ and JetPack 4.x ships 3.10.2.",
+      "args": ["--build", "build", "--", "-j4"],
       "dependsOn": "cmake configure (Debug)",
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": ["$gcc"]
