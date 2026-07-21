@@ -8,6 +8,23 @@ full rationale and decision record.
 > Not ESP firmware and not the Node server — this is a native C++17 Linux daemon
 > that runs on the Jetson itself.
 
+## Layout
+
+```
+jetson-ctrl/
+├── src/ tests/ third_party/   # the C++17 daemon (this README)
+├── CMakeLists.txt
+├── systemd/jetson-ctrl.service
+├── config.example.json
+├── python/                    # host provisioning: DS3231 RTC timekeeping
+└── docs/host-setup.md         # wiring, GPIO map, RTC units, troubleshooting
+```
+
+The **[`python/`](python/)** tree is separate on purpose — it is one-shot host
+setup that runs at boot and exits, not part of the control loop. Anything about
+the machine underneath the daemon (I²C RTC, 40-pin header allocation, boot
+units) lives in **[docs/host-setup.md](docs/host-setup.md)**.
+
 ## What it controls
 - **Reads:** on-die thermal zones (`/sys/class/thermal`, the safety anchor) + a
   DHT22 enclosure-air sensor (secondary/telemetry).
@@ -52,6 +69,10 @@ sudo gpioinfo            # list every line on every gpiochip
 # or, if you know a line's label:
 sudo gpiofind <LABEL>
 ```
+
+The as-built pin map (DHT22 on pin 29 / line 149, fan on pin 15 / line 194) and
+the wiring behind it are in
+[docs/host-setup.md](docs/host-setup.md#gpio-allocation).
 
 Also **bench-test the relay polarity** (`external_fan.active_high`) so the fan is
 OFF at rest, and confirm NVIDIA's governor owns the built-in fan

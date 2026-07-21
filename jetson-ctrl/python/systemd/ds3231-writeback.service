@@ -1,0 +1,18 @@
+[Unit]
+Description=Write NTP-corrected system time back to the DS3231
+Documentation=file:/usr/share/doc/jetson-ctrl/host-setup.md
+# Only meaningful once the network has had a chance to correct the clock.
+After=time-sync.target network-online.target
+Wants=time-sync.target network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/ds3231_writeback.py
+# Exits 1 when NTP never synchronised. That is the correct, expected outcome on
+# an offline boot -- not a fault worth restarting over.
+SuccessExitStatus=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

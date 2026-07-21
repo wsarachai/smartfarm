@@ -1,0 +1,15 @@
+[Unit]
+Description=Periodically refresh the DS3231 from NTP-corrected system time
+Documentation=file:/usr/share/doc/jetson-ctrl/host-setup.md
+
+[Timer]
+# Daily is far more often than a +/-2 ppm part needs, but each run is one I2C
+# write and it means the chip is never more than a day of drift stale when the
+# network goes away for a week.
+OnCalendar=daily
+# The Nano is often powered down; catch up a missed run instead of skipping it.
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,22 @@
+[Unit]
+Description=Sync system clock from DS3231 hardware RTC at boot
+Documentation=file:/usr/share/doc/jetson-ctrl/host-setup.md
+# Must land before anything timestamps anything, hence sysinit.target.
+Before=network-pre.target time-sync.target
+# local-fs: /usr/local/bin must be mounted.
+# systemd-modules-load: i2c-dev must exist before we open /dev/i2c-1. Without
+# this the unit can lose a race at sysinit and fail the whole boot's timekeeping.
+After=local-fs.target systemd-modules-load.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/ds3231_sync.py
+RemainAfterExit=yes
+# A flat backup cell exits non-zero on purpose. Do not mask that as success:
+# the boot continues either way, but `systemctl status` must show the fault.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=sysinit.target
