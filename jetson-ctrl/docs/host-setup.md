@@ -32,24 +32,40 @@ sudo i2cdetect -y -r 1     # 0x68 should appear
 Jetson Nano `gpiochip0` line offsets equal the legacy sysfs numbers, so
 `gpioinfo` offsets map directly onto the values in `config.example.json`.
 
-| Function | Header pin | `gpiochip0` line | Config key |
-|---|---|---|---|
-| DHT22 data | 29 | 149 | `dht22.line_offset` |
-| External fan | 15 | 194 | `external_fan.line_offset` |
+| Function | Header pin | `gpiochip0` line | Label | Config key |
+|---|---|---|---|---|
+| DHT22 data | 29 | 149 | `GPIO01` | `dht22.line_offset` |
+| External fan | 31 | 200 | `GPIO11` | `external_fan.line_offset` |
+
+Both verified `unused` on the target with `gpioinfo` (2026-07-21).
 
 **Pin 29 rather than pin 7** for the DHT22: pin 7 was believed to be occupied by
 the RTC wiring. Pin 29 is a plain GPIO with no default alt-function and sits
-beside GND on pin 30, which keeps the bit-banged data run short. If pin 7 turns
-out to be free, it works equally well — set `line_offset` to `216`.
+beside GND on pin 30, which keeps the bit-banged data run short.
 
-Verify both lines are unclaimed before wiring. `libgpiod` will fail the request
-at daemon startup if anything else holds them:
+**Pin 31 rather than pin 15** for the fan. Line 194 (pin 15) is **claimed by the
+SD card-detect driver** — `gpioinfo` shows it as `"cd" [used]`. `libgpiod` would
+refuse the request at daemon startup, and driving it would interfere with the
+boot device. The original `194` in `config.example.json` was a placeholder that
+had never been checked against real hardware. Pin 31 is plain GPIO, and leaves
+the PWM-capable line 38 (pin 33) free should the relay ever be replaced with a
+variable-speed fan.
+
+Always confirm before wiring — placeholders lie, and `libgpiod` fails the whole
+daemon at startup if a line is held:
 
 ```bash
-sudo gpioinfo gpiochip0 | grep -E 'line +(149|194):'   # want "unused"
+sudo apt install gpiod                                 # tools, separate from libgpiod-dev
+sudo gpioinfo gpiochip0 | grep -E 'line +(149|200):'   # want "unused", no [used]
 ```
 
-Backup picks if 149 is taken: pin 31 (line 200), then pin 18 (line 15).
+Known-free alternates on this board, all verified unused: lines 12, 14, 15, 38,
+50, 51, 76, 77, 78, 79, 232.
+
+> **libgpiod 1.1 syntax.** JetPack 4.x ships libgpiod 1.1, which takes
+> positional arguments — `gpioinfo gpiochip0`, `gpioget gpiochip0 149`. Examples
+> online are usually written for 1.6+ or 2.x and use `--chip` flags that do not
+> exist here.
 
 ### DHT22 wiring
 
@@ -77,8 +93,12 @@ Bench-test polarity before connecting the fan, and set `external_fan.active_high
 to match:
 
 ```bash
-sudo gpioset gpiochip0 194=1     # fan should energise if active_high is true
+sudo gpioset gpiochip0 200=1     # fan should energise if active_high is true
 ```
+
+Note `gpioset` holds the line only while it runs; on exit the line is released
+and reverts. Use `gpioset -m wait gpiochip0 200=1` to hold it until you press
+enter.
 
 Mind the boot window. The line floats until the daemon claims it; `fan.cpp` is
 fail-to-ON, so make sure your chosen polarity means *fan running* during that

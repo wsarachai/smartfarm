@@ -15,13 +15,13 @@
   },
   "dht22": {
     "gpiochip": "gpiochip0",
-    "line_offset": 216,
+    "line_offset": 149,
     "max_retries": 3,
     "stale_after_ms": 30000
   },
   "external_fan": {
     "gpiochip": "gpiochip0",
-    "line_offset": 194,
+    "line_offset": 200,
     "active_high": true
   },
   "control": {

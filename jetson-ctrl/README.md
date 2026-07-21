@@ -83,7 +83,7 @@ sudo gpioinfo            # list every line on every gpiochip
 sudo gpiofind <LABEL>
 ```
 
-The as-built pin map (DHT22 on pin 29 / line 149, fan on pin 15 / line 194) and
+The as-built pin map (DHT22 on pin 29 / line 149, fan on pin 31 / line 200) and
 the wiring behind it are in
 [docs/host-setup.md](docs/host-setup.md#gpio-allocation).
 
