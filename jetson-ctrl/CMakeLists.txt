@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.10)   # ships on Ubuntu 18.04 / L4T (3.10.2)
 project(jetson-ctrl CXX)
 
 # NOTE: 3.10.2 is a hard floor -- it is what JetPack 4.x has, and the daemon is
-# built on the target. Anything newer must not creep in. Banned here:
+# built ON the target. Anything newer must not creep in, in this file or in the
+# documented commands:
+#   cmake -S . -B build        3.13   -> mkdir -p build && cd build && cmake ..
 #   target_link_directories()  3.13   -> link_directories() before the target
-#   cmake --build -j <N>       3.12   -> cmake --build build -- -j$(nproc)
-#   cmake --install            3.15   -> make -C build install
+#   cmake --build -j <N>       3.12   -> make -j$(nproc) from the build dir
+#   cmake --install            3.15   -> make install
 #   ctest --test-dir           3.20   -> cd build && ctest
 
 set(CMAKE_CXX_STANDARD 17)
@@ -63,7 +65,7 @@ target_link_libraries(jetson-ctrl PRIVATE
 # --- Tests -------------------------------------------------------------------
 # The control law is pure (depends only on the Config struct), so its tests link
 # against src/control.cpp alone — no libcurl/gpiod/json — and run on any host.
-#   cmake -S . -B build && cmake --build build && (cd build && ctest)
+#   mkdir -p build && cd build && cmake .. && make -j$(nproc) && ctest
 enable_testing()
 add_executable(test_control tests/test_control.cpp src/control.cpp)
 target_include_directories(test_control PRIVATE src)

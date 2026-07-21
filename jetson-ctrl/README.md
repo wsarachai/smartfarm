@@ -39,24 +39,31 @@ sudo apt install build-essential cmake pkg-config libcurl4-openssl-dev libgpiod-
 curl -L -o third_party/nlohmann/json.hpp \
   https://github.com/nlohmann/json/releases/latest/download/json.hpp
 
-cmake -S . -B build
-cmake --build build -- -j$(nproc)
+mkdir -p build && cd build
+cmake ..
+make -j$(nproc)
 
 # for debug
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -- -j$(nproc)
+cmake .. -DCMAKE_BUILD_TYPE=Debug
+make -j$(nproc)
 ```
 
-> **CMake on JetPack 4.x is 3.10.2**, which is old enough to matter. `cmake
-> --build -j <N>` (3.12), `cmake --install` (3.15) and `ctest --test-dir` (3.20)
-> do not exist there — hence the `-- -j$(nproc)` passthrough above and `make
-> install` below. Keep newer CMake features out of `CMakeLists.txt`: the daemon
-> is compiled on the target, so 3.10 is a hard floor, not a preference.
+> **CMake on JetPack 4.x is 3.10.2**, which is old enough to matter — the daemon
+> is compiled on the target, so that is a hard floor, not a preference. None of
+> these exist there:
+>
+> | Newer form | Needs | Use instead |
+> |---|---|---|
+> | `cmake -S . -B build` | 3.13 | `mkdir -p build && cd build && cmake ..` |
+> | `cmake --build build -j N` | 3.12 | `make -j$(nproc)` from the build dir |
+> | `cmake --install build` | 3.15 | `make install` |
+> | `ctest --test-dir build` | 3.20 | `cd build && ctest` |
+> | `target_link_directories()` | 3.13 | `link_directories()` before the target |
 
 ## Install
 
 ```bash
-sudo make -C build install                      # binary + unit + doc
+sudo make -C build install                      # binary + unit + doc  (cmake --install is 3.15+)
 sudo mkdir -p /etc/jetson-ctrl
 sudo cp config.example.json /etc/jetson-ctrl/config.json   # edit before first run!
 sudo systemctl daemon-reload

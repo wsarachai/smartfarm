@@ -2,18 +2,17 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "comment": "Classic in-build-dir invocation, not 'cmake -S . -B build': -S/-B are CMake 3.13+ and JetPack 4.x ships 3.10.2. Likewise 'make' over 'cmake --build -j' (3.12+). These must stay runnable on the Jetson itself.",
       "label": "cmake configure (Debug)",
       "type": "shell",
-      "command": "cmake",
-      "args": ["-S", ".", "-B", "build", "-DCMAKE_BUILD_TYPE=Debug"],
+      "command": "mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Debug",
       "problemMatcher": []
     },
     {
       "label": "build (Debug)",
       "type": "shell",
-      "command": "cmake",
-      "comment": "'--' passthrough, not 'cmake --build -j': the -j flag is CMake 3.12+ and JetPack 4.x ships 3.10.2.",
-      "args": ["--build", "build", "--", "-j4"],
+      "command": "make -j$(nproc)",
+      "options": { "cwd": "${workspaceFolder}/build" },
       "dependsOn": "cmake configure (Debug)",
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": ["$gcc"]
