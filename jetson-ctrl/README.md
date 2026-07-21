@@ -24,6 +24,10 @@ curl -L -o third_party/nlohmann/json.hpp \
 
 cmake -S . -B build
 cmake --build build -j
+# for debug
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+
 ```
 
 ## Install
