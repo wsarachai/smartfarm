@@ -113,7 +113,7 @@ The one GPIO the daemon writes.
 |---|---|---|
 | `gpiochip` | `gpiochip0` | As above. |
 | `line_offset` | `200` | Line driving the relay/MOSFET. 200 = header pin 31 on the Nano. |
-| `active_high` | `true` | `true`: logical ON drives the line **high**. `false`: ON drives it **low** (active-low relay boards). |
+| `active_high` | `true` | `true`: logical ON drives the line **high**. `false`: ON drives it **low** (active-low relay boards). **The as-built rig is `false`.** |
 
 **`active_high` must be bench-tested, not assumed.** The daemon's `external_fan:
 "off"` in telemetry is its *logical* state; with the polarity inverted, "off"

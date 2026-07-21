@@ -22,7 +22,7 @@
   "external_fan": {
     "gpiochip": "gpiochip0",
     "line_offset": 200,
-    "active_high": true
+    "active_high": false
   },
   "control": {
     "temp_on_c": 60.0,

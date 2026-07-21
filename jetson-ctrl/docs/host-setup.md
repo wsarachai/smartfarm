@@ -89,6 +89,13 @@ Never drive a relay coil from a header pin — Nano GPIOs are 3.3V at a few mA, 
 typical 5V coil wants ~70 mA. Use an opto-isolated relay module or a
 logic-level MOSFET, powered separately, sharing ground with the Nano.
 
+**The as-built rig uses an active-low relay module**, so `external_fan.active_high`
+is `false`: logical ON drives line 200 **low**. The symptom that identified it was
+the fan running whenever the daemon was stopped — an unclaimed line reverts to
+input and floats/pulls low, which an active-low `IN` reads as asserted. Note this
+means the fan runs during any window where the daemon is not holding the line,
+including the gap between power-on and `jetson-ctrl` starting.
+
 Bench-test polarity before connecting the fan, and set `external_fan.active_high`
 to match:
 
