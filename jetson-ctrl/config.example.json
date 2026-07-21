@@ -1,7 +1,7 @@
 {
   "web_server": {
     "base_url": "http://localhost:3000",
-    "device_id": "jetson_ctrl_01",
+    "device_id": "jetson_ctrl_unit",
     "http_timeout_ms": 2000
   },
   "cadence": {
