@@ -122,9 +122,27 @@ Verify — at idle the fan should sit near 0 and the CPU should not be pinned at
 its maximum frequency:
 
 ```bash
-cat /sys/devices/pwm-fan/target_pwm                       # ~0 when cool
-cat /sys/devices/cpu/cpu0/cpufreq/scaling_cur_freq        # should vary with load
+cat /sys/devices/pwm-fan/target_pwm                             # ~0 when cool
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor       # schedutil, not performance
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq       # low (~102000), not == max
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq       # kHz, varies with load
 ```
+
+`scaling_governor` is the tell: `jetson_clocks` sets `performance` and raises the
+frequency floor to the ceiling, so a `schedutil` governor with a low
+`scaling_min_freq` means DVFS is genuinely back.
+
+A `target_pwm` of `0` on a cool box is auto mode working, not auto mode missing —
+the Nano's fan trip points sit around 50 °C, so it simply has no reason to spin
+yet. Confirm the governor can actually reach the fan:
+
+```bash
+for c in /sys/class/thermal/cooling_device*; do
+  echo "$(basename $c): $(cat $c/type) cur=$(cat $c/cur_state)/$(cat $c/max_state)"
+done
+```
+
+A `pwm-fan` entry in that list is the governor's handle on it.
 
 If `target_pwm` holds a constant mid-scale value while the box is cool,
 something is writing it — see the history below for how to find it.
