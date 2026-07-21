@@ -144,7 +144,8 @@ weaken.
 
 ## Config schema (`/etc/jetson-ctrl/config.json`)
 
-See `config.example.json`. Notable fields:
+Full parameter manual — defaults, validation, tuning: **[docs/config-reference.md](docs/config-reference.md)**.
+Summary of the notable fields:
 
 | Key | Meaning |
 |-----|---------|
@@ -158,9 +159,11 @@ See `config.example.json`. Notable fields:
 | `control.min_on_seconds` / `min_off_seconds` | Relay chatter protection. |
 | `override.max_duration_minutes` | Hard cap on any override's `until`. |
 
-> **GPIO line offsets are placeholders.** On the Jetson, map the physical 40-pin
-> header pin to its `gpiochip` line with `sudo gpioinfo` / `gpiofind`, then set
-> `line_offset` accordingly. JSON has no comments — document your pin choice here.
+> **GPIO line offsets are board-specific.** The as-built map (DHT22 = line 149 /
+> header pin 29, fan = line 200 / header pin 31) is verified on the target and
+> recorded in [docs/host-setup.md](docs/host-setup.md#gpio-allocation) — JSON has
+> no comments, so the reasoning lives there. Re-check with `sudo gpioinfo` on any
+> new board: the original placeholders pointed at SD card-detect.
 
 ---
 

@@ -105,8 +105,10 @@ OFF at rest, and confirm NVIDIA's governor owns the built-in fan
 
 Live config: `/etc/jetson-ctrl/config.json` (schema in `config.example.json`).
 **Hot-reloaded** on file change — edit and save; a bad edit is rejected and the
-last-known-good config keeps running. Full field reference in
-[DESIGN.md](DESIGN.md#config-schema-etcjetson-ctrlconfigjson).
+last-known-good config keeps running.
+
+**Every parameter explained, with defaults, validation rules and tuning advice:
+[docs/config-reference.md](docs/config-reference.md).**
 
 ## Remote override
 

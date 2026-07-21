@@ -25,15 +25,15 @@ struct Config {
 
   struct {
     std::string gpiochip = "gpiochip0";
-    unsigned line_offset = 216;
+    unsigned line_offset = 149;  // Nano header pin 29; verify with gpioinfo
     int max_retries = 3;
     long stale_after_ms = 30000;
   } dht22;
 
   struct {
     std::string gpiochip = "gpiochip0";
-    unsigned line_offset = 194;
-    bool active_high = true;
+    unsigned line_offset = 200;  // Nano header pin 31; 194 is SD card-detect
+    bool active_high = true;     // bench-test before trusting: fan.cpp fails to ON
   } fan;
 
   struct {
