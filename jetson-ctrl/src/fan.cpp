@@ -1,7 +1,11 @@
 #include "fan.hpp"
 
 #include <gpiod.h>
+
+#include <cerrno>
+#include <cstring>
 #include <stdexcept>
+#include <string>
 
 #include "log.hpp"
 
@@ -21,16 +25,32 @@ Fan::~Fan() {
 }
 
 void Fan::init_on() {
+  // Every failure below names the chip and offset. Without them the operator
+  // cannot tell a mis-set config from a line another driver already holds --
+  // and a placeholder offset pointing at, say, SD card-detect looks identical
+  // to a wiring fault from the log alone.
+  const std::string where = chip_name_ + ":" + std::to_string(line_off_);
+
   chip_ = gpiod_chip_open_by_name(chip_name_.c_str());
-  if (!chip_) throw std::runtime_error("fan: cannot open " + chip_name_);
+  if (!chip_)
+    throw std::runtime_error("fan: cannot open " + chip_name_ + ": " +
+                             std::strerror(errno));
   line_ = gpiod_chip_get_line(chip_, line_off_);
-  if (!line_) throw std::runtime_error("fan: cannot get line");
+  if (!line_)
+    throw std::runtime_error("fan: cannot get line " + where + ": " +
+                             std::strerror(errno));
 
   // Boot-safe default: ON (Q10). Request the line already driven to the active
   // level so there's no OFF glitch between request and first write.
   int initial = active_high_ ? 1 : 0;
-  if (gpiod_line_request_output(line_, kConsumer, initial) != 0)
-    throw std::runtime_error("fan: cannot request output line");
+  if (gpiod_line_request_output(line_, kConsumer, initial) != 0) {
+    const int err = errno;
+    std::string msg = "fan: cannot request output line " + where + ": " +
+                      std::strerror(err);
+    if (err == EBUSY)
+      msg += " (another driver holds it -- check: gpioinfo " + chip_name_ + ")";
+    throw std::runtime_error(msg);
+  }
   on_ = true;
   last_change_ = steady_clock::now();
   LOG_INFO("fan: initialized ON (boot-safe default)");

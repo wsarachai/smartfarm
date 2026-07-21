@@ -10,7 +10,10 @@ Wants=local-fs.target
 Type=notify
 # Runs as root (v1): unrestricted /dev/gpiochip* + sysfs thermal access.
 User=root
-ExecStart=/usr/sbin/jetson-ctrl --config /etc/jetson-ctrl/config.json
+# /usr/local/sbin, not /usr/sbin: CMAKE_INSTALL_PREFIX defaults to /usr/local,
+# which is where locally-built software belongs on Ubuntu (/usr is dpkg's).
+# If you configure with -DCMAKE_INSTALL_PREFIX=/usr, change this to match.
+ExecStart=/usr/local/sbin/jetson-ctrl --config /etc/jetson-ctrl/config.json
 
 # Self-healing.
 Restart=always

@@ -67,9 +67,19 @@ sudo make -C build install                      # binary + unit + doc  (cmake --
 sudo mkdir -p /etc/jetson-ctrl
 sudo cp config.example.json /etc/jetson-ctrl/config.json   # edit before first run!
 sudo systemctl daemon-reload
+
+# Bench-test in the foreground BEFORE handing it to systemd — Restart=always
+# turns any startup failure into a 2-second restart loop that buries the cause.
+sudo /usr/local/sbin/jetson-ctrl --config /etc/jetson-ctrl/config.json
+
 sudo systemctl enable --now jetson-ctrl
 journalctl -u jetson-ctrl -f
 ```
+
+Installs to `CMAKE_INSTALL_PREFIX`, default `/usr/local` — so the binary lands
+at `/usr/local/sbin/jetson-ctrl`, which is what `systemd/jetson-ctrl.service`
+expects. Configure with `-DCMAKE_INSTALL_PREFIX=/usr` only if you also edit the
+unit's `ExecStart` to match.
 
 ## Before first run — you MUST set the GPIO line offsets
 
