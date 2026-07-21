@@ -28,6 +28,10 @@ for the original hand-written version: **[../docs/host-setup.md](../docs/host-se
   exits non-zero with the clock untouched. NTP can repair a missing time; a
   silently wrong one poisons TLS, `apt`, telemetry timestamps and the
   irrigation schedule.
-- **Not yet verified on hardware** — written from the running configuration on
-  `watcharin-desktop` but not re-run there. Test with
-  `sudo systemctl start ds3231-sync` and read the journal before rebooting.
+- **Installed and running** on the target (2026-07-21). `install.sh` completed,
+  the chip was migrated to the UTC convention with
+  `ds3231_writeback.py --force`, and the system clock comes up correct. **The
+  offline case is still unproven** — no reboot with the network unplugged, which
+  is the scenario the DS3231 exists for. Verify with
+  `journalctl -u ds3231-sync -b`: the sync line must appear *before* any network
+  or timesyncd line, or NTP is what fixed your clock, not the RTC.

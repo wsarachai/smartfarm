@@ -99,7 +99,14 @@ the wiring behind it are in
 
 Also **bench-test the relay polarity** (`external_fan.active_high`) so the fan is
 OFF at rest, and confirm NVIDIA's governor owns the built-in fan
-(`systemctl status nvfancontrol`).
+(`systemctl status nvfancontrol`). The as-built rig uses an **active-low** relay
+module, hence `"active_high": false` — do not assume yours matches:
+
+```bash
+sudo systemctl stop jetson-ctrl                # the daemon holds the line
+sudo gpioset -m wait gpiochip0 200=1           # fan runs here => active_high: true
+sudo gpioset -m wait gpiochip0 200=0           # fan runs here => active_high: false
+```
 
 ## Config
 
@@ -124,6 +131,24 @@ safety trigger always wins.
 
 ## Status
 
-Scaffold. Hardware-touching paths (`dht22.cpp` bit-bang, `fan.cpp`/thermal GPIO)
-are structured and commented but **not yet verified on real hardware** — build and
-bench-test on the target Jetson before trusting it.
+**Running on the target** (Jetson Nano, JetPack 4.x, 2026-07-21). Verified
+end-to-end by hand:
+
+- Builds on the Jetson's CMake 3.10.2.
+- `dht22.cpp` bit-bang decodes cleanly — 23.8 °C / 66.2 % against a DHT22 on
+  header pin 29, `enclosure_stale: false` (good checksums, not scraping by on
+  retries).
+- `thermal.cpp` resolves 2/2 zones; the control law decides and logs its reason.
+- `fan.cpp` drives a real active-low relay on header pin 31; fan confirmed off
+  at rest with the daemon running.
+- Telemetry reaches the web-server and appears on the dashboard.
+
+Not yet proven:
+
+- **Unattended reboot.** It has been started by hand, not yet observed coming up
+  clean on its own.
+- **The remote override path** (`force_on` / expiry) — never exercised.
+- **Sustained running.** No soak test, so nothing is known about DHT22 read
+  reliability once the enclosure is hot, or about relay behaviour over many
+  cycles. `dht22.cpp` logs nothing about retries or checksum failures, so a
+  sensor going marginal would surface only as `enclosure_stale` flipping.
