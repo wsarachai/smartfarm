@@ -111,6 +111,58 @@ Mind the boot window. The line floats until the daemon claims it; `fan.cpp` is
 fail-to-ON, so make sure your chosen polarity means *fan running* during that
 gap, not *fan stopped*.
 
+## Clocks and the built-in fan — deliberately left on auto
+
+**Nothing on this host overrides the SoC clocks or the built-in PWM fan.** That
+is a decision, not an omission, and `DESIGN.md` Q6 depends on it: NVIDIA's
+thermal governor owns the built-in fan as an untouched safety net *beneath*
+`jetson-ctrl`, which only ever drives the external enclosure fan.
+
+Verify — at idle the fan should sit near 0 and the CPU should not be pinned at
+its maximum frequency:
+
+```bash
+cat /sys/devices/pwm-fan/target_pwm                       # ~0 when cool
+cat /sys/devices/cpu/cpu0/cpufreq/scaling_cur_freq        # should vary with load
+```
+
+If `target_pwm` holds a constant mid-scale value while the box is cool,
+something is writing it — see the history below for how to find it.
+
+### What was here before (removed 2026-07-21)
+
+`/etc/rc.local` ran, after a 10 s sleep:
+
+```bash
+sudo /usr/bin/jetson_clocks
+sudo sh -c 'echo 128 > /sys/devices/pwm-fan/target_pwm'
+```
+
+Removed for three reasons:
+
+**`jetson_clocks` pins every clock to maximum and disables DVFS**, so the Nano
+ran flat out and generated near-maximum heat permanently, even idle. The control
+law's thresholds (`temp_on_c: 60`) were chosen against a normally-scaling SoC, so
+the two were tuned against different machines.
+
+**The `echo 128` was one-shot and not what it looked like.** Nothing re-applied
+it, and `thermal-fan-est` is still bound to the `pwm-fan` cooling device — so the
+governor overwrites it the moment a trip point is crossed. The manual value held
+only while the box was cool and yielded exactly when it got hot. Safe direction,
+but it meant "the fan is set to 128" was untrue in the only case that mattered.
+
+**It contradicted the design.** Q6 treats the built-in fan as an untouched
+backstop; overriding it at boot removed that guarantee silently.
+
+If you ever want max clocks back (AI inference latency, no ramp-up), reinstate it
+as a proper systemd unit committed here rather than in `rc.local` — and re-tune
+`control.temp_on_c`, because the idle thermal baseline moves substantially.
+
+> Incidental notes for anyone reading the old file: `sudo` inside `rc.local` is
+> redundant (it already runs as root — that is what filled the journal with
+> `pam_unix` lines), and the `sleep 10` delayed `multi-user.target` by ten
+> seconds for no stated reason.
+
 ## Timekeeping
 
 The Nano has no battery-backed clock of its own and often boots with no network,
@@ -223,6 +275,7 @@ mechanisms fight over one chip.
 
 | Symptom | Likely cause |
 |---|---|
+| Built-in fan pinned at a constant PWM while cool | Something overrides it at boot. `sudo grep -rIl -e target_pwm -e jetson_clocks /etc /usr/local /opt /home` |
 | `i2cdetect` shows nothing at `0x68` | Wiring, or the module has no power. Check pins 3/5, and 3.3V on pin 1. |
 | `OSF set` in the journal | Flat CR2032. Replace it, then run the writeback with `--force`. |
 | Clock is 7 hours out after install | The chip still holds local time — run the UTC migration above. |
