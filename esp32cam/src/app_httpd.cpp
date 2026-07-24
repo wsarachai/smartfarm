@@ -28,6 +28,17 @@ static httpd_handle_t stream_httpd = NULL;  // port 81: MJPEG stream
 #define LED_LEDC_CHANNEL  2
 static int led_intensity = 0;  // 0 (off) .. 255 (full)
 
+// Arduino-ESP32 core v3 made the whole LEDC API *pin*-based: ledcWrite(pin,duty)
+// (the channel is auto-assigned by ledcAttach). Core v2 is *channel*-based:
+// ledcWrite(channel,duty). Writing the channel number on v3 targets the wrong
+// GPIO (channel 2 -> pin 2, not the flash on pin 4) — which is why the LED never
+// lit. Address the right thing per core version.
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+  #define LED_LEDC_TARGET  LED_GPIO_NUM
+#else
+  #define LED_LEDC_TARGET  LED_LEDC_CHANNEL
+#endif
+
 static void setupLedFlash() {
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
   // Arduino-ESP32 core v3 uses ledcAttach(pin, freq, resolution).
@@ -37,7 +48,7 @@ static void setupLedFlash() {
   ledcSetup(LED_LEDC_CHANNEL, 5000, 8);   // 5 kHz, 8-bit duty (0..255)
   ledcAttachPin(LED_GPIO_NUM, LED_LEDC_CHANNEL);
 #endif
-  ledcWrite(LED_LEDC_CHANNEL, led_intensity);  // start off
+  ledcWrite(LED_LEDC_TARGET, led_intensity);  // start off
 }
 
 // ---- Web UI --------------------------------------------------------------
@@ -233,7 +244,7 @@ static esp_err_t control_handler(httpd_req_t *req) {
   else if (!strcmp(var, "vflip"))      r = s->set_vflip(s, val);
   else if (!strcmp(var, "led_intensity")) {
     led_intensity = val < 0 ? 0 : (val > 255 ? 255 : val);
-    ledcWrite(LED_LEDC_CHANNEL, led_intensity);
+    ledcWrite(LED_LEDC_TARGET, led_intensity);
   }
   else { httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown var"); return ESP_FAIL; }
 
