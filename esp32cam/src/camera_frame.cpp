@@ -19,8 +19,10 @@ static void          (*s_applyDefaults)(sensor_t *) = NULL;
 
 // Serializes frame grabs against a deinit/reinit. The control server (:80) can
 // change framesize on a different task from the one streaming on :81; without
-// this, a reinit could free the frame-buffer pool mid-grab. Only the software
-// path ever reinits, but grabbing always takes the lock so the two can't race.
+// this, a reinit could free the frame-buffer pool mid-grab. A framesize change
+// reinits the camera (on either module), and every grab copies the JPEG out and
+// returns the camera buffer before releasing this lock — so no buffer is ever
+// checked out across a reinit.
 static SemaphoreHandle_t s_lock = NULL;
 static inline void lock()   { if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY); }
 static inline void unlock() { if (s_lock) xSemaphoreGive(s_lock); }
@@ -63,9 +65,9 @@ bool jpeg_frame_grab(jpeg_frame_t *out, int max_tries) {
   if (max_tries < 1) max_tries = 1;
 
   // Held for the whole grab so a framesize reinit can't free the fb pool under
-  // us. On the software path the fb is returned before we exit, so nothing is
-  // checked out past the lock; on the native path the fb outlives the lock, but
-  // that path never reinits, so the pool is stable.
+  // us. Both paths return the camera buffer before releasing the lock (the
+  // native path copies the JPEG into an owned buffer first), so nothing is ever
+  // checked out across a reinit.
   lock();
   for (int i = 0; i < max_tries; i++) {
     camera_fb_t *fb = esp_camera_fb_get();
@@ -76,7 +78,19 @@ bool jpeg_frame_grab(jpeg_frame_t *out, int max_tries) {
       // still over returning quickly (AI use-case), but on the final attempt
       // take whatever we have rather than dropping the cycle entirely.
       if (looks_like_jpeg(fb->buf, fb->len) || i == max_tries - 1) {
-        out->buf = fb->buf; out->len = fb->len; out->fb = fb; out->owned = false;
+        // Copy out (PSRAM-first — a UXGA JPEG can overflow internal RAM) so the
+        // camera buffer goes straight back and isn't held past the lock.
+        uint8_t *copy = (uint8_t *)ps_malloc(fb->len);
+        if (!copy) copy = (uint8_t *)malloc(fb->len);
+        if (copy) {
+          memcpy(copy, fb->buf, fb->len);
+          out->buf = copy; out->len = fb->len; out->fb = NULL; out->owned = true;
+          esp_camera_fb_return(fb);
+        } else {
+          // Out of memory to copy: fall back to zero-copy (hold the fb). Rare;
+          // a concurrent reinit would just have to wait for the release.
+          out->buf = fb->buf; out->len = fb->len; out->fb = fb; out->owned = false;
+        }
         unlock();
         return true;
       }
@@ -108,23 +122,15 @@ void jpeg_frame_release(jpeg_frame_t *f) {
 
 framesize_t camera_set_framesize(framesize_t f) {
   if (f > s_maxFramesize) f = s_maxFramesize;  // RGB565 modules run out of PSRAM
-
-  if (s_nativeJpeg) {
-    // Hardware JPEG (OV3660/OV2640): the capture is a variable-length byte
-    // stream, so the sensor can be re-windowed live — just poke the register.
-    sensor_t *s = esp_camera_sensor_get();
-    if (s) s->set_framesize(s, f);
-    return f;
-  }
-
-  // Software path (GC2145): the RGB565 DMA is sized at init, and the GC2145's
-  // set_framesize only rewrites sensor registers — it does NOT resize the frame
-  // buffer, so a live change desyncs the capture (the reported "can't switch
-  // resolution"). Do a full deinit+reinit at the new size instead. Serialized
-  // against grabs by the lock so no frame is in flight across the teardown.
   if (!s_cfgValid) return camera_get_framesize();
   if (f == s_cfg.frame_size) return f;  // nothing to do
 
+  // Full deinit+reinit at the new size, on BOTH modules. The GC2145's
+  // set_framesize only rewrites sensor registers without resizing the RGB565
+  // DMA buffer; the OV sensors re-window live but that proved unreliable here.
+  // A reinit is the one path that always actually changes the resolution.
+  // Serialized against grabs by the lock so no frame is in flight across the
+  // teardown (every grab returns its camera buffer before releasing the lock).
   lock();
   framesize_t prev = s_cfg.frame_size;
   esp_camera_deinit();
@@ -138,10 +144,14 @@ framesize_t camera_set_framesize(framesize_t f) {
     f = prev;
   }
   if (err == ESP_OK) {
+    // Reinit reset the sensor: re-apply the module's tuning and the current
+    // quality (the OV quality register reverts to the config default otherwise).
     sensor_t *s = esp_camera_sensor_get();
-    if (s && s_applyDefaults) s_applyDefaults(s);  // reinit wiped the tweaks
+    if (s && s_applyDefaults) s_applyDefaults(s);
+    camera_set_quality(s_quality);
   }
   unlock();
+  Serial.printf("[cam] framesize -> %d (reinit %s)\n", f, err == ESP_OK ? "ok" : "FAILED");
   return f;
 }
 
