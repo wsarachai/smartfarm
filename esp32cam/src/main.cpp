@@ -19,6 +19,8 @@
 
 #include "secrets.h"
 #include "camera_pins.h"
+#include "camera_module.h"
+#include "camera_frame.h"
 
 // v2 health telemetry defaults — override in secrets.h. TELEMETRY_URL empty
 // disables the health POST, so an older secrets.h still compiles and runs.
@@ -49,8 +51,35 @@ static uint32_t g_rebootIntervalHours = 24;  // local fallback reboot (0 = off)
 // Defined in app_httpd.cpp — starts the control server (port 80) and stream
 // server (port 81). Returns true if the control UI (:80) started.
 bool startCameraServer();
-// Defined in app_httpd.cpp — grab a validated (complete) JPEG frame.
-camera_fb_t *grab_validated_frame(int max_tries);
+
+// Per-module sensor tuning. Re-applied by camera_frame after every reinit (a
+// framesize change on the software path resets the sensor registers), so it
+// must be idempotent and safe to call repeatedly.
+static void applyModuleSensorDefaults(sensor_t *s) {
+  if (!s) return;
+  if (s->id.PID == OV3660_PID) {
+    // OV3660 ships slightly washed out & upside-down on this board — correct it.
+    s->set_vflip(s, 1);
+    s->set_brightness(s, 1);
+    s->set_saturation(s, -2);
+  } else if (s->id.PID == GC2145_PID) {
+    // GC2145 has no brightness/contrast/saturation controls at all (its driver
+    // returns -1), so orientation is the only thing worth setting here. It also
+    // reads mirrored on this socket.
+    s->set_hmirror(s, 1);
+  }
+}
+
+static const char *sensorName(int pid) {
+  switch (pid) {
+    case OV3660_PID: return "OV3660";
+    case OV2640_PID: return "OV2640";
+    case GC2145_PID: return "GC2145 (RHYX M21-45)";
+    case GC032A_PID: return "GC032A";
+    case GC0308_PID: return "GC0308";
+    default:         return "unknown";
+  }
+}
 
 static void initCamera() {
   camera_config_t config;
@@ -72,27 +101,56 @@ static void initCamera() {
   config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn     = PWDN_GPIO_NUM;
   config.pin_reset    = RESET_GPIO_NUM;
-  // 10 MHz (vs the usual 20) gives the DMA capture path maximum margin against
-  // dropped bytes, which show up as random colored horizontal lines. This is an
-  // AI feed — FPS is irrelevant, clean frames are everything.
-  config.xclk_freq_hz = 10000000;
-  config.frame_size   = FRAMESIZE_UXGA;         // 1600x1200 — max detail for AI
-  config.pixel_format = PIXFORMAT_JPEG;         // streaming
-  config.grab_mode    = CAMERA_GRAB_WHEN_EMPTY; // only complete, in-order frames
+  // All of these come from the module profile in camera_module.h, selected by
+  // the -DCAMERA_MODULE_* build flag.
+  config.xclk_freq_hz = CAM_XCLK_HZ;
+  config.frame_size   = CAM_FRAME_SIZE;
+  config.pixel_format = CAM_PIXEL_FORMAT;
+  config.grab_mode    = CAM_GRAB_MODE;
   config.fb_location  = CAMERA_FB_IN_PSRAM;
-  config.jpeg_quality = 12;                  // lower = better quality / bigger; 12 is the safe floor at UXGA
-  config.fb_count     = 2;                   // double buffer (needs PSRAM)
+  config.jpeg_quality = CAM_QUALITY_DEFAULT;  // ignored unless the sensor encodes
+  config.fb_count     = CAM_FB_COUNT;
+
+  Serial.printf("[cam] module profile: %s (%s JPEG)\n", CAM_MODULE_NAME,
+                CAM_NATIVE_JPEG ? "hardware" : "software");
 
   if (!psramFound()) {
     // No PSRAM: fall back to a config that fits internal RAM so we still boot.
+    // RGB565 can't survive this — even VGA is 600 KB — so a software-encoding
+    // module is effectively PSRAM-only.
     Serial.println("[cam] WARNING: PSRAM not found — falling back to VGA/single buffer");
     config.frame_size  = FRAMESIZE_VGA;
     config.fb_location = CAMERA_FB_IN_DRAM;
     config.fb_count    = 1;
     config.grab_mode   = CAMERA_GRAB_WHEN_EMPTY;
+    if (config.pixel_format != PIXFORMAT_JPEG) {
+      Serial.println("[cam] WARNING: RGB565 needs PSRAM — dropping to QVGA");
+      config.frame_size = FRAMESIZE_QVGA;
+    }
   }
 
+  bool        nativeJpeg = (config.pixel_format == PIXFORMAT_JPEG);
+  framesize_t maxSize    = CAM_MAX_FRAME_SIZE;
+
   esp_err_t err = esp_camera_init(&config);
+
+  if (err == ESP_ERR_NOT_SUPPORTED && nativeJpeg) {
+    // The fitted sensor has no hardware JPEG encoder — an RHYX M21-45 (GC2145)
+    // in a board flashed with the OV3660 profile. Rather than boot-loop, retry
+    // on the software path so the camera still comes up; the operator gets a
+    // loud hint to flash the right env for correct defaults.
+    Serial.println("[cam] sensor rejected JPEG — no hardware encoder fitted.");
+    Serial.println("[cam] retrying in RGB565 + software encode "
+                   "(flash -e esp32cam_rhyx for proper defaults)");
+    config.pixel_format = PIXFORMAT_RGB565;
+    config.frame_size   = FRAMESIZE_SVGA;  // RGB565 at UXGA would eat all of PSRAM
+    config.fb_count     = 2;               // 1 stalls fb_get on RGB565 (see camera_module.h)
+    config.grab_mode    = CAMERA_GRAB_LATEST;
+    nativeJpeg          = false;
+    maxSize             = FRAMESIZE_SVGA;
+    err = esp_camera_init(&config);
+  }
+
   if (err != ESP_OK) {
     Serial.printf("[cam] init failed (0x%x) — check ribbon cable & power, then reset\n", err);
     // Nothing works without the sensor; reboot to retry rather than hang half-alive.
@@ -102,16 +160,16 @@ static void initCamera() {
 
   // Sensor is up. Report which one and apply a couple of sensible defaults.
   sensor_t *s = esp_camera_sensor_get();
-  Serial.printf("[cam] sensor PID: 0x%x (%s)\n", s->id.PID,
-                s->id.PID == OV3660_PID ? "OV3660" :
-                s->id.PID == OV2640_PID ? "OV2640" : "unknown");
+  Serial.printf("[cam] sensor PID: 0x%x (%s)\n", s->id.PID, sensorName(s->id.PID));
+  applyModuleSensorDefaults(s);
 
-  if (s->id.PID == OV3660_PID) {
-    // OV3660 ships slightly washed out & upside-down on this board — correct it.
-    s->set_vflip(s, 1);
-    s->set_brightness(s, 1);
-    s->set_saturation(s, -2);
-  }
+  // Tell the frame layer what we actually ended up with, not what was compiled.
+  // Pass the winning config + the tuning callback so the software path can
+  // reinit for a framesize change and re-apply these tweaks afterward.
+  camera_frame_begin(&config, nativeJpeg, maxSize, applyModuleSensorDefaults);
+  Serial.printf("[cam] ready: %s, max %s\n",
+                nativeJpeg ? "hardware JPEG" : "RGB565 -> software JPEG",
+                maxSize == FRAMESIZE_UXGA ? "UXGA" : "SVGA");
 }
 
 static void connectWiFi() {
@@ -281,25 +339,25 @@ static void saveToSD(const uint8_t *buf, size_t len) {
 // Capture one validated JPEG, save it to SD (rolling), and POST it (raw body,
 // image/jpeg) to PUSH_URL.
 static void pushSnapshot() {
-  camera_fb_t *fb = grab_validated_frame(5);
-  if (!fb) { Serial.println("[push] capture failed — skipping"); return; }
+  jpeg_frame_t f;
+  if (!jpeg_frame_grab(&f, 5)) { Serial.println("[push] capture failed — skipping"); return; }
 
 #if SD_SAVE_ENABLED
-  saveToSD(fb->buf, fb->len);
+  saveToSD(f.buf, f.len);
 #endif
 
   WiFiClient client;
   HTTPClient http;
   if (http.begin(client, PUSH_URL)) {
     http.addHeader("Content-Type", "image/jpeg");
-    int code = http.POST(fb->buf, fb->len);
-    if (code > 0) Serial.printf("[push] POST %s -> %d (%u bytes)\n", PUSH_URL, code, fb->len);
+    int code = http.POST(f.buf, f.len);
+    if (code > 0) Serial.printf("[push] POST %s -> %d (%u bytes)\n", PUSH_URL, code, (unsigned)f.len);
     else          Serial.printf("[push] POST failed: %s\n", http.errorToString(code).c_str());
     http.end();
   } else {
     Serial.println("[push] http.begin() failed (bad URL?)");
   }
-  esp_camera_fb_return(fb);
+  jpeg_frame_release(&f);
 }
 
 // v2: report device health to the hub's generic telemetry endpoint so the
@@ -361,15 +419,20 @@ static void fetchConfig() {
       }
       // Server-driven health reboot: honored after we finish reading the body.
       doReboot = doc["reboot"].is<bool>() && doc["reboot"].as<bool>();
-      sensor_t *s = esp_camera_sensor_get();
-      if (s) {
-        const char *fs = doc["framesize"] | "";
-        framesize_t f = framesizeFromStr(fs);
-        if (f != FRAMESIZE_INVALID) s->set_framesize(s, f);
-        if (!doc["jpeg_quality"].isNull()) {
-          int q = doc["jpeg_quality"].as<int>();
-          if (q >= 4 && q <= 63) s->set_quality(s, q);
-        }
+      // Both of these go through the frame layer so the hub can keep sending
+      // one schema regardless of which module is fitted: framesize is clamped
+      // to the module ceiling, and quality is retargeted at the software
+      // encoder when the sensor has no hardware one.
+      const char *fs = doc["framesize"] | "";
+      framesize_t f = framesizeFromStr(fs);
+      if (f != FRAMESIZE_INVALID) {
+        framesize_t applied = camera_set_framesize(f);
+        if (applied != f)
+          Serial.printf("[config] framesize %s clamped to this module's max\n", fs);
+      }
+      if (!doc["jpeg_quality"].isNull()) {
+        int q = doc["jpeg_quality"].as<int>();
+        if (q >= 4 && q <= 63) camera_set_quality(q);
       }
     }
   } else {
@@ -388,7 +451,7 @@ static void fetchConfig() {
 void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(false);
-  Serial.println("\n\n=== ESP32-CAM IP Camera (v1) ===");
+  Serial.println("\n\n=== ESP32-CAM IP Camera (v1) — module: " CAM_MODULE_NAME " ===");
 
   initCamera();
 #if SD_SAVE_ENABLED

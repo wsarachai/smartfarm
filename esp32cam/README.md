@@ -4,6 +4,45 @@ A LAN-only IP camera on the AI-Thinker **ESP32-CAM**, flashed via the
 **ESP32-CAM-MB** (CH340G) adapter. Live MJPEG stream + on-demand snapshot,
 viewable in any browser.
 
+## Camera modules
+
+The same AI-Thinker board ships with different sensors behind the ribbon. Two
+are supported, each with its own build env — **flash the one that matches your
+module**:
+
+| Module | Sensor | Env | JPEG | Notes |
+|---|---|---|---|---|
+| Original | OV3660 / OV2640 | `esp32cam` | **Hardware** | UXGA, the v1 tuning, unchanged |
+| RHYX M21-45 | GC2145 | `esp32cam_rhyx` | **Software** | SVGA max, no image sliders |
+
+The socket and pin map are identical, so this is a **build-flag choice**
+(`-DCAMERA_MODULE_*` in `platformio.ini`, profiles in `src/camera_module.h`),
+not rewiring.
+
+**Why the RHYX needs its own build:** the GC2145 has **no hardware JPEG
+encoder** — it only emits RGB565/YUV422. Asking `esp_camera_init()` for
+`PIXFORMAT_JPEG` (what the OV profile does) fails with
+`ESP_ERR_NOT_SUPPORTED`, which would boot-loop. The `esp32cam_rhyx` profile
+instead captures RGB565 and compresses to JPEG **on the CPU** (`frame2jpg`),
+so everything downstream — the stream, `/capture`, the snapshot push to the hub —
+still sees a normal JPEG. Consequences of software encoding:
+
+- **Resolution ceiling is SVGA** (800×600). RGB565 is 2 bytes/px, so UXGA would
+  need a 3.84 MB frame buffer (out of 4 MB PSRAM) and overflow the encoder's
+  fixed 128 KB output buffer. The ceiling is enforced at runtime, and the web
+  UI hides the resolutions this module can't reach.
+- **No brightness / contrast / saturation** — the GC2145 driver doesn't
+  implement them (returns −1). Those sliders are greyed out in the UI.
+- **Quality** still uses the familiar hardware scale (4–63, lower = better);
+  the firmware maps it onto the software encoder internally, so the hub's
+  `jpeg_quality` config and the UI slider work unchanged.
+
+If you flash the wrong env (OV profile on an RHYX board), the firmware
+**detects the rejected-JPEG failure at boot and falls back to the software
+path automatically** so the camera still comes up — but flash `esp32cam_rhyx`
+for the correct defaults and ceiling. The serial log and the web UI header both
+name the module actually detected.
+
 ## Design (v1)
 
 | Decision | Choice |
@@ -31,9 +70,11 @@ viewable in any browser.
    to pin a fixed address, add a MAC reservation in ap-server instead. The MAC
    is printed on the serial monitor at boot.
 
-2. First flash over USB (ESP32-CAM-MB plugged in):
+2. First flash over USB (ESP32-CAM-MB plugged in). Pick the env for your
+   module (see the table above):
    ```
-   pio run -e esp32cam --target upload
+   pio run -e esp32cam --target upload        # OV3660 / OV2640
+   pio run -e esp32cam_rhyx --target upload    # RHYX M21-45 (GC2145)
    pio device monitor
    ```
    The MB adapter handles boot mode + auto-reset — no GPIO0 jumper needed.
@@ -50,10 +91,12 @@ Once the OTA-capable firmware is on the board (step 2 above), push future
 updates wirelessly from any machine on the same WiFi:
 
 ```
-pio run -e esp32cam_ota --target upload
+pio run -e esp32cam_ota --target upload        # OV3660 / OV2640
+pio run -e esp32cam_rhyx_ota --target upload    # RHYX M21-45 (GC2145)
 ```
 
-- Target IP and `--auth` password live in `platformio.ini` under `[env:esp32cam_ota]`.
+- Target IP and `--auth` password live in `platformio.ini` under `[env:esp32cam_ota]`
+  (the RHYX OTA env extends `esp32cam_rhyx` and reuses the same IP/auth).
 - The `--auth` value **must match** `OTA_PASSWORD` in `include/secrets.h`.
 - Changing the OTA password requires one USB reflash (the board authenticates
   the incoming update against the password it's *currently* running).
@@ -75,6 +118,13 @@ pio run -e esp32cam_ota --target upload
   supply and a short, thick cable. Weak USB ports sag under the camera's
   current spikes.
 - **`camera init failed`** → reseat the ribbon cable; confirm power.
+- **`sensor rejected JPEG — no hardware encoder fitted`** in the boot log → the
+  board has an **RHYX M21-45 (GC2145)** but was flashed with the OV env. It
+  auto-falls back to software JPEG so it still works; reflash `esp32cam_rhyx`
+  for the correct SVGA ceiling and defaults.
+- **Resolution won't go above SVGA / image sliders do nothing** → expected on
+  the RHYX M21-45; the GC2145 encodes in software (SVGA max) and has no
+  brightness/contrast/saturation controls. See *Camera modules* above.
 - **Can't reach `esp32cam.local`** → mDNS is flaky on some Android/Windows
   setups; use the DHCP-assigned IP directly (printed on the serial monitor at
   boot, or visible in ap-server's client list).

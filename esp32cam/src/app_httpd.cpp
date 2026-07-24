@@ -10,6 +10,8 @@
 #include "esp_timer.h"
 #include "img_converters.h"
 #include "Arduino.h"
+#include "camera_module.h"
+#include "camera_frame.h"
 
 // ---- MJPEG multipart stream framing --------------------------------------
 #define PART_BOUNDARY "123456789000000000000987654321"
@@ -60,10 +62,12 @@ static const char INDEX_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   button{cursor:pointer}
   button.primary{background:#2d6cdf;border-color:#2d6cdf}
   .btns{display:flex;gap:8px;margin-top:8px}
+  .row.off{opacity:.4}
+  .mod{font-weight:400;font-size:13px;color:#9aa}
 </style>
 </head>
 <body>
-<header>ESP32-CAM &middot; live</header>
+<header>ESP32-CAM &middot; live <span class="mod" id="mod"></span></header>
 <div class="wrap">
   <div class="view">
     <img id="stream" src="">
@@ -122,6 +126,25 @@ static const char INDEX_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   fetch(base + '/status').then(r=>r.json()).then(function(s){
     for (var k in s){ var e = document.getElementById(k); if(!e) continue;
       if (e.type === 'checkbox') e.checked = !!s[k]; else e.value = s[k]; }
+
+    document.getElementById('mod').textContent =
+      '· ' + s.module + (s.native_jpeg ? '' : ' · software JPEG');
+
+    // Hide resolutions above what this module can do — on a software-encoding
+    // sensor the ceiling is PSRAM and the encoder's fixed output buffer, so
+    // offering UXGA would just fail silently.
+    var fsSel = document.getElementById('framesize');
+    Array.prototype.forEach.call(fsSel.options, function(o){
+      o.hidden = o.disabled = (+o.value > s.max_framesize);
+    });
+
+    // The GC2145 driver implements none of these, so don't pretend they work.
+    if (!s.adjustable) {
+      ['brightness','contrast','saturation'].forEach(function(id){
+        var e = document.getElementById(id);
+        e.disabled = true; e.closest('.row').classList.add('off');
+      });
+    }
   }).catch(()=>{});
 
   startStream();
@@ -137,30 +160,13 @@ static esp_err_t index_handler(httpd_req_t *req) {
   return httpd_resp_send(req, INDEX_HTML, strlen(INDEX_HTML));
 }
 
-// A structurally valid JPEG starts with SOI (FF D8) and ends with EOI (FF D9).
-// Truncated/byte-dropped frames fail this — cheap way to reject obvious garbage.
-static bool looks_like_jpeg(camera_fb_t *fb) {
-  return fb && fb->format == PIXFORMAT_JPEG && fb->len > 100 &&
-         fb->buf[0] == 0xFF && fb->buf[1] == 0xD8 &&
-         fb->buf[fb->len - 2] == 0xFF && fb->buf[fb->len - 1] == 0xD9;
-}
-
-// Grab a frame that passes the JPEG sanity check, retrying a few times.
-// Favors returning a clean still over returning quickly (AI use-case).
-// Non-static: also used by the periodic snapshot push in main.cpp.
-camera_fb_t *grab_validated_frame(int max_tries) {
-  camera_fb_t *fb = NULL;
-  for (int i = 0; i < max_tries; i++) {
-    fb = esp_camera_fb_get();
-    if (looks_like_jpeg(fb)) return fb;
-    if (fb) esp_camera_fb_return(fb);  // drop bad frame, try again
-  }
-  return esp_camera_fb_get();  // last resort: whatever we can get
-}
+// Frame acquisition (including the software-encode path for modules without a
+// hardware JPEG encoder) lives in camera_frame.cpp — these handlers only ever
+// see a finished JPEG.
 
 static esp_err_t capture_handler(httpd_req_t *req) {
-  camera_fb_t *fb = grab_validated_frame(5);
-  if (!fb) {
+  jpeg_frame_t f;
+  if (!jpeg_frame_grab(&f, 5)) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
   }
@@ -168,17 +174,8 @@ static esp_err_t capture_handler(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
-  esp_err_t res = ESP_OK;
-  if (fb->format == PIXFORMAT_JPEG) {
-    res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
-  } else {
-    // Non-JPEG buffer (shouldn't happen with our config) — convert on the fly.
-    uint8_t *jpg = NULL; size_t jpg_len = 0;
-    bool ok = frame2jpg(fb, 80, &jpg, &jpg_len);
-    if (ok) { res = httpd_resp_send(req, (const char *)jpg, jpg_len); free(jpg); }
-    else    { httpd_resp_send_500(req); res = ESP_FAIL; }
-  }
-  esp_camera_fb_return(fb);
+  esp_err_t res = httpd_resp_send(req, (const char *)f.buf, f.len);
+  jpeg_frame_release(&f);
   return res;
 }
 
@@ -190,32 +187,22 @@ static esp_err_t stream_handler(httpd_req_t *req) {
 
   char part_buf[128];  // must fit the full header incl. 10-digit epoch + usec
   while (true) {
-    camera_fb_t *fb = esp_camera_fb_get();
-    if (!fb) { res = ESP_FAIL; break; }
-
-    // Drop obviously corrupt (truncated) frames so the live view doesn't flash garbage.
-    if (fb->format == PIXFORMAT_JPEG && !looks_like_jpeg(fb)) {
-      esp_camera_fb_return(fb);
-      continue;
-    }
-
-    uint8_t *jpg = fb->buf; size_t jpg_len = fb->len; bool converted = false;
-    if (fb->format != PIXFORMAT_JPEG) {
-      converted = frame2jpg(fb, 80, &jpg, &jpg_len);
-      if (!converted) { esp_camera_fb_return(fb); res = ESP_FAIL; break; }
-    }
+    // Fewer retries than the snapshot push (5): the live view would rather show
+    // a slightly imperfect frame than stall, but still discards the obviously
+    // truncated ones so it doesn't flash garbage.
+    jpeg_frame_t f;
+    if (!jpeg_frame_grab(&f, 3)) { res = ESP_FAIL; break; }
 
     struct timeval ts; gettimeofday(&ts, NULL);
     size_t hlen = snprintf(part_buf, sizeof(part_buf), STREAM_PART,
-                           jpg_len, (int)ts.tv_sec, (int)ts.tv_usec);
+                           f.len, (int)ts.tv_sec, (int)ts.tv_usec);
 
     if ((res = httpd_resp_send_chunk(req, STREAM_BOUNDARY, strlen(STREAM_BOUNDARY))) == ESP_OK)
       res = httpd_resp_send_chunk(req, part_buf, hlen);
     if (res == ESP_OK)
-      res = httpd_resp_send_chunk(req, (const char *)jpg, jpg_len);
+      res = httpd_resp_send_chunk(req, (const char *)f.buf, f.len);
 
-    if (converted) free(jpg);
-    esp_camera_fb_return(fb);
+    jpeg_frame_release(&f);
     if (res != ESP_OK) break;  // client disconnected
   }
   return res;
@@ -233,8 +220,12 @@ static esp_err_t control_handler(httpd_req_t *req) {
   int val = atoi(valstr);
   sensor_t *s = esp_camera_sensor_get();
   int r = 0;
-  if      (!strcmp(var, "framesize"))  r = s->set_framesize(s, (framesize_t)val);
-  else if (!strcmp(var, "quality"))    r = s->set_quality(s, val);
+  // framesize/quality go through camera_frame so the module ceiling is enforced
+  // and quality reaches whichever encoder is actually in use. The rest are plain
+  // sensor controls — note the GC2145 has none of them and returns -1, which the
+  // UI reflects by disabling those sliders (see /status "adjustable").
+  if      (!strcmp(var, "framesize"))  camera_set_framesize((framesize_t)val);
+  else if (!strcmp(var, "quality"))    camera_set_quality(val);
   else if (!strcmp(var, "brightness")) r = s->set_brightness(s, val);
   else if (!strcmp(var, "contrast"))   r = s->set_contrast(s, val);
   else if (!strcmp(var, "saturation")) r = s->set_saturation(s, val);
@@ -251,15 +242,23 @@ static esp_err_t control_handler(httpd_req_t *req) {
 }
 
 // /status — current sensor state as JSON so the UI can sync its controls.
+// Also reports the fitted module's capabilities: "max_framesize" so the UI can
+// grey out resolutions this sensor can't reach, and "adjustable" so it can grey
+// out the image sliders the GC2145 simply doesn't implement.
 static esp_err_t status_handler(httpd_req_t *req) {
   sensor_t *s = esp_camera_sensor_get();
-  char json[256];
+  bool adjustable = camera_native_jpeg();  // OV-series: yes; GC2145: no
+  char json[384];
   snprintf(json, sizeof(json),
            "{\"framesize\":%u,\"quality\":%u,\"brightness\":%d,\"contrast\":%d,"
-           "\"saturation\":%d,\"led_intensity\":%d,\"hmirror\":%u,\"vflip\":%u}",
-           s->status.framesize, s->status.quality, s->status.brightness,
+           "\"saturation\":%d,\"led_intensity\":%d,\"hmirror\":%u,\"vflip\":%u,"
+           "\"module\":\"%s\",\"sensor_pid\":%u,\"native_jpeg\":%s,"
+           "\"max_framesize\":%u,\"adjustable\":%s}",
+           s->status.framesize, camera_get_quality(), s->status.brightness,
            s->status.contrast, s->status.saturation, led_intensity,
-           s->status.hmirror, s->status.vflip);
+           s->status.hmirror, s->status.vflip,
+           CAM_MODULE_NAME, s->id.PID, camera_native_jpeg() ? "true" : "false",
+           (unsigned)camera_max_framesize(), adjustable ? "true" : "false");
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   return httpd_resp_send(req, json, strlen(json));
