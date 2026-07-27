@@ -230,7 +230,7 @@ function DiseasePanel() {
   const t = useT();
   const { data: current } = useGetDiseaseQuery();
   const { data: hist } = useGetDiseaseHistoryQuery(15);
-  const [analyze, { isLoading }] = useAnalyzeDiseaseMutation();
+  const [analyze, { isLoading, isError, reset }] = useAnalyzeDiseaseMutation();
   const status = current?.status ?? 'idle';
   const m = diseaseMeta(status);
   const busy = isLoading || current?.analyzing;
@@ -251,7 +251,10 @@ function DiseasePanel() {
         </div>
         <button
           type="button"
-          onClick={() => analyze()}
+          onClick={() => {
+            reset(); // clear a previous failure so a retry starts clean
+            analyze();
+          }}
           disabled={busy}
           className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-label-caps hover:brightness-110 disabled:opacity-50"
         >
@@ -259,6 +262,13 @@ function DiseasePanel() {
           {busy ? t('disease.analyzing') : t('disease.analyzeFrame')}
         </button>
       </div>
+
+      {/* A failed Analyze used to be swallowed silently: the cache kept the old
+          headline and the button just re-enabled, so a transient AI outage was
+          indistinguishable from a dead button. Say so instead. */}
+      {isError ? (
+        <p className="mb-3 font-data-mono text-[13px] text-error">{t('disease.analyzeFailed')}</p>
+      ) : null}
 
       {current?.detail ? (
         <p className="mb-3 font-data-mono text-[13px] text-error/90">{t('disease.modelHint', { detail: current.detail })}</p>

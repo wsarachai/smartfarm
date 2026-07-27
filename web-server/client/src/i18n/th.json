@@ -106,7 +106,8 @@
     "details": "รายละเอียด",
     "topPredictions": "การคาดการณ์อันดับต้น",
     "recentChecks": "การตรวจล่าสุด",
-    "modelHint": "{detail} — รันคำสั่ง smartfarm-ai/download_model.sh บน Jetson"
+    "modelHint": "{detail} — ดูวิธีติดตั้งโมเดลได้ที่ smartfarm-ai/README.md",
+    "analyzeFailed": "วิเคราะห์ไม่สำเร็จ — บริการ AI ไม่ตอบสนอง กรุณาลองใหม่อีกครั้ง"
   },
   "waterStress": {
     "riskTitle": "ความเสี่ยงการขาดน้ำ",

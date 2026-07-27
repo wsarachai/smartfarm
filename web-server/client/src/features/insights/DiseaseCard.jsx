@@ -8,7 +8,7 @@ import { useT } from '../../i18n';
 export default function DiseaseCard() {
   const t = useT();
   const { data } = useGetDiseaseQuery();
-  const [analyze, { isLoading }] = useAnalyzeDiseaseMutation();
+  const [analyze, { isLoading, isError, reset }] = useAnalyzeDiseaseMutation();
   const status = data?.status ?? 'idle';
   const m = diseaseMeta(status);
   const busy = isLoading || data?.analyzing;
@@ -26,12 +26,19 @@ export default function DiseaseCard() {
           <span className={`w-2.5 h-2.5 rounded-full ${m.dot}`} />
           <span className={`font-body-md text-sm ${m.text}`}>{data?.headline ?? t('disease.notAnalyzed')}</span>
         </div>
+        {/* Without this a failed analyze looked like a dead button (see DiseasePanel). */}
+        {isError ? (
+          <p className="mt-3 font-data-mono text-[12px] text-error">{t('disease.analyzeFailed')}</p>
+        ) : null}
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <button
           type="button"
-          onClick={() => analyze()}
+          onClick={() => {
+            reset(); // clear a previous failure so a retry starts clean
+            analyze();
+          }}
           disabled={busy}
           className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-3 py-2 rounded font-label-caps text-label-caps hover:brightness-110 disabled:opacity-50"
         >

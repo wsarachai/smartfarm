@@ -22,6 +22,7 @@ The web-server applies the confidence threshold + healthy/disease headline.
 """
 import json
 import os
+import threading
 import time
 from io import BytesIO
 
@@ -36,6 +37,12 @@ RETRY_AFTER_S = float(os.environ.get("DISEASE_RETRY_AFTER_S", "30"))
 
 # Lazily-initialized singletons (loaded once, on first inference).
 _state = {"loaded": False, "error": None, "failed_at": 0.0, "model": None, "labels": None, "cfg": None, "tf": None}
+
+# The service is threaded (ai_service.py), but neither backend is thread-safe:
+# a TFLite Interpreter holds one set of input/output tensors, so two concurrent
+# invokes would interleave and return each other's results. Serialize both the
+# lazy load and the inference. Cheap endpoints (/health, /canopy) stay parallel.
+_lock = threading.Lock()
 
 
 def _load_config():
@@ -230,12 +237,13 @@ def _ensure_loaded():
 
 def classify(jpeg_bytes, topk=DEFAULT_TOPK):
     """Return { modelLoaded, topK:[{label,confidence}], ... } or a not-loaded note."""
-    _ensure_loaded()
-    if not _state["loaded"]:
-        return {"modelLoaded": False, "error": _state["error"], "topK": []}
+    with _lock:
+        _ensure_loaded()
+        if not _state["loaded"]:
+            return {"modelLoaded": False, "error": _state["error"], "topK": []}
 
-    cfg = _state["cfg"]
-    scored = _BACKENDS[cfg["runtime"]][1](cfg, jpeg_bytes, topk)
-    labels = _state["labels"]
+        cfg = _state["cfg"]
+        scored = _BACKENDS[cfg["runtime"]][1](cfg, jpeg_bytes, topk)
+        labels = _state["labels"]
     top = [{"label": labels[i], "confidence": round(v * 100.0, 1)} for v, i in scored]
     return {"modelLoaded": True, "topK": top, "arch": cfg.get("arch"), "runtime": cfg["runtime"]}

@@ -23,7 +23,9 @@ export const diseaseApi = createApi({
           const { data } = await queryFulfilled;
           dispatch(diseaseApi.util.updateQueryData('getDisease', undefined, () => data));
         } catch {
-          // leave cache; the button re-enables and the user can retry
+          // Leave the cached result alone — a failed analyze shouldn't wipe the
+          // last good reading. The failure is surfaced via the mutation's
+          // isError flag (see DiseasePanel), not swallowed.
         }
       },
       invalidatesTags: ['Disease'], // refresh the history list

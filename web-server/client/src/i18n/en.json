@@ -106,7 +106,8 @@
     "details": "Details",
     "topPredictions": "Top predictions",
     "recentChecks": "Recent checks",
-    "modelHint": "{detail} — run smartfarm-ai/download_model.sh on the Jetson."
+    "modelHint": "{detail} — see smartfarm-ai/README.md to install the model.",
+    "analyzeFailed": "Analyze failed — the AI service did not respond. Try again."
   },
   "waterStress": {
     "riskTitle": "Water Stress Risk",

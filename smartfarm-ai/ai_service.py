@@ -16,7 +16,7 @@ stateless decision function. Run as the container command (see docker-compose.ai
 import json
 import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 # Import sibling modules regardless of the process working directory.
@@ -76,8 +76,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    server = HTTPServer(("0.0.0.0", PORT), Handler)
-    print("[smartfarm-ai] decision service listening on :%d" % PORT, flush=True)
+    # THREADING, not the plain HTTPServer: disease inference takes ~1s warm (and
+    # several seconds cold) on a Pi 3 B, and a serial server made every other
+    # caller queue behind it. The web-server's canopy (8s) and water-stress (4s)
+    # timeouts are tight enough that they'd trip and report "AI offline" purely
+    # because a disease request was in flight. The heavy inference still
+    # serializes on its own lock (see disease.py) — this just stops /health and
+    # the cheap endpoints from waiting in line.
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    server.daemon_threads = True  # don't let in-flight requests block shutdown
+    print("[smartfarm-ai] decision service listening on :%d (threaded)" % PORT, flush=True)
     server.serve_forever()
 
 
