@@ -1,0 +1,8 @@
+numpy>=1.19.5
+Pillow>=8.0.0
+# Note: PyTorch is optional. The disease detection module (disease.py) imports
+# torch and torchvision lazily on the first request. Because the Raspberry Pi 3 B
+# is resource-constrained (1GB RAM), PyTorch may be slow or run out of memory.
+# Uncomment the following lines only if you need the disease classification feature.
+# torch
+# torchvision
