@@ -1,14 +1,18 @@
-FROM python:3.9-slim
+FROM debian:bookworm-slim
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3, numpy, and pillow using pre-compiled Debian packages.
+# This prevents compiling numpy and Pillow from source, which fails/hangs on Raspberry Pi 3 B.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-numpy \
+    python3-pillow \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory inside the container
 WORKDIR /smartfarm-ai
-
-
-# Copy requirements.txt to leverage Docker cache
-COPY requirements.txt .
-
-# Install dependencies (will fetch pre-compiled wheels for ARM/Raspberry Pi)
-RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application files
 COPY . .
