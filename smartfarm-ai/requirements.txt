@@ -1,8 +1,19 @@
 numpy>=1.19.5
 Pillow>=8.0.0
-# Note: PyTorch is optional. The disease detection module (disease.py) imports
-# torch and torchvision lazily on the first request. Because the Raspberry Pi 3 B
-# is resource-constrained (1GB RAM), PyTorch may be slow or run out of memory.
-# Uncomment the following lines only if you need the disease classification feature.
-# torch
-# torchvision
+
+# Inference runtime for the disease endpoint (disease.py), imported lazily.
+# Which one you need depends on the HOST, not on preference:
+#
+#   Raspberry Pi (armv7l)  -> tflite-runtime. PyTorch publishes ZERO 32-bit ARM
+#                             wheels, so torch cannot be installed at all here.
+#                             The Dockerfile installs this; run models through
+#                             convert_to_tflite.py (off-Pi) to get a .tflite.
+#   Jetson / x86 / aarch64 -> torch + torchvision, using the .pth model.
+#
+# The Dockerfile installs tflite-runtime directly (pinned, --no-deps) rather than
+# from this file, so apt's prebuilt numpy/Pillow are kept — pip would rebuild
+# them from source, which hangs for hours on a Pi 3 B.
+#
+# tflite-runtime==2.14.0   # installed by the Dockerfile
+# torch                    # Jetson/x86 only — no armv7l wheels exist
+# torchvision              # Jetson/x86 only

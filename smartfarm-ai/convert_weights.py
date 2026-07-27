@@ -111,29 +111,32 @@ def main():
         else:
             labels = labels[:num]
 
-    # Build a model whose head MATCHES the checkpoint, load it, then copy the
-    # trained Linear into a FLAT-head model so disease.py (flat loader) can read
-    # the output.
-    src = tvm.mobilenet_v2(pretrained=False)
+    # Normalize a nested head (Sequential(Dropout, Linear)) to torchvision's flat
+    # Linear by REMAPPING KEYS, then load the WHOLE state dict — backbone
+    # included. An earlier version built a fresh model and copied only the
+    # classifier, which left a randomly-initialized feature extractor: ReLU6
+    # drives it to all-zero, so every image produced identical logits (the
+    # classifier bias) and scored ~1/numClasses. Never copy just the head.
     if nested:
-        src.classifier[1] = nn.Sequential(nn.Dropout(0.2), nn.Linear(in_f, num))
-        get_linear = lambda m: m.classifier[1][1]  # noqa: E731
-    else:
-        src.classifier[1] = nn.Linear(in_f, num)
-        get_linear = lambda m: m.classifier[1]  # noqa: E731
+        prefix = "classifier.1.1."
+        sd = {("classifier.1." + k[len(prefix):] if k.startswith(prefix) else k): v for k, v in sd.items()}
+
+    dst = tvm.mobilenet_v2(pretrained=False)
+    dst.classifier[1] = nn.Linear(in_f, num)
     try:
-        src.load_state_dict(sd)
+        dst.load_state_dict(sd)
     except Exception as exc:
         sys.exit(
             "ERROR: state_dict didn't fit MobileNetV2 (%d classes, nested=%s): %s" % (num, nested, exc)
         )
-
-    dst = tvm.mobilenet_v2(pretrained=False)
-    dst.classifier[1] = nn.Linear(in_f, num)
-    lin = get_linear(src)
-    dst.classifier[1].weight.data = lin.weight.data.clone()
-    dst.classifier[1].bias.data = lin.bias.data.clone()
     dst.eval()
+
+    # Fail loudly rather than shipping a dead network (see above).
+    with torch.no_grad():
+        spread = float((dst.features(torch.rand(1, 3, 224, 224)) - dst.features(torch.rand(1, 3, 224, 224))).abs().max())
+    if spread < 1e-6:
+        sys.exit("ERROR: backbone is dead (features identical for different inputs) — refusing to save.")
+    print("backbone alive (feature max|Δ| between random inputs = %.4f)" % spread)
 
     print("Saving legacy-format state_dict (flat head, %d classes) -> %s" % (num, OUT))
     torch.save(dst.state_dict(), OUT, _use_new_zipfile_serialization=False)

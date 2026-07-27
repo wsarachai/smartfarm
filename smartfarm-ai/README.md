@@ -18,10 +18,12 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
 - `canopy.py` — canopy-coverage **decision** (feature 2): % green pixels via HSV
   thresholding (PIL + numpy) + a mask-preview PNG.
 - `disease.py` — disease **decision** (feature 3): a config-driven PlantVillage
-  CNN (default MobileNetV2). Torch is imported lazily on first call.
-- `download_model.sh` + `convert_weights.py` + `models/` — fetch the weights +
-  class names (gitignored), then normalize them into `models/disease.pth` +
-  `models/model_config.json`. See "Set up the disease model" below.
+  CNN (default MobileNetV2), with **two backends** (torch / tflite) chosen by
+  `model_config.json`. The runtime is imported lazily on first call.
+- `download_model.sh` + `convert_weights.py` (torch hosts) + `convert_to_tflite.py`
+  (Raspberry Pi) + `models/` — fetch the weights + class names (gitignored), then
+  normalize them into `models/disease.{pth,tflite}` + `models/model_config.json`.
+  See "Set up the disease model" below.
 - `frame_poller.py` / `smartfarm_inference.ipynb` — dev artifacts for the camera
   frame-pull path (`../web-server/docs/ai-frame-pull.md`); used interactively.
 
@@ -38,7 +40,15 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
 ## Set up the disease model
 
 Uses `Daksh159/plant-disease-mobilenetv2` by default (torchvision MobileNetV2,
-38 PlantVillage classes, ImageNet preprocessing). On the Jetson:
+38 PlantVillage classes, ImageNet preprocessing).
+
+**Pick the path that matches your host** — this is a hardware constraint, not a
+preference. PyTorch publishes **no 32-bit ARM wheels** (zero `armv7l` files on
+PyPI, any version), so on a Raspberry Pi running a 32-bit OS `import torch` can
+never succeed. `tflite-runtime` does ship `armv7l` wheels, so the Pi runs the
+same network through the TFLite interpreter. Check yours with `uname -m`.
+
+### Jetson / x86 / aarch64 (`.pth`, torch backend)
 
 ```bash
 # 1. download the checkpoint + class names into models/ (host-side)
@@ -54,6 +64,31 @@ Then hit **Analyze** on the dashboard — the model lazy-loads. (Already downloa
 the `.pth` manually into `models/`? Skip step 1; `convert_weights.py` fetches
 `class_names.json` itself if missing.) Override the source with
 `DISEASE_WEIGHTS_URL` / `DISEASE_CLASS_NAMES_URL`.
+
+### Raspberry Pi, 32-bit (`.tflite`, tflite backend)
+
+Convert **on a dev box** — the toolchain (torch + tensorflow + onnx2tf, ~2 GB)
+is exactly what the Pi can't install, and it's only needed once. The Pi consumes
+just the ~9 MB output.
+
+```bash
+# on the dev machine, in smartfarm-ai/
+./download_model.sh                     # or copy models/mobilenetv2_plant.pth + class_names.json across
+python3 -m venv .venv && . .venv/bin/activate
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install onnx onnx2tf tensorflow-cpu onnx_graphsurgeon sng4onnx \
+            simple_onnx_processing_tools onnxruntime psutil
+python3 convert_to_tflite.py            # -> models/disease.tflite + model_config.json
+
+# then, on the Pi
+scp models/disease.tflite models/model_config.json pi@<pi>:~/…/smartfarm-ai/models/
+docker compose -f docker-compose.rpi.yaml up -d --build   # --build picks up tflite-runtime
+```
+
+The pipeline is torch → ONNX → TFLite; `onnx2tf` does the NCHW→NHWC transpose
+TFLite needs. `convert_to_tflite.py` finishes by running **both** models on
+`models/leaf.jpg` and comparing logits — if it prints a disagreement warning,
+don't ship that model. Expect a few seconds per inference on a Pi 3 B.
 
 The web-server sends already-averaged fresh inputs + the thresholds; this service
 holds no state. When it's unreachable the web-server degrades gracefully (shows
