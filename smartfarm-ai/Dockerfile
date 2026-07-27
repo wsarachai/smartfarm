@@ -3,10 +3,6 @@ FROM python:3.9-slim
 # Set working directory inside the container
 WORKDIR /smartfarm-ai
 
-# Install basic system utilities
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements.txt to leverage Docker cache
 COPY requirements.txt .
