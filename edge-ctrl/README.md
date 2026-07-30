@@ -15,7 +15,9 @@ edge-ctrl/
 ├── src/ tests/ third_party/   # Native C++17 daemon & unit tests
 ├── CMakeLists.txt             # Multi-target build script
 ├── systemd/edge-ctrl.service  # Systemd service unit for C++ daemon
-├── config.example.json        # Default configuration template
+├── config.example.json        # Standard configuration template
+├── config.raspberry_pi_3b.json # Pre-configured template for Raspberry Pi 3B
+├── config.jetson_nano.json    # Pre-configured template for NVIDIA Jetson Nano
 ├── python/                    # Host provisioning tooling & diagnostic scripts
 │   ├── env_config.py          # Zero-dependency .env environment parser
 │   ├── .env.jetson_nano.template # NVIDIA Jetson Nano pin mapping template
@@ -47,7 +49,7 @@ Complete electrical wiring details and kernel driver specifications are document
 
 ## 1. Host Provisioning (Python Tooling)
 
-The [`python/`](python/) tree handles one-shot boot provisioning for environment variables, I²C RTC timekeeping, and pin diagnostics.
+The [`python/`](python/) tree handles one-shot boot provisioning for environment variables (`.env`), target hardware configuration (`/etc/edge-ctrl/config.json`), I²C RTC timekeeping, and pin diagnostics.
 
 ### Install on NVIDIA Jetson Nano
 ```bash
@@ -93,7 +95,13 @@ ctest
 ```bash
 sudo make -C build install
 sudo mkdir -p /etc/edge-ctrl
-sudo cp config.example.json /etc/edge-ctrl/config.json
+
+# Copy target-specific configuration template if not deployed by install.sh:
+# For Raspberry Pi 3B:
+sudo cp config.raspberry_pi_3b.json /etc/edge-ctrl/config.json
+# For Jetson Nano:
+# sudo cp config.jetson_nano.json /etc/edge-ctrl/config.json
+
 sudo systemctl daemon-reload
 
 # Foreground bench test before handing to systemd
@@ -110,7 +118,7 @@ journalctl -u edge-ctrl -f
 
 - **Live Config:** `/etc/edge-ctrl/config.json` (**Hot-reloaded** on save without restarting the daemon).
 - **Config Manual:** See **[docs/config-reference.md](docs/config-reference.md)** for parameters, thresholds, and safety rules.
-- **Remote Override:** Dashboard command (`POST /api/v1/control`, `device_id: edge_ctrl_unit`):
+- **Remote Override:** Dashboard command (`POST /api/v1/control`, `device_id: edge_ctrl_rpi3b` or `edge_ctrl_jetson`):
   ```json
   { "external_fan_override": "force_on", "until": "2026-07-20T15:30:00Z" }
   ```

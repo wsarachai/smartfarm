@@ -148,15 +148,23 @@ RELAY_ACTIVE_HIGH=true
 ## 7. Lessons Learned & Technical Notes
 
 ### 7.1 `gpiod` v1 vs `gpiod` v2 Library Compatibility
-- **`gpiod` 1.x (Debian 11 / Ubuntu 18.04):** `Chip` uses `chip.get_line(line_offset)` and `num_lines` is an integer property (`chip.num_lines`). Calling `chip.num_lines()` as a function raises `AttributeError`.
-- **`gpiod` 2.x (Debian 12 Bookworm / Raspberry Pi OS):** Removed `chip.get_line()`. Uses `gpiod.request_lines(chip_path, consumer=..., config={line: LineSettings(...)})`.
-- **Polyfill Strategy:** Host scripts inspect `gpiod` API versions at runtime and fall back seamlessly to `gpioset` CLI utility (`gpioset /dev/gpiochip0 17=1`) or sysfs (`/sys/class/gpio`).
+- **Python Scripts:** `python3-gpiod` v1 uses `chip.get_line()` and `chip.num_lines` as an integer property. `gpiod` 2.x (Debian 12 Bookworm) uses `gpiod.request_lines()` and `gpiod.LineSettings`. Python scripts dynamically inspect APIs at runtime with fallbacks to `gpioset` CLI (`gpioset /dev/gpiochip0 17=1`) and sysfs.
+- **C++ Daemon:** CMake inspects `libgpiod` version via `pkg-config` and defines `HAVE_GPIOD_V2=1` (for `libgpiod >= 2.0.0`) or `HAVE_GPIOD_V1=1` (for `1.6.3`). C++ source files (`fan.cpp`, `dht22.cpp`) implement `#if HAVE_GPIOD_V2` using `gpiod_line_request` and `gpiod_line_settings`.
 
-### 7.2 Character Device Path Resolution
-- Passing a bare string `"gpiochip0"` to `gpiod.Chip` on newer 64-bit kernels may fail with `[Errno 2] No such file or directory` if `/dev/gpiochip0` is missing or mapped to a different chip index (e.g. `/dev/gpiochip4`).
-- All host scripts dynamically resolve paths against `/dev/gpiochip*` nodes.
+### 7.2 Character Device Path Resolution & Line Offset Bounds
+- **Device Paths:** Passing bare string `"gpiochip0"` to `gpiod.Chip` on 64-bit kernels may fail with `[Errno 2] No such file or directory` if `/dev/gpiochip0` is missing or mapped to a different chip index (e.g. `/dev/gpiochip4`). Host scripts and C++ daemon resolve paths against `/dev/gpiochip*` nodes.
+- **Line Offset Bounds:** Jetson Tegra line `200` causes `libgpiod` to return `EINVAL` (*Invalid argument*) on Raspberry Pi's 54-line `pinctrl-bcm2835` controller (0..53). Raspberry Pi configuration MUST specify `line_offset: 17` for Pin 11 (BCM 17) and `line_offset: 4` for Pin 7 (BCM 4).
 
-### 7.3 `raspi-config` Requirements
+### 7.3 Target-Specific Configuration Templates & Automated Installer
+- **Templates:** Dedicated configuration templates are provided for each hardware platform:
+  - [`config.raspberry_pi_3b.json`](../config.raspberry_pi_3b.json) (`external_fan.line_offset`: 17, `dht22.line_offset`: 4, `zone_names`: `["cpu-thermal"]`).
+  - [`config.jetson_nano.json`](../config.jetson_nano.json) (`external_fan.line_offset`: 200, `dht22.line_offset`: 149, `zone_names`: `["CPU-therm", "GPU-therm"]`).
+- **Installer Script:** Running `sudo ./install.sh rpi` or `sudo ./install.sh jetson` automatically deploys both `.env` and `config.json` templates to `/etc/edge-ctrl/`.
+
+### 7.4 CMake `nlohmann_json` Multi-Stage Fallback
+- `CMakeLists.txt` uses a 4-tier fallback for `nlohmann_json`: (1) vendored header `third_party/nlohmann/json.hpp`, (2) CMake package `find_package(nlohmann_json QUIET)`, (3) system include `/usr/include/nlohmann/json.hpp`, or (4) automatic remote header download directly into the build tree during `cmake ..`.
+
+### 7.5 `raspi-config` Requirements
 - **Standard GPIOs:** Enabled by default in kernel — no `raspi-config` steps required for digital GPIO pins.
 - **I²C RTC (DS3231):** Must be enabled via `sudo raspi-config nonint do_i2c 0`.
 - **User Groups:** Run `sudo usermod -aG gpio,i2c $USER` to grant non-root script execution rights.
