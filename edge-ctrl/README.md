@@ -107,8 +107,11 @@ sudo systemctl daemon-reload
 # Foreground bench test before handing to systemd
 sudo /usr/local/sbin/edge-ctrl --config /etc/edge-ctrl/config.json
 
-# Enable and start systemd service
+# Enable and start systemd service to run automatically at boot
 sudo systemctl enable --now edge-ctrl
+
+# Verify service status and follow live logs
+systemctl status edge-ctrl
 journalctl -u edge-ctrl -f
 ```
 

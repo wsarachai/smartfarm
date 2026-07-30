@@ -140,13 +140,14 @@ cmake ..
 make -j$(nproc)
 ctest
 
-# Install binary and start systemd daemon
+# Install binary, reload systemd, and enable + start edge-ctrl daemon
 sudo make install
 sudo systemctl daemon-reload
 sudo systemctl enable --now edge-ctrl
 
-# Check status
+# Verify service status and follow live logs
 systemctl status edge-ctrl
+journalctl -u edge-ctrl -f
 ```
 
 ---
