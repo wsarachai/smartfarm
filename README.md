@@ -193,8 +193,31 @@ curl http://localhost:5000/health
 ```bash
 cd ~/workspace/smartfarm/web-server
 cp .env.example .env
+Contents of `web-server/.env.example`:
+```env
+# Backend environment configuration. Copy to .env and adjust as needed.
+
+# Server Port & Persistence
+PORT=3000
+SETTINGS_PATH=./data/settings.json
+
+# Pump Control (Irrigation Actuator)
+PUMP_URL=http://localhost:8080
+PUMP_LABEL=Main Pump
+PUMP_AUTO_OFF_MINUTES=5
+
+# Camera Source Preferences
+CAMERA_SOURCE_MODE=relay
+CAMERA_STREAM_URL=http://192.168.0.3:81/stream
+CAMERA_SNAPSHOT_URL=/api/v1/camera/frame.jpg
+
+# AI Decision Microservice (smartfarm-ai) Endpoints
+AI_SERVICE_URL=http://smartfarm-ai:5000/water-stress
+CANOPY_SERVICE_URL=http://smartfarm-ai:5000/canopy
+DISEASE_SERVICE_URL=http://smartfarm-ai:5000/disease
+AI_SERVICE_TIMEOUT_MS=8000
+DISEASE_TIMEOUT_MS=30000
 ```
-*(Verify that `AI_SERVICE_URL=http://smartfarm-ai:5000` is set).*
 
 #### 4.2 Launch Web Server Container
 ```bash
