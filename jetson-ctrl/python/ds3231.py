@@ -28,8 +28,24 @@ try:
 except ImportError:  # older images ship python3-smbus only
     import smbus
 
-BUS_NUM = 1          # Jetson Nano 40-pin header pins 3 (SDA) / 5 (SCL)
-DS3231_ADDR = 0x68
+try:
+    import env_config
+    BUS_NUM = env_config.DS3231_I2C_BUS
+    DS3231_ADDR = env_config.DS3231_I2C_ADDR
+    SDA_PIN = env_config.DS3231_SDA_PIN
+    SCL_PIN = env_config.DS3231_SCL_PIN
+except ImportError:
+    import os
+    def _parse_env_int(key, default):
+        val = os.getenv(key)
+        if not val:
+            return default
+        return int(val, 16) if val.startswith(("0x", "0X")) else int(val)
+
+    BUS_NUM = _parse_env_int("DS3231_I2C_BUS", _parse_env_int("BUS_NUM", 1))
+    DS3231_ADDR = _parse_env_int("DS3231_I2C_ADDR", _parse_env_int("DS3231_ADDR", 0x68))
+    SDA_PIN = _parse_env_int("DS3231_SDA_PIN", 3)
+    SCL_PIN = _parse_env_int("DS3231_SCL_PIN", 5)
 
 REG_TIME = 0x00      # 7 bytes: sec, min, hour, dow, day, month(+century), year
 REG_CONTROL = 0x0E

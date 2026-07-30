@@ -17,11 +17,32 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN=/usr/local/bin
 UNITS=/etc/systemd/system
 DOCS=/usr/share/doc/jetson-ctrl
+CONF=/etc/jetson-ctrl
 
 echo "==> scripts -> $BIN"
-install -m 0644 "$HERE/ds3231.py"            "$BIN/ds3231.py"
-install -m 0755 "$HERE/ds3231_sync.py"       "$BIN/ds3231_sync.py"
-install -m 0755 "$HERE/ds3231_writeback.py"  "$BIN/ds3231_writeback.py"
+install -m 0644 "$HERE/env_config.py"         "$BIN/env_config.py"
+install -m 0644 "$HERE/ds3231.py"             "$BIN/ds3231.py"
+install -m 0755 "$HERE/ds3231_sync.py"        "$BIN/ds3231_sync.py"
+install -m 0755 "$HERE/ds3231_writeback.py"   "$BIN/ds3231_writeback.py"
+install -m 0755 "$HERE/dht22.py"              "$BIN/dht22.py"
+install -m 0755 "$HERE/relay.py"              "$BIN/relay.py"
+
+echo "==> config -> $CONF"
+install -d "$CONF"
+
+TARGET_ARG="${1:-}"
+TEMPLATE="$HERE/.env.jetson_nano.template"
+
+if [ "$TARGET_ARG" = "rpi" ] || [ "$TARGET_ARG" = "rpi3b" ] || [ "$TARGET_ARG" = "raspberrypi" ]; then
+  TEMPLATE="$HERE/.env.raspberry_pi_3b.template"
+elif [ -f /proc/device-tree/model ] && grep -qi "Raspberry Pi" /proc/device-tree/model 2>/dev/null; then
+  TEMPLATE="$HERE/.env.raspberry_pi_3b.template"
+fi
+
+if [ ! -f "$CONF/.env" ]; then
+  echo "    using template: $(basename "$TEMPLATE")"
+  install -m 0644 "$TEMPLATE" "$CONF/.env"
+fi
 
 echo "==> units -> $UNITS"
 install -m 0644 "$HERE/systemd/ds3231-sync.service"      "$UNITS/"

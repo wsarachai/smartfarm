@@ -16,7 +16,8 @@ jetson-ctrl/
 ├── CMakeLists.txt
 ├── systemd/jetson-ctrl.service
 ├── config.example.json
-├── python/                    # host provisioning: DS3231 RTC timekeeping
+├── python/                    # host provisioning: DS3231 RTC, DHT22 & Relay env setup
+├── docs/hardware-spec.md      # Pin & GPIO spec for Jetson Nano & Raspberry Pi 3B
 └── docs/host-setup.md         # wiring, GPIO map, RTC units, troubleshooting
 ```
 
