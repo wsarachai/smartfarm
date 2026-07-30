@@ -142,3 +142,22 @@ RELAY_ACTIVE_HIGH=true
    ```bash
    systemctl status ds3231-sync.service
    ```
+
+---
+
+## 7. Lessons Learned & Technical Notes
+
+### 7.1 `gpiod` v1 vs `gpiod` v2 Library Compatibility
+- **`gpiod` 1.x (Debian 11 / Ubuntu 18.04):** `Chip` uses `chip.get_line(line_offset)` and `num_lines` is an integer property (`chip.num_lines`). Calling `chip.num_lines()` as a function raises `AttributeError`.
+- **`gpiod` 2.x (Debian 12 Bookworm / Raspberry Pi OS):** Removed `chip.get_line()`. Uses `gpiod.request_lines(chip_path, consumer=..., config={line: LineSettings(...)})`.
+- **Polyfill Strategy:** Host scripts inspect `gpiod` API versions at runtime and fall back seamlessly to `gpioset` CLI utility (`gpioset /dev/gpiochip0 17=1`) or sysfs (`/sys/class/gpio`).
+
+### 7.2 Character Device Path Resolution
+- Passing a bare string `"gpiochip0"` to `gpiod.Chip` on newer 64-bit kernels may fail with `[Errno 2] No such file or directory` if `/dev/gpiochip0` is missing or mapped to a different chip index (e.g. `/dev/gpiochip4`).
+- All host scripts dynamically resolve paths against `/dev/gpiochip*` nodes.
+
+### 7.3 `raspi-config` Requirements
+- **Standard GPIOs:** Enabled by default in kernel — no `raspi-config` steps required for digital GPIO pins.
+- **I²C RTC (DS3231):** Must be enabled via `sudo raspi-config nonint do_i2c 0`.
+- **User Groups:** Run `sudo usermod -aG gpio,i2c $USER` to grant non-root script execution rights.
+
