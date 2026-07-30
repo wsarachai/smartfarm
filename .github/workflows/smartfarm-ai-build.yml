@@ -1,0 +1,68 @@
+name: smartfarm-ai Build & Test
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'smartfarm-ai/**'
+      - '.github/workflows/smartfarm-ai-build.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'smartfarm-ai/**'
+      - '.github/workflows/smartfarm-ai-build.yml'
+  workflow_dispatch:
+
+jobs:
+  python-test:
+    name: Lint & Test Python AI Modules
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: 'smartfarm-ai/requirements.txt'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest
+          if [ -f smartfarm-ai/requirements.txt ]; then pip install -r smartfarm-ai/requirements.txt; fi
+
+      - name: Validate Python Syntax & Lint
+        run: |
+          python3 -m py_compile smartfarm-ai/*.py
+          flake8 smartfarm-ai --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Verify PlantVillage Class Names
+        run: |
+          cd smartfarm-ai
+          python3 verify_class_names.py plantvillage_classes.json
+
+  docker-build:
+    name: Test Build Docker Container
+    runs-on: ubuntu-22.04
+    needs: python-test
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image (No Push)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./smartfarm-ai
+          file: ./smartfarm-ai/Dockerfile
+          push: false
+          tags: smartfarm-ai:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,54 @@
+name: esp32cam Firmware Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'esp32cam/**'
+      - '.github/workflows/esp32cam-build.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'esp32cam/**'
+      - '.github/workflows/esp32cam-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-firmware:
+    name: Build ESP32-CAM PlatformIO Firmware
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install PlatformIO CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Cache PlatformIO Core Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-pio-esp32cam-${{ hashFiles('esp32cam/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-esp32cam-
+
+      - name: Compile ESP32-CAM Firmware
+        run: |
+          cd esp32cam
+          pio run -e esp32cam
+
+      - name: Upload Firmware Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32cam-firmware
+          path: esp32cam/.pio/build/esp32cam/firmware.bin
+          if-no-files-found: error
