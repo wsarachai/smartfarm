@@ -11,7 +11,10 @@
     "language": "Language",
     "secondsAgo": "{n}s ago",
     "showAll": "Show All",
-    "showLess": "Show Less"
+    "showLess": "Show Less",
+    "sortDefault": "Sort: Default",
+    "sortAsc": "Sort: Low to High",
+    "sortDesc": "Sort: High to Low"
   },
   "status": {
     "online": "Online",

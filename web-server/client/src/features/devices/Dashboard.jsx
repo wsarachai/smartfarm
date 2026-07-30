@@ -37,17 +37,22 @@ export default function Dashboard() {
   // clean (2-up on md, 3-up on lg); the live trend spans full width at the end.
   return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-gutter">
-      {/* 1. Pump — dedicated pump-zone control (configured in Settings). */}
+      {/* 1. Live trend (client-buffered), full width — always stays on top. */}
+      <div className="md:col-span-12">
+        <TrendChart />
+      </div>
+
+      {/* 2. Pump — dedicated pump-zone control (configured in Settings). */}
       <div className="md:col-span-6 lg:col-span-4">
         <PumpControlCard />
       </div>
 
-      {/* 2. Water Stress Risk (AI insight). */}
+      {/* 3. Water Stress Risk (AI insight). */}
       <div className="md:col-span-6 lg:col-span-4">
         <WaterStressCard />
       </div>
 
-      {/* 3. Sensor telemetry cards — one per sensor device. */}
+      {/* 4. Sensor telemetry cards — one per sensor device. */}
       {sensors.length === 0 ? (
         <div className="md:col-span-6 lg:col-span-4">
           <EmptyPanel>{t('dashboard.noSensors')}</EmptyPanel>
@@ -59,12 +64,6 @@ export default function Dashboard() {
           </div>
         ))
       )}
-
-      {/* 4. Live trend (client-buffered), full width — sits with the sensor
-          data it plots: "current readings -> their trend over time". */}
-      <div className="md:col-span-12">
-        <TrendChart />
-      </div>
 
       {/* 5. Camera status + remaining AI insight. */}
       <div className="md:col-span-6 lg:col-span-4">
