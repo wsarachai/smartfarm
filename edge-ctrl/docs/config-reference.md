@@ -1,7 +1,7 @@
 # `config.json` reference
 
-The live config is `/etc/jetson-ctrl/config.json`. `config.example.json` in the
-repo is the template — it is installed to `/usr/share/doc/jetson-ctrl/` as a
+The live config is `/etc/edge-ctrl/config.json`. `config.example.json` in the
+repo is the template — it is installed to `/usr/share/doc/edge-ctrl/` as a
 reference copy and **never overwrites** the live file.
 
 **Hot-reloaded.** The daemon stats the file every tick and re-parses when the
@@ -206,15 +206,15 @@ The config hot-reloads, so a threshold can be exercised without a restart:
 
 ```bash
 # force the fan on (current die temp is ~23 C)
-sudo sed -i 's/"temp_on_c": 60.0/"temp_on_c": 20.0/' /etc/jetson-ctrl/config.json
+sudo sed -i 's/"temp_on_c": 60.0/"temp_on_c": 20.0/' /etc/edge-ctrl/config.json
 # put it back
-sudo sed -i 's/"temp_on_c": 20.0/"temp_on_c": 60.0/' /etc/jetson-ctrl/config.json
+sudo sed -i 's/"temp_on_c": 20.0/"temp_on_c": 60.0/' /etc/edge-ctrl/config.json
 ```
 
 Watch the effect:
 
 ```bash
-journalctl -u jetson-ctrl -f
+journalctl -u edge-ctrl -f
 curl -s localhost:3000/api/v1/devices | python3 -m json.tool
 ```
 
@@ -226,5 +226,5 @@ Validate JSON before saving, since a syntax error is silently rejected at
 runtime (and fatal at startup):
 
 ```bash
-python3 -m json.tool < /etc/jetson-ctrl/config.json > /dev/null && echo OK
+python3 -m json.tool < /etc/edge-ctrl/config.json > /dev/null && echo OK
 ```

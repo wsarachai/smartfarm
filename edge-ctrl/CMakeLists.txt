@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)   # ships on Ubuntu 18.04 / L4T (3.10.2)
-project(jetson-ctrl CXX)
+project(edge-ctrl CXX)
 
 # NOTE: 3.10.2 is a hard floor -- it is what JetPack 4.x has, and the daemon is
 # built ON the target. Anything newer must not creep in, in this file or in the
@@ -44,7 +44,7 @@ endif()
 # form (target_link_directories) is CMake 3.13+, which JetPack 4.x does not have.
 link_directories(${CURL_LIBRARY_DIRS} ${GPIOD_LIBRARY_DIRS})
 
-add_executable(jetson-ctrl
+add_executable(edge-ctrl
   src/main.cpp
   src/config.cpp
   src/thermal.cpp
@@ -54,9 +54,9 @@ add_executable(jetson-ctrl
   src/net.cpp
 )
 
-target_include_directories(jetson-ctrl PRIVATE
+target_include_directories(edge-ctrl PRIVATE
   ${CURL_INCLUDE_DIRS} ${GPIOD_INCLUDE_DIRS})
-target_link_libraries(jetson-ctrl PRIVATE
+target_link_libraries(edge-ctrl PRIVATE
   ${JSON_TARGET}
   Threads::Threads
   ${CURL_LIBRARIES}
@@ -73,9 +73,9 @@ add_test(NAME control COMMAND test_control)
 
 # --- Install -----------------------------------------------------------------
 include(GNUInstallDirs)
-install(TARGETS jetson-ctrl RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
-install(FILES systemd/jetson-ctrl.service
+install(TARGETS edge-ctrl RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
+install(FILES systemd/edge-ctrl.service
         DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/system)
 # config.example.json is installed only as a reference; the LIVE config lives at
-# /etc/jetson-ctrl/config.json and is NOT overwritten by install (see README).
+# /etc/edge-ctrl/config.json and is NOT overwritten by install (see README).
 install(FILES config.example.json DESTINATION ${CMAKE_INSTALL_DOCDIR})

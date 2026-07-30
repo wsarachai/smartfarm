@@ -13,7 +13,7 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 
 namespace {
-constexpr char kConsumer[] = "jetson-ctrl-dht22";
+constexpr char kConsumer[] = "edge-ctrl-dht22";
 
 // Busy-wait until the line reaches `level` or `timeout_us` elapses.
 // Returns microseconds waited, or -1 on timeout. (Polling libgpiod is the

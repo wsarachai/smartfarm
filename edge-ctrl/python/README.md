@@ -1,6 +1,6 @@
-# jetson-ctrl/python — Multi-Device Host Provisioning
+# edge-ctrl/python — Multi-Device Host Provisioning
 
-Python host tooling for single-board computers (**NVIDIA Jetson Nano** and **Raspberry Pi 3 Model B**) running the `jetson-ctrl` daemon.
+Python host tooling for single-board computers (**NVIDIA Jetson Nano** and **Raspberry Pi 3 Model B**) running the `edge-ctrl` daemon.
 
 Separate from the C++ daemon on purpose: this is **one-shot host setup** that runs at boot and exits, not part of the control loop. All hardware pins and I²C bus configurations are decoupled into environment files (`.env`).
 
@@ -42,13 +42,13 @@ For complete electrical wiring and Linux `gpiochip` driver details, see **[../do
 ```bash
 sudo ./install.sh jetson
 ```
-*Installs scripts, systemd units, and copies `.env.jetson_nano.template` to `/etc/jetson-ctrl/.env`.*
+*Installs scripts, systemd units, and copies `.env.jetson_nano.template` to `/etc/edge-ctrl/.env`.*
 
 ### 2. Deploy on Raspberry Pi 3 Model B
 ```bash
 sudo ./install.sh rpi
 ```
-*Installs scripts, systemd units, and copies `.env.raspberry_pi_3b.template` to `/etc/jetson-ctrl/.env`.*
+*Installs scripts, systemd units, and copies `.env.raspberry_pi_3b.template` to `/etc/edge-ctrl/.env`.*
 
 ---
 

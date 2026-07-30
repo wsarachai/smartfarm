@@ -1,12 +1,12 @@
-# jetson-ctrl — Design
+# edge-ctrl — Design
 
-A C++17 **host daemon** for the Jetson Nano (Ubuntu 18.04 / L4T) that manages the
+A C++17 **host daemon** for single-board computers (NVIDIA Jetson Nano & Raspberry Pi 3B) that manages the
 enclosure's **external fan** as a *second cooling stage*, reports thermal state to
 the existing SmartFarm web-server, and self-heals under systemd.
 
 > This project is categorically different from the rest of the repo: it is **not**
 > ESP firmware (`sensor-zone`, `pump-zone`, …) and **not** the Node web-server. It
-> is a native Linux daemon that runs on the Jetson that *hosts* the web-server.
+> is a native Linux daemon that runs on the edge device that *hosts* the web-server.
 
 ---
 
@@ -96,7 +96,7 @@ weaken.
   of network).
 - **Q13 — Cadence & config.** Control loop **~2 s tick**; telemetry POST + override
   GET **~10 s** (every 5th tick), best-effort with **short libcurl timeouts that
-  never block the control tick**. Live config at **`/etc/jetson-ctrl/config.json`**;
+  never block the control tick**. Live config at **`/etc/edge-ctrl/config.json`**;
   `config.example.json` committed in-repo.
 
 ---
@@ -104,7 +104,7 @@ weaken.
 ## Architecture
 
 ```
-                 ┌────────────────────────── jetson-ctrl (root, systemd) ─────────────────────────┐
+                 ┌────────────────────────── edge-ctrl (root, systemd) ───────────────────────────┐
                  │                                                                                 │
   /sys/class/thermal ──read──►  thermal.cpp  (resolve zones by name, max)                          │
                  │                     │                                                           │
@@ -142,7 +142,7 @@ weaken.
 
 ---
 
-## Config schema (`/etc/jetson-ctrl/config.json`)
+## Config schema (`/etc/edge-ctrl/config.json`)
 
 Full parameter manual — defaults, validation, tuning: **[docs/config-reference.md](docs/config-reference.md)**.
 Summary of the notable fields:

@@ -1,6 +1,6 @@
 [Unit]
 Description=Periodically refresh the DS3231 from NTP-corrected system time
-Documentation=file:/usr/share/doc/jetson-ctrl/host-setup.md
+Documentation=file:/usr/share/doc/edge-ctrl/host-setup.md
 
 [Timer]
 # Daily is far more often than a +/-2 ppm part needs, but each run is one I2C

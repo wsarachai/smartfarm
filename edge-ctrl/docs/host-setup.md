@@ -1,6 +1,6 @@
-# Jetson Nano host setup
+# Edge device host setup
 
-Everything the `jetson-ctrl` daemon assumes about the machine underneath it:
+Everything the `edge-ctrl` daemon assumes about the machine underneath it:
 the I²C real-time clock, the 40-pin header allocation, and the boot-time units
 that hold it together.
 
@@ -203,7 +203,7 @@ clock with the drifted value.
 ### Install
 
 ```bash
-cd jetson-ctrl/python
+cd edge-ctrl/python
 sudo ./install.sh
 ```
 

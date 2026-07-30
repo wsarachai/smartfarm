@@ -12,7 +12,7 @@
 using std::chrono::steady_clock;
 using std::chrono::seconds;
 
-namespace { constexpr char kConsumer[] = "jetson-ctrl-fan"; }
+namespace { constexpr char kConsumer[] = "edge-ctrl-fan"; }
 
 Fan::Fan(std::string gpiochip, unsigned line_offset, bool active_high)
     : chip_name_(std::move(gpiochip)),

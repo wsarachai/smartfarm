@@ -12,8 +12,9 @@ def load_env_file(filepath=None):
     """Load key-value pairs from a .env file into os.environ if not already set."""
     if filepath is None:
         search_paths = [
-            os.getenv("JETSON_CTRL_ENV"),
+            os.getenv("EDGE_CTRL_ENV", os.getenv("JETSON_CTRL_ENV")),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+            "/etc/edge-ctrl/.env",
             "/etc/jetson-ctrl/.env",
             ".env",
             os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env.jetson_nano.template"),

@@ -8,6 +8,7 @@
   // Open via:  File -> Open Workspace from File... -> smartfarm.code-workspace
   "folders": [
     { "name": "smartfarm (repo root)", "path": "." },
+    { "name": "edge-ctrl (C++)", "path": "edge-ctrl" },
     { "name": "sensor-zone (ESP-IDF)", "path": "sensor-zone" },
     { "name": "pump-zone (ESP-IDF)", "path": "pump-zone" },
     { "name": "ap-server (Arduino)", "path": "ap-server" },

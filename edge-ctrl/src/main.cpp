@@ -1,4 +1,4 @@
-// jetson-ctrl — enclosure external-fan controller (see DESIGN.md).
+// edge-ctrl — enclosure external-fan controller (see DESIGN.md).
 #include <csignal>
 #include <cstring>
 #include <ctime>
@@ -28,7 +28,7 @@ void on_signal(int) { g_stop = 1; }
 std::string arg_config(int argc, char** argv) {
   for (int i = 1; i < argc - 1; ++i)
     if (std::strcmp(argv[i], "--config") == 0) return argv[i + 1];
-  return "/etc/jetson-ctrl/config.json";
+  return "/etc/edge-ctrl/config.json";
 }
 
 // Parse an ISO-8601 UTC timestamp ("2026-07-20T15:30:00Z"). Returns (time_t)-1 on
@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
   }
 
   notify::ready();
-  LOG_INFO("jetson-ctrl started (config %s)", cfg_path.c_str());
+  LOG_INFO("edge-ctrl started (config %s)", cfg_path.c_str());
 
   net::OverridePayload override_payload;  // refreshed on network ticks
   long tick = 0;
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
     std::this_thread::sleep_for(milliseconds(cfg->cadence.control_tick_ms));
   }
 
-  LOG_INFO("jetson-ctrl stopping (relay holds last state)");
+  LOG_INFO("edge-ctrl stopping (relay holds last state)");
   dht.stop();
   net::global_cleanup();
   return 0;

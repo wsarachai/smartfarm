@@ -1,6 +1,6 @@
 [Unit]
-Description=SmartFarm Jetson enclosure fan controller (jetson-ctrl)
-Documentation=file:/usr/share/doc/jetson-ctrl/DESIGN.md
+Description=SmartFarm Edge enclosure fan controller (edge-ctrl)
+Documentation=file:/usr/share/doc/edge-ctrl/DESIGN.md
 # Cooling must start at boot regardless of network. Deliberately NOT gated on
 # network-online.target — telemetry is best-effort, cooling is not.
 After=local-fs.target
@@ -13,7 +13,7 @@ User=root
 # /usr/local/sbin, not /usr/sbin: CMAKE_INSTALL_PREFIX defaults to /usr/local,
 # which is where locally-built software belongs on Ubuntu (/usr is dpkg's).
 # If you configure with -DCMAKE_INSTALL_PREFIX=/usr, change this to match.
-ExecStart=/usr/local/sbin/jetson-ctrl --config /etc/jetson-ctrl/config.json
+ExecStart=/usr/local/sbin/edge-ctrl --config /etc/edge-ctrl/config.json
 
 # Self-healing.
 Restart=always
@@ -30,7 +30,7 @@ ProtectControlGroups=yes
 ProtectKernelModules=yes
 # The live config is the only writable path the daemon needs (it only reads it,
 # but keep /etc reachable). Everything else stays read-only where possible.
-ReadOnlyPaths=/etc/jetson-ctrl
+ReadOnlyPaths=/etc/edge-ctrl
 
 [Install]
 WantedBy=multi-user.target

@@ -1,6 +1,6 @@
 [Unit]
 Description=Sync system clock from DS3231 hardware RTC at boot
-Documentation=file:/usr/share/doc/jetson-ctrl/host-setup.md
+Documentation=file:/usr/share/doc/edge-ctrl/host-setup.md
 # Must land before anything timestamps anything, hence sysinit.target.
 Before=network-pre.target time-sync.target
 # local-fs: /usr/local/bin must be mounted.

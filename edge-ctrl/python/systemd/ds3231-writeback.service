@@ -1,6 +1,6 @@
 [Unit]
 Description=Write NTP-corrected system time back to the DS3231
-Documentation=file:/usr/share/doc/jetson-ctrl/host-setup.md
+Documentation=file:/usr/share/doc/edge-ctrl/host-setup.md
 # Only meaningful once the network has had a chance to correct the clock.
 After=time-sync.target network-online.target
 Wants=time-sync.target network-online.target

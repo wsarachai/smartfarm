@@ -17,10 +17,10 @@
       "preLaunchTask": "build (Debug)"
     },
     {
-      "name": "Debug jetson-ctrl daemon",
+      "name": "Debug edge-ctrl daemon",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/jetson-ctrl",
+      "program": "${workspaceFolder}/build/edge-ctrl",
       "args": ["--config", "${workspaceFolder}/config.example.json"],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,

@@ -16,8 +16,8 @@ fi
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN=/usr/local/bin
 UNITS=/etc/systemd/system
-DOCS=/usr/share/doc/jetson-ctrl
-CONF=/etc/jetson-ctrl
+DOCS=/usr/share/doc/edge-ctrl
+CONF=/etc/edge-ctrl
 
 echo "==> scripts -> $BIN"
 install -m 0644 "$HERE/env_config.py"         "$BIN/env_config.py"

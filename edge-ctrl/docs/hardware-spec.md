@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-This document specifies the hardware pinout, electrical connections, Linux `gpiochip` mappings, and environment variable configuration for deploying the **Smart Farm Control System** (`jetson-ctrl`) on two target single-board computers:
+This document specifies the hardware pinout, electrical connections, Linux `gpiochip` mappings, and environment variable configuration for deploying the **Smart Farm Control System** (`edge-ctrl`) on two target single-board computers:
 1. **NVIDIA Jetson Nano** (4GB Developer Kit, ARM64, Ubuntu 18.04 LTS / L4T)
 2. **Raspberry Pi 3 Model B** (BCM2837 ARMv8, 1GB RAM, Raspberry Pi OS 32/64-bit)
 
@@ -108,12 +108,12 @@ RELAY_ACTIVE_HIGH=true
 ### 6.1 Deploying Config on Host Target
 - **On Jetson Nano:**
   ```bash
-  cd jetson-ctrl/python
+  cd edge-ctrl/python
   sudo ./install.sh jetson
   ```
 - **On Raspberry Pi 3B:**
   ```bash
-  cd jetson-ctrl/python
+  cd edge-ctrl/python
   sudo ./install.sh rpi
   ```
 
