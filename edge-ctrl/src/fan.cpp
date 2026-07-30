@@ -31,7 +31,23 @@ void Fan::init_on() {
   // to a wiring fault from the log alone.
   const std::string where = chip_name_ + ":" + std::to_string(line_off_);
 
+  // Try gpiod_chip_open_by_name first, then gpiod_chip_open, then fallback chips
   chip_ = gpiod_chip_open_by_name(chip_name_.c_str());
+  if (!chip_ && chip_name_.rfind("/dev/", 0) == 0) {
+    chip_ = gpiod_chip_open(chip_name_.c_str());
+  }
+  if (!chip_ && chip_name_.rfind("/dev/", 0) != 0) {
+    std::string dev_path = "/dev/" + chip_name_;
+    chip_ = gpiod_chip_open(dev_path.c_str());
+  }
+  if (!chip_) {
+    for (const char* fb : {"gpiochip0", "/dev/gpiochip0", "gpiochip4", "/dev/gpiochip4"}) {
+      chip_ = gpiod_chip_open_by_name(fb);
+      if (!chip_) chip_ = gpiod_chip_open(fb);
+      if (chip_) break;
+    }
+  }
+
   if (!chip_)
     throw std::runtime_error("fan: cannot open " + chip_name_ + ": " +
                              std::strerror(errno));

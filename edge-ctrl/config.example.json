@@ -11,7 +11,7 @@
   },
   "thermal": {
     "sysfs_root": "/sys/class/thermal",
-    "zone_names": ["CPU-therm", "GPU-therm"]
+    "zone_names": ["CPU-therm", "GPU-therm", "cpu-thermal", "bcm2835_thermal", "soc-thermal", "cpu_thermal"]
   },
   "dht22": {
     "gpiochip": "gpiochip0",

@@ -45,6 +45,25 @@ void Thermal::resolve() {
     if (!paths_.count(w))
       LOG_WARN("thermal: requested zone '%s' not found in sysfs", w.c_str());
   }
+
+  // Auto-fallback: if no explicit zone_names matched, bind any thermal_zone*/temp found.
+  if (paths_.empty()) {
+    DIR* d2 = ::opendir(sysfs_root_.c_str());
+    if (d2) {
+      for (dirent* e; (e = ::readdir(d2)) != nullptr;) {
+        std::string name = e->d_name;
+        if (name.rfind("thermal_zone", 0) != 0) continue;
+        std::string base = sysfs_root_ + "/" + name;
+        std::string type = read_trim(base + "/type");
+        paths_[type.empty() ? name : type] = base + "/temp";
+      }
+      ::closedir(d2);
+      if (!paths_.empty()) {
+        LOG_INFO("thermal: auto-fallback resolved %zu thermal zone(s) in %s", paths_.size(), sysfs_root_.c_str());
+      }
+    }
+  }
+
   LOG_INFO("thermal: resolved %zu/%zu zones", paths_.size(), want_.size());
 }
 

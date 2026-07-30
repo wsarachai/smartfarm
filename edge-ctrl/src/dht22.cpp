@@ -112,6 +112,18 @@ void Dht22::run() {
 // [RH_hi RH_lo T_hi T_lo checksum]; RH and T are tenths; T sign in the high bit.
 bool Dht22::read_once(double& t_out, double& h_out) {
   gpiod_chip* chip = gpiod_chip_open_by_name(chip_.c_str());
+  if (!chip && chip_.rfind("/dev/", 0) == 0) chip = gpiod_chip_open(chip_.c_str());
+  if (!chip && chip_.rfind("/dev/", 0) != 0) {
+    std::string dev_path = "/dev/" + chip_;
+    chip = gpiod_chip_open(dev_path.c_str());
+  }
+  if (!chip) {
+    for (const char* fb : {"gpiochip0", "/dev/gpiochip0", "gpiochip4", "/dev/gpiochip4"}) {
+      chip = gpiod_chip_open_by_name(fb);
+      if (!chip) chip = gpiod_chip_open(fb);
+      if (chip) break;
+    }
+  }
   if (!chip) return false;
   gpiod_line* line = gpiod_chip_get_line(chip, line_);
   if (!line) { gpiod_chip_close(chip); return false; }
