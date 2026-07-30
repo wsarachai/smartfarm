@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Set the Jetson's system clock from the DS3231 hardware RTC, at boot.
+Set the Edge Device's system clock from the DS3231 hardware RTC, at boot.
 
 Runs before the network exists, so this is the only thing standing between a
 headless reboot and a system clock of 1970. Replaces the original
