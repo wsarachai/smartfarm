@@ -4,6 +4,7 @@
 
 struct gpiod_chip;
 struct gpiod_line;
+struct gpiod_line_request;
 
 // The one and only actuated GPIO: the external enclosure fan (on/off).
 //
@@ -38,6 +39,7 @@ class Fan {
   bool active_high_;
   gpiod_chip* chip_ = nullptr;
   gpiod_line* line_ = nullptr;
+  gpiod_line_request* req_v2_ = nullptr;
 
   bool on_ = false;
   std::chrono::steady_clock::time_point last_change_;

@@ -20,18 +20,58 @@ Fan::Fan(std::string gpiochip, unsigned line_offset, bool active_high)
       active_high_(active_high) {}
 
 Fan::~Fan() {
+#if HAVE_GPIOD_V2
+  if (req_v2_) gpiod_line_request_release(req_v2_);
+  if (chip_) gpiod_chip_close(chip_);
+#else
   if (line_) gpiod_line_release(line_);
   if (chip_) gpiod_chip_close(chip_);
+#endif
 }
 
 void Fan::init_on() {
-  // Every failure below names the chip and offset. Without them the operator
-  // cannot tell a mis-set config from a line another driver already holds --
-  // and a placeholder offset pointing at, say, SD card-detect looks identical
-  // to a wiring fault from the log alone.
   const std::string where = chip_name_ + ":" + std::to_string(line_off_);
 
-  // Try gpiod_chip_open_by_name first, then gpiod_chip_open, then fallback chips
+#if HAVE_GPIOD_V2
+  std::string dev_path = chip_name_;
+  if (dev_path.rfind("/dev/", 0) != 0) {
+    dev_path = "/dev/" + dev_path;
+  }
+  chip_ = gpiod_chip_open(dev_path.c_str());
+  if (!chip_) {
+    for (const char* fb : {"/dev/gpiochip0", "/dev/gpiochip4", "/dev/gpiochip1"}) {
+      chip_ = gpiod_chip_open(fb);
+      if (chip_) break;
+    }
+  }
+  if (!chip_) {
+    throw std::runtime_error("fan: cannot open " + chip_name_ + ": " + std::strerror(errno));
+  }
+
+  int initial_val = active_high_ ? 1 : 0;
+  gpiod_line_settings* settings = gpiod_line_settings_new();
+  gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_OUTPUT);
+  gpiod_line_settings_set_output_value(settings, initial_val ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE);
+
+  gpiod_line_config* line_cfg = gpiod_line_config_new();
+  unsigned int offsets[1] = { line_off_ };
+  gpiod_line_config_add_line_settings(line_cfg, offsets, 1, settings);
+
+  gpiod_request_config* req_cfg = gpiod_request_config_new();
+  gpiod_request_config_set_consumer(req_cfg, kConsumer);
+
+  req_v2_ = gpiod_chip_request_lines(chip_, req_cfg, line_cfg);
+
+  gpiod_line_settings_free(settings);
+  gpiod_line_config_free(line_cfg);
+  gpiod_request_config_free(req_cfg);
+
+  if (!req_v2_) {
+    throw std::runtime_error("fan: cannot request output line " + where + ": " + std::strerror(errno));
+  }
+
+#else
+  // libgpiod v1
   chip_ = gpiod_chip_open_by_name(chip_name_.c_str());
   if (!chip_ && chip_name_.rfind("/dev/", 0) == 0) {
     chip_ = gpiod_chip_open(chip_name_.c_str());
@@ -56,8 +96,6 @@ void Fan::init_on() {
     throw std::runtime_error("fan: cannot get line " + where + ": " +
                              std::strerror(errno));
 
-  // Boot-safe default: ON (Q10). Request the line already driven to the active
-  // level so there's no OFF glitch between request and first write.
   int initial = active_high_ ? 1 : 0;
   if (gpiod_line_request_output(line_, kConsumer, initial) != 0) {
     const int err = errno;
@@ -67,6 +105,8 @@ void Fan::init_on() {
       msg += " (another driver holds it -- check: gpioinfo " + chip_name_ + ")";
     throw std::runtime_error(msg);
   }
+#endif
+
   on_ = true;
   last_change_ = steady_clock::now();
   LOG_INFO("fan: initialized ON (boot-safe default)");
@@ -74,7 +114,14 @@ void Fan::init_on() {
 
 bool Fan::write(bool on) {
   int level = (on == active_high_) ? 1 : 0;  // active_high_ maps logical->electrical
+#if HAVE_GPIOD_V2
+  if (!req_v2_) return false;
+  gpiod_line_value val = level ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE;
+  return gpiod_line_request_set_value(req_v2_, line_off_, val) == 0;
+#else
+  if (!line_) return false;
   return gpiod_line_set_value(line_, level) == 0;
+#endif
 }
 
 bool Fan::set(bool desired_on, int min_on_seconds, int min_off_seconds,

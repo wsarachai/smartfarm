@@ -15,9 +15,26 @@ using std::chrono::steady_clock;
 namespace {
 constexpr char kConsumer[] = "edge-ctrl-dht22";
 
-// Busy-wait until the line reaches `level` or `timeout_us` elapses.
-// Returns microseconds waited, or -1 on timeout. (Polling libgpiod is the
-// pragmatic approach on the Nano; see DESIGN.md — this is the timing-fragile part.)
+#if HAVE_GPIOD_V2
+// Busy-wait until the line reaches `level` or `timeout_us` elapses (libgpiod v2).
+long wait_level(gpiod_line_request* req, unsigned int offset, int level, long timeout_us) {
+  timespec t0, now;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  gpiod_line_value expected = level ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE;
+  for (;;) {
+    if (gpiod_line_request_get_value(req, offset) == expected) {
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      return (now.tv_sec - t0.tv_sec) * 1000000L +
+             (now.tv_nsec - t0.tv_nsec) / 1000L;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    long us = (now.tv_sec - t0.tv_sec) * 1000000L +
+              (now.tv_nsec - t0.tv_nsec) / 1000L;
+    if (us > timeout_us) return -1;
+  }
+}
+#else
+// Busy-wait until the line reaches `level` or `timeout_us` elapses (libgpiod v1).
 long wait_level(gpiod_line* line, int level, long timeout_us) {
   timespec t0, now;
   clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -33,6 +50,7 @@ long wait_level(gpiod_line* line, int level, long timeout_us) {
     if (us > timeout_us) return -1;
   }
 }
+#endif
 }  // namespace
 
 Dht22::Dht22(std::string gpiochip, unsigned line_offset, int max_retries,
@@ -68,9 +86,6 @@ Dht22::Sample Dht22::snapshot() const {
 }
 
 void Dht22::run() {
-  // Best-effort real-time scheduling + memory locking to reduce the scheduler
-  // jitter that corrupts the bit-bang. Failures are non-fatal (we just tolerate a
-  // higher drop rate) — the DHT22 is secondary by design.
   sched_param sp{};
   sp.sched_priority = 10;
   if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != 0)
@@ -95,7 +110,6 @@ void Dht22::run() {
       last_.humidity = h;
       last_ok_ = steady_clock::now();
     }
-    // Respect the DHT22's 0.5 Hz ceiling (and let config tune it).
     long interval = min_interval_ms_.load();
     for (long slept = 0; slept < interval && running_; slept += 50) {
       timespec ts{0, 50L * 1000 * 1000};
@@ -105,12 +119,71 @@ void Dht22::run() {
 }
 
 // One bit-bang attempt. Returns true and fills t/h on a checksum-valid frame.
-//
-// NOTE: hardware-timing code — structured but NOT yet verified on a real Jetson.
-// DHT22 frame: host pulls low >=1ms, releases; sensor replies 80us low + 80us high,
-// then 40 data bits where a ~26-28us high = 0 and ~70us high = 1. 5 bytes:
-// [RH_hi RH_lo T_hi T_lo checksum]; RH and T are tenths; T sign in the high bit.
 bool Dht22::read_once(double& t_out, double& h_out) {
+#if HAVE_GPIOD_V2
+  std::string dev_path = chip_;
+  if (dev_path.rfind("/dev/", 0) != 0) dev_path = "/dev/" + dev_path;
+
+  gpiod_chip* chip = gpiod_chip_open(dev_path.c_str());
+  if (!chip) {
+    for (const char* fb : {"/dev/gpiochip0", "/dev/gpiochip4", "/dev/gpiochip1"}) {
+      chip = gpiod_chip_open(fb);
+      if (chip) break;
+    }
+  }
+  if (!chip) return false;
+
+  bool ok = false;
+  uint8_t bytes[5] = {0, 0, 0, 0, 0};
+
+  gpiod_line_settings* out_set = gpiod_line_settings_new();
+  gpiod_line_settings_set_direction(out_set, GPIOD_LINE_DIRECTION_OUTPUT);
+  gpiod_line_settings_set_output_value(out_set, GPIOD_LINE_VALUE_INACTIVE);
+
+  gpiod_line_config* line_cfg = gpiod_line_config_new();
+  unsigned int offsets[1] = { line_ };
+  gpiod_line_config_add_line_settings(line_cfg, offsets, 1, out_set);
+
+  gpiod_request_config* req_cfg = gpiod_request_config_new();
+  gpiod_request_config_set_consumer(req_cfg, kConsumer);
+
+  gpiod_line_request* req = gpiod_chip_request_lines(chip, req_cfg, line_cfg);
+
+  gpiod_line_settings_free(out_set);
+  gpiod_line_config_free(line_cfg);
+  gpiod_request_config_free(req_cfg);
+
+  if (req) {
+    timespec ts{0, 2L * 1000 * 1000};  // 2 ms
+    nanosleep(&ts, nullptr);
+
+    gpiod_line_settings* in_set = gpiod_line_settings_new();
+    gpiod_line_settings_set_direction(in_set, GPIOD_LINE_DIRECTION_INPUT);
+
+    gpiod_line_config* in_cfg = gpiod_line_config_new();
+    gpiod_line_config_add_line_settings(in_cfg, offsets, 1, in_set);
+
+    if (gpiod_line_request_reconfigure_lines(req, in_cfg) == 0) {
+      if (wait_level(req, line_, 0, 200) >= 0 && wait_level(req, line_, 1, 200) >= 0 &&
+          wait_level(req, line_, 0, 200) >= 0) {
+        ok = true;
+        for (int i = 0; i < 40 && ok; ++i) {
+          if (wait_level(req, line_, 1, 200) < 0) { ok = false; break; }
+          long high_us = wait_level(req, line_, 0, 200);
+          if (high_us < 0) { ok = false; break; }
+          bytes[i / 8] <<= 1;
+          if (high_us > 45) bytes[i / 8] |= 1;
+        }
+      }
+    }
+    gpiod_line_settings_free(in_set);
+    gpiod_line_config_free(in_cfg);
+    gpiod_line_request_release(req);
+  }
+  gpiod_chip_close(chip);
+
+#else
+  // libgpiod v1
   gpiod_chip* chip = gpiod_chip_open_by_name(chip_.c_str());
   if (!chip && chip_.rfind("/dev/", 0) == 0) chip = gpiod_chip_open(chip_.c_str());
   if (!chip && chip_.rfind("/dev/", 0) != 0) {
@@ -131,7 +204,6 @@ bool Dht22::read_once(double& t_out, double& h_out) {
   bool ok = false;
   uint8_t bytes[5] = {0, 0, 0, 0, 0};
 
-  // Start pulse: drive low ~2ms, then release to input (external pull-up idles high).
   if (gpiod_line_request_output(line, kConsumer, 0) == 0) {
     gpiod_line_set_value(line, 0);
     timespec ts{0, 2L * 1000 * 1000};  // 2 ms
@@ -139,26 +211,26 @@ bool Dht22::read_once(double& t_out, double& h_out) {
     gpiod_line_release(line);
 
     if (gpiod_line_request_input(line, kConsumer) == 0) {
-      // Sensor response preamble: ~80us low, ~80us high.
       if (wait_level(line, 0, 200) >= 0 && wait_level(line, 1, 200) >= 0 &&
           wait_level(line, 0, 200) >= 0) {
         ok = true;
         for (int i = 0; i < 40 && ok; ++i) {
-          if (wait_level(line, 1, 200) < 0) { ok = false; break; }  // start of bit
-          long high_us = wait_level(line, 0, 200);                  // length of high
+          if (wait_level(line, 1, 200) < 0) { ok = false; break; }
+          long high_us = wait_level(line, 0, 200);
           if (high_us < 0) { ok = false; break; }
           bytes[i / 8] <<= 1;
-          if (high_us > 45) bytes[i / 8] |= 1;  // >~45us => '1'
+          if (high_us > 45) bytes[i / 8] |= 1;
         }
       }
       gpiod_line_release(line);
     }
   }
   gpiod_chip_close(chip);
+#endif
 
   if (!ok) return false;
   uint8_t sum = bytes[0] + bytes[1] + bytes[2] + bytes[3];
-  if (sum != bytes[4]) return false;  // checksum
+  if (sum != bytes[4]) return false;
 
   h_out = ((bytes[0] << 8) | bytes[1]) * 0.1;
   int raw_t = ((bytes[2] & 0x7F) << 8) | bytes[3];

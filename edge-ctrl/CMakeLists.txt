@@ -27,6 +27,14 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(CURL   REQUIRED libcurl)
 pkg_check_modules(GPIOD  REQUIRED libgpiod)
 
+if(GPIOD_VERSION VERSION_GREATER_EQUAL "2.0")
+  add_compile_definitions(HAVE_GPIOD_V2=1)
+  message(STATUS "Detected libgpiod v2 (${GPIOD_VERSION})")
+else()
+  add_compile_definitions(HAVE_GPIOD_V1=1)
+  message(STATUS "Detected libgpiod v1 (${GPIOD_VERSION})")
+endif()
+
 # nlohmann/json: prefer vendored header, then system package / headers, or auto-download.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann/json.hpp")
   add_library(nlohmann_json INTERFACE)
