@@ -90,7 +90,11 @@
     "title": "Live Telemetry Trend",
     "samples": "{n} SAMPLES",
     "waitingNumeric": "Waiting for numeric telemetry…",
-    "collecting": "Collecting samples…"
+    "collecting": "Collecting samples…",
+    "none": "— None —",
+    "slot1": "Slot 1 (Blue)",
+    "slot2": "Slot 2 (Green)",
+    "slot3": "Slot 3 (Amber)"
   },
   "systemHeader": {
     "statusLabel": "SYSTEM STATUS: {status}",

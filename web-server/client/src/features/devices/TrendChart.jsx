@@ -1,13 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { selectHistory } from '../history/historySlice';
 import { metricMeta } from '../../lib/metricMeta';
 import { useT } from '../../i18n';
+import { useGetSettingsQuery, useUpdateSettingsMutation } from '../settings/settingsApi';
 
 const AXIS = '#bbcbbb'; // on-surface-variant
 const GRID = '#3d4a3e'; // outline-variant
-const SERIES = '#92ccff'; // secondary (Tech Blue — reserved for data viz)
+
+// 3 distinct high-contrast series colors matching the design system
+const SLOT_COLORS = [
+  '#92ccff', // Tech Blue (Slot 1)
+  '#54e98a', // Primary Mint (Slot 2)
+  '#f7c919', // Tertiary Amber (Slot 3)
+];
+
+const LOCAL_STORAGE_KEY = 'smartfarm_trend_indicators';
 
 function fmtTime(t) {
   const d = new Date(t);
@@ -16,20 +25,46 @@ function fmtTime(t) {
   ).padStart(2, '0')}`;
 }
 
-// Translate a metric-meta label (known keys carry a labelKey; unknown fall back
-// to the humanized English label).
 function metaLabel(t, meta) {
   return meta.labelKey ? t(meta.labelKey) : meta.label;
+}
+
+function CustomTooltip({ active, payload, label, activeSlots, t }) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="bg-surface-container border border-outline-variant p-3 font-data-mono text-xs shadow-xl rounded z-50">
+      <div className="text-on-surface-variant mb-2 pb-1 border-b border-outline-variant/30 font-bold">
+        {fmtTime(label)}
+      </div>
+      <div className="space-y-1.5">
+        {payload.map((entry) => {
+          const slotIdx = Number(String(entry.dataKey).replace('v_', ''));
+          const slot = activeSlots.find((s) => s.index === slotIdx);
+          if (!slot) return null;
+          const meta = metricMeta(slot.metric);
+          const name = metaLabel(t, meta);
+          return (
+            <div key={entry.dataKey} className="flex items-center gap-2 min-w-[200px]">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: slot.color }} />
+              <span className="text-on-surface-variant truncate">
+                {slot.deviceId} · {name}:
+              </span>
+              <span className="text-on-surface font-bold ml-auto pl-2 whitespace-nowrap">
+                {entry.value} {meta.unit || ''}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function TrendChart() {
   const t = useT();
   const points = useSelector(selectHistory);
-  const [selected, setSelected] = useState(null);
-  const seriesLabel = (key) => {
-    const [deviceId, metric] = key.split('::');
-    return `${deviceId} · ${metaLabel(t, metricMeta(metric))}`;
-  };
+  const { data: appSettings } = useGetSettingsQuery();
+  const [updateSettings] = useUpdateSettingsMutation();
 
   const seriesKeys = useMemo(() => {
     const keys = new Set();
@@ -37,59 +72,140 @@ export default function TrendChart() {
     return Array.from(keys).sort();
   }, [points]);
 
-  const active = selected && seriesKeys.includes(selected) ? selected : seriesKeys[0];
+  const seriesLabel = (key) => {
+    if (!key) return t('trend.none');
+    const [deviceId, metric] = key.split('::');
+    return `${deviceId} · ${metaLabel(t, metricMeta(metric))}`;
+  };
 
-  const data = useMemo(
-    () =>
-      active
-        ? points
-            .filter((p) => active in p.values)
-            .map((p) => ({ t: p.t, value: p.values[active] }))
-        : [],
-    [points, active]
-  );
+  // 3 slot indicators state
+  const [selectedIndicators, setSelectedIndicators] = useState(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 3) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return ['', '', ''];
+  });
 
-  const metric = active ? active.split('::')[1] : '';
-  const unit = active ? metricMeta(metric).unit : '';
+  // Sync server settings into state when loaded
+  useEffect(() => {
+    const serverInds = appSettings?.trend?.indicators;
+    if (Array.isArray(serverInds) && serverInds.length === 3) {
+      // check if any indicator is populated
+      if (serverInds.some((s) => s !== '')) {
+        setSelectedIndicators(serverInds);
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverInds));
+      }
+    }
+  }, [appSettings]);
+
+  // Seed default selections if seriesKeys are populated and slots are blank
+  useEffect(() => {
+    if (seriesKeys.length > 0 && selectedIndicators.every((s) => s === '')) {
+      const initial = [
+        seriesKeys[0] || '',
+        seriesKeys[1] || '',
+        seriesKeys[2] || '',
+      ];
+      setSelectedIndicators(initial);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initial));
+      updateSettings({ trend: { indicators: initial } });
+    }
+  }, [seriesKeys, selectedIndicators, updateSettings]);
+
+  const handleSelectSlot = (index, value) => {
+    const next = [...selectedIndicators];
+    next[index] = value;
+    setSelectedIndicators(next);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(next));
+    updateSettings({ trend: { indicators: next } });
+  };
+
+  // Determine active slots
+  const activeSlots = useMemo(() => {
+    return selectedIndicators
+      .map((key, index) => ({
+        index,
+        key,
+        color: SLOT_COLORS[index],
+        metric: key ? key.split('::')[1] : '',
+        deviceId: key ? key.split('::')[0] : '',
+      }))
+      .filter((s) => s.key && seriesKeys.includes(s.key));
+  }, [selectedIndicators, seriesKeys]);
+
+  // Build aggregated data array for Recharts
+  const data = useMemo(() => {
+    if (activeSlots.length === 0 || points.length === 0) return [];
+    return points
+      .filter((p) => activeSlots.some((slot) => slot.key in p.values))
+      .map((p) => {
+        const entry = { t: p.t };
+        activeSlots.forEach((slot) => {
+          if (slot.key in p.values) {
+            entry[`v_${slot.index}`] = p.values[slot.key];
+          }
+        });
+        return entry;
+      });
+  }, [points, activeSlots]);
 
   return (
-    <div className="panel industrial-top overflow-hidden relative min-h-[300px]">
-      <div className="p-5 flex flex-wrap gap-2 justify-between items-center border-b border-outline-variant/30">
+    <div className="panel industrial-top overflow-hidden relative min-h-[320px]">
+      <div className="p-5 flex flex-wrap gap-3 justify-between items-center border-b border-outline-variant/30">
         <h3 className="font-headline-sm text-headline-sm text-on-background">{t('trend.title')}</h3>
-        <div className="flex items-center gap-2">
-          {seriesKeys.length > 0 && (
-            <select
-              value={active}
-              onChange={(e) => setSelected(e.target.value)}
-              className="bg-surface-container-highest text-on-surface font-data-mono text-xs px-3 py-1 border border-outline-variant focus:border-secondary focus:outline-none"
-            >
-              {seriesKeys.map((k) => (
-                <option key={k} value={k}>
-                  {seriesLabel(k)}
-                </option>
-              ))}
-            </select>
-          )}
-          <span className="bg-surface-container-highest px-3 py-1 text-[12px] font-data-mono text-on-surface-variant">
+
+        <div className="flex flex-wrap items-center gap-2">
+          {[0, 1, 2].map((slotIdx) => {
+            const slotColor = SLOT_COLORS[slotIdx];
+            const slotKey = selectedIndicators[slotIdx] || '';
+            const labelKey = `slot${slotIdx + 1}`;
+            return (
+              <div key={slotIdx} className="flex items-center gap-1.5 bg-surface-container-highest px-2 py-1 border border-outline-variant">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: slotColor }} />
+                <select
+                  value={slotKey}
+                  onChange={(e) => handleSelectSlot(slotIdx, e.target.value)}
+                  className="bg-transparent text-on-surface font-data-mono text-xs focus:outline-none cursor-pointer max-w-[160px] sm:max-w-[200px]"
+                  title={t(`trend.${labelKey}`)}
+                  aria-label={t(`trend.${labelKey}`)}
+                >
+                  <option value="" className="bg-surface-container-highest text-on-surface-variant">
+                    {t('trend.none')}
+                  </option>
+                  {seriesKeys.map((k) => (
+                    <option key={k} value={k} className="bg-surface-container-highest text-on-surface">
+                      {seriesLabel(k)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
+
+          <span className="bg-surface-container-highest px-3 py-1 text-[12px] font-data-mono text-on-surface-variant border border-outline-variant/50">
             {t('trend.samples', { n: data.length })}
           </span>
         </div>
       </div>
 
       <div className="h-64 w-full p-2">
-        {data.length < 2 ? (
+        {data.length < 2 || activeSlots.length === 0 ? (
           <div className="h-full flex items-center justify-center text-on-surface-variant font-data-mono text-xs">
-            {seriesKeys.length === 0 ? t('trend.waitingNumeric') : t('trend.collecting')}
+            {seriesKeys.length === 0
+              ? t('trend.waitingNumeric')
+              : activeSlots.length === 0
+              ? t('trend.none')
+              : t('trend.collecting')}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={SERIES} stopOpacity={0.35} />
-                  <stop offset="100%" stopColor={SERIES} stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid stroke={GRID} strokeOpacity={0.5} vertical={false} />
               <XAxis
                 dataKey="t"
@@ -104,19 +220,20 @@ export default function TrendChart() {
                 width={40}
                 domain={['auto', 'auto']}
               />
-              <Tooltip
-                labelFormatter={fmtTime}
-                formatter={(v) => [`${v}${unit ? ` ${unit}` : ''}`, metaLabel(t, metricMeta(metric))]}
-                contentStyle={{
-                  background: '#1e2023',
-                  border: '1px solid #3d4a3e',
-                  fontFamily: 'JetBrains Mono',
-                  fontSize: 12,
-                  color: '#e2e2e6',
-                }}
-              />
-              <Area type="monotone" dataKey="value" stroke={SERIES} strokeWidth={2} fill="url(#trendFill)" isAnimationActive={false} />
-            </AreaChart>
+              <Tooltip content={<CustomTooltip activeSlots={activeSlots} t={t} />} />
+              {activeSlots.map((slot) => (
+                <Line
+                  key={slot.index}
+                  type="monotone"
+                  dataKey={`v_${slot.index}`}
+                  stroke={slot.color}
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 5, fill: slot.color, stroke: '#111316', strokeWidth: 2 }}
+                  isAnimationActive={false}
+                />
+              ))}
+            </LineChart>
           </ResponsiveContainer>
         )}
       </div>

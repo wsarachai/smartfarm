@@ -72,6 +72,10 @@ function defaults() {
     disease: {
       confidenceThreshold: clampPercent(process.env.DISEASE_CONFIDENCE_THRESHOLD, 60),
     },
+    // Selected telemetry trend indicators (up to 3 series).
+    trend: {
+      indicators: ['', '', ''],
+    },
   };
 }
 
@@ -176,6 +180,9 @@ function validate(patch) {
     waterStress: { ...settings.waterStress },
     canopy: { ...settings.canopy },
     disease: { ...settings.disease },
+    trend: {
+      indicators: Array.isArray(settings.trend?.indicators) ? [...settings.trend.indicators] : ['', '', ''],
+    },
   };
   const p = patch || {};
 
@@ -303,6 +310,18 @@ function validate(patch) {
     }
   }
 
+  if ('trend' in p) {
+    const tr = p.trend || {};
+    if ('indicators' in tr) {
+      if (!Array.isArray(tr.indicators))
+        return { ok: false, error: 'trend.indicators must be an array' };
+      next.trend.indicators = tr.indicators.slice(0, 3).map((s) => (typeof s === 'string' ? s : ''));
+      while (next.trend.indicators.length < 3) {
+        next.trend.indicators.push('');
+      }
+    }
+  }
+
   return { ok: true, value: next };
 }
 
@@ -343,6 +362,9 @@ function get() {
     waterStress: { ...settings.waterStress },
     canopy: { ...settings.canopy },
     disease: { ...settings.disease },
+    trend: {
+      indicators: Array.isArray(settings.trend?.indicators) ? [...settings.trend.indicators] : ['', '', ''],
+    },
   };
 }
 
