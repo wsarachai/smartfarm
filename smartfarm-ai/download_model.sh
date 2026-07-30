@@ -25,6 +25,19 @@ curl -fL "$WEIGHTS_URL" -o "$DIR/mobilenetv2_plant.pth"
 echo "Downloading labels   -> $DIR/class_names.json"
 curl -fL "$CLASS_URL" -o "$DIR/class_names.json"
 
+# The upstream label file is BROKEN: 37 entries for a 38-class checkpoint, with
+# "Tomato___healthy" missing and "Tomato___Tomato_mosaic_virus" mangled. Without
+# this check a re-download silently reintroduces it, and the missing class comes
+# back as a synthetic "class_37" that defeats the web-server's /healthy/ headline
+# match. Repair it here, at the point of download.
+echo
+if command -v python3 >/dev/null 2>&1; then
+  python3 "$(dirname "$DIR")/verify_class_names.py" "$DIR/class_names.json"
+else
+  echo "WARNING: no python3 on this host — skipping label validation."
+  echo "         The converter validates too, so this is caught before it matters."
+fi
+
 echo
 echo "Downloaded. Now convert (inside the running smartfarm-ai container):"
 echo "  docker exec smartfarm-ai python3 /smartfarm-ai/convert_weights.py"

@@ -47,24 +47,13 @@ def load_labels():
         except Exception as exc:
             sys.exit("ERROR: no %s and download failed (%s). Provide it manually." % (CLASS_NAMES, exc))
 
-    with open(CLASS_NAMES) as f:
-        data = json.load(f)
+    # Validated + repaired centrally: the upstream PlantVillage label file ships
+    # a truncated, partly-mangled list, and inventing placeholder names for the
+    # gap silently breaks the web-server's /healthy/ headline match.
+    sys.path.insert(0, HERE)
+    from verify_class_names import load_verified
 
-    if isinstance(data, list):
-        labels = [str(x) for x in data]
-    elif isinstance(data, dict):
-        keys = list(data.keys())
-        if keys and all(str(k).lstrip("-").isdigit() for k in keys):
-            labels = [str(data[k]) for k in sorted(keys, key=lambda k: int(k))]  # index -> name
-        else:
-            try:
-                inv = {int(v): k for k, v in data.items()}  # name -> index
-                labels = [inv[i] for i in range(len(inv))]
-            except Exception:
-                labels = [str(k) for k in keys]
-    else:
-        sys.exit("ERROR: unrecognized class_names.json shape")
-    return labels
+    return load_verified(CLASS_NAMES)
 
 
 def to_state_dict(obj):
@@ -105,11 +94,13 @@ def main():
     in_f = tvm.mobilenet_v2(pretrained=False).classifier[1].in_features
     print("checkpoint classes=%d, class_names.json labels=%d, head=%s" % (num, len(labels), "nested" if nested else "flat"))
     if num != len(labels):
-        print("WARNING: class count mismatch (%d vs %d) -- using %d; verify label order." % (num, len(labels), num))
-        if len(labels) < num:
-            labels = labels + ["class_%d" % i for i in range(len(labels), num)]
-        else:
-            labels = labels[:num]
+        # Padding with synthetic "class_N" names used to hide this, and a bogus
+        # label silently breaks the web-server's /healthy/ headline match.
+        sys.exit(
+            "ERROR: checkpoint has %d classes but the label file has %d.\n"
+            "       Refusing to invent names -- fix models/class_names.json\n"
+            "       (python3 verify_class_names.py) or point at the right checkpoint." % (num, len(labels))
+        )
 
     # Normalize a nested head (Sequential(Dropout, Linear)) to torchvision's flat
     # Linear by REMAPPING KEYS, then load the WHOLE state dict — backbone

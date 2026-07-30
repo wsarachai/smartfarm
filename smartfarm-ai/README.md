@@ -24,6 +24,11 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
   (Raspberry Pi) + `models/` — fetch the weights + class names (gitignored), then
   normalize them into `models/disease.{pth,tflite}` + `models/model_config.json`.
   See "Set up the disease model" below.
+- `verify_class_names.py` + `plantvillage_classes.json` — the **upstream label
+  file is broken** (37 entries for a 38-class checkpoint: `Tomato___healthy`
+  missing, `Tomato___Tomato_mosaic_virus` mangled). This validates and repairs it
+  against the committed canonical list. Run automatically by `download_model.sh`
+  and by both converters, so a re-download can't silently reintroduce the fault.
 - `frame_poller.py` / `smartfarm_inference.ipynb` — dev artifacts for the camera
   frame-pull path (`../web-server/docs/ai-frame-pull.md`); used interactively.
 
@@ -89,6 +94,22 @@ The pipeline is torch → ONNX → TFLite; `onnx2tf` does the NCHW→NHWC transp
 TFLite needs. `convert_to_tflite.py` finishes by running **both** models on
 `models/leaf.jpg` and comparing logits — if it prints a disagreement warning,
 don't ship that model. Expect a few seconds per inference on a Pi 3 B.
+
+### A note on the labels
+
+The upstream `class_names.json` is **broken**: 37 entries for a 38-class
+checkpoint, with index 37 (`Tomato___healthy`) absent and index 36 mangled to
+`Tomato___Tomato_mosaic_Normally`. Both converters used to pad the gap with a
+synthetic `class_37`, which matters more than it looks — the web-server picks
+its headline by matching `/healthy/` against the label, so a healthy tomato was
+reported as "Possible: class_37".
+
+`verify_class_names.py` now repairs it against `plantvillage_classes.json`
+(the canonical 38 in ImageFolder order) and is invoked by `download_model.sh`
+and both converters. It only rewrites files it recognises as PlantVillage
+(≥90% positional match); a genuinely different model's labels are left alone,
+and a label file with holes is rejected rather than guessed at. Re-running it is
+a no-op, and the first original is preserved as `class_names.json.orig`.
 
 The web-server sends already-averaged fresh inputs + the thresholds; this service
 holds no state. When it's unreachable the web-server degrades gracefully (shows

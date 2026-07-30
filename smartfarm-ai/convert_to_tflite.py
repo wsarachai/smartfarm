@@ -46,25 +46,15 @@ STD = [0.229, 0.224, 0.225]
 
 
 def load_labels():
-    """Ordered class names. Shares convert_weights.py's shape-tolerant parsing:
-    a list, an index->name dict, or a name->index dict."""
+    """Ordered class names, validated + repaired by verify_class_names (which
+    knows the upstream PlantVillage file ships a truncated, partly-mangled list).
+    Dies rather than inventing placeholder labels."""
     if not os.path.exists(CLASS_NAMES):
         sys.exit("ERROR: no %s — run download_model.sh first." % CLASS_NAMES)
-    with open(CLASS_NAMES) as f:
-        data = json.load(f)
+    sys.path.insert(0, HERE)
+    from verify_class_names import load_verified
 
-    if isinstance(data, list):
-        return [str(x) for x in data]
-    if isinstance(data, dict):
-        keys = list(data.keys())
-        if keys and all(str(k).lstrip("-").isdigit() for k in keys):
-            return [str(data[k]) for k in sorted(keys, key=lambda k: int(k))]
-        try:
-            inv = {int(v): k for k, v in data.items()}
-            return [inv[i] for i in range(len(inv))]
-        except Exception:
-            return [str(k) for k in keys]
-    sys.exit("ERROR: unrecognized class_names.json shape")
+    return load_verified(CLASS_NAMES)
 
 
 def build_torch_model(labels):
@@ -97,8 +87,13 @@ def build_torch_model(labels):
     print("checkpoint classes=%d, labels=%d, head=%s" % (num, len(labels), "nested" if nested else "flat"))
 
     if num != len(labels):
-        print("WARNING: class count mismatch (%d vs %d) — using %d; verify label order." % (num, len(labels), num))
-        labels = (labels + ["class_%d" % i for i in range(len(labels), num)])[:num]
+        # Padding with synthetic "class_N" names used to hide this, and a bogus
+        # label silently breaks the web-server's /healthy/ headline match.
+        sys.exit(
+            "ERROR: checkpoint has %d classes but the label file has %d.\n"
+            "       Refusing to invent names — fix models/class_names.json\n"
+            "       (python3 verify_class_names.py) or point at the right checkpoint." % (num, len(labels))
+        )
 
     # Normalize a nested head (Sequential(Dropout, Linear)) to torchvision's flat
     # Linear by REMAPPING KEYS — so the trained BACKBONE loads too. Rebuilding a
