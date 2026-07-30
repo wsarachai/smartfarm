@@ -9,7 +9,9 @@
   },
   "common": {
     "language": "Language",
-    "secondsAgo": "{n}s ago"
+    "secondsAgo": "{n}s ago",
+    "showAll": "Show All",
+    "showLess": "Show Less"
   },
   "status": {
     "online": "Online",

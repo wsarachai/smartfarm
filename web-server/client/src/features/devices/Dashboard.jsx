@@ -15,7 +15,7 @@ const POLL_INTERVAL_MS = 5000;
 
 function EmptyPanel({ children }) {
   return (
-    <div className="panel p-5 flex items-center justify-center text-on-surface-variant font-data-mono text-xs min-h-[120px]">
+    <div className="panel p-5 flex items-center justify-center text-on-surface-variant font-data-mono text-xs min-h-[230px] h-[230px]">
       {children}
     </div>
   );
