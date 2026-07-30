@@ -32,16 +32,24 @@ install -d "$CONF"
 
 TARGET_ARG="${1:-}"
 TEMPLATE="$HERE/.env.jetson_nano.template"
+JSON_TEMPLATE="$HERE/../config.jetson_nano.json"
 
 if [ "$TARGET_ARG" = "rpi" ] || [ "$TARGET_ARG" = "rpi3b" ] || [ "$TARGET_ARG" = "raspberrypi" ]; then
   TEMPLATE="$HERE/.env.raspberry_pi_3b.template"
+  JSON_TEMPLATE="$HERE/../config.raspberry_pi_3b.json"
 elif [ -f /proc/device-tree/model ] && grep -qi "Raspberry Pi" /proc/device-tree/model 2>/dev/null; then
   TEMPLATE="$HERE/.env.raspberry_pi_3b.template"
+  JSON_TEMPLATE="$HERE/../config.raspberry_pi_3b.json"
 fi
 
 if [ ! -f "$CONF/.env" ]; then
-  echo "    using template: $(basename "$TEMPLATE")"
+  echo "    using env template: $(basename "$TEMPLATE")"
   install -m 0644 "$TEMPLATE" "$CONF/.env"
+fi
+
+if [ ! -f "$CONF/config.json" ] && [ -f "$JSON_TEMPLATE" ]; then
+  echo "    using config template: $(basename "$JSON_TEMPLATE")"
+  install -m 0644 "$JSON_TEMPLATE" "$CONF/config.json"
 fi
 
 echo "==> units -> $UNITS"

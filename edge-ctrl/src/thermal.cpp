@@ -42,8 +42,8 @@ void Thermal::resolve() {
   ::closedir(d);
 
   for (const auto& w : want_) {
-    if (!paths_.count(w))
-      LOG_WARN("thermal: requested zone '%s' not found in sysfs", w.c_str());
+    if (paths_.count(w))
+      LOG_INFO("thermal: bound zone '%s' -> %s", w.c_str(), paths_[w].c_str());
   }
 
   // Auto-fallback: if no explicit zone_names matched, bind any thermal_zone*/temp found.
