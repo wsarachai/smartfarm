@@ -48,10 +48,13 @@ Both platforms utilize a standard 40-pin expansion header but differ in Linux ke
 
 ### 4.2 Raspberry Pi 3 Model B
 - **GPIO Chip Driver:** `pinctrl-bcm2835` registered as `gpiochip0` (54 lines total).
-- **Line Indexing:** 1:1 mapping with Broadcom BCM GPIO numbers.
-  - Pin 7 (`BCM 4`) $\rightarrow$ Line Offset `4`
-  - Pin 11 (`BCM 17`) $\rightarrow$ Line Offset `17`
-- **I²C Device File:** `/dev/i2c-1` (Bus 1) at address `0x68` (enabled via `dtparam=i2c_arm=on` in `/boot/config.txt`).
+- **Standard GPIOs (Relay, DHT22):** Enabled by default in the Linux kernel — no `raspi-config` steps required for digital GPIO pins.
+- **I²C Device File (DS3231 RTC):** `/dev/i2c-1` (Bus 1) at address `0x68`. Enable via terminal:
+  ```bash
+  sudo raspi-config nonint do_i2c 0
+  ```
+  or interactively: `sudo raspi-config` $\rightarrow$ **Interface Options** $\rightarrow$ **I2C** $\rightarrow$ **Enable**.
+- **User Permissions:** Add your user to the `gpio` and `i2c` groups: `sudo usermod -aG gpio,i2c $USER`.
 
 ---
 
