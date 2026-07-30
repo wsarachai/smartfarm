@@ -2,7 +2,7 @@
 """
 Relay Switch / External Fan Controller interface for Edge Devices.
 Reads pin mapping from environment variables (.env / env_config).
-Auto-detects available /dev/gpiochip* devices on Raspberry Pi and Jetson.
+Auto-detects available GPIO chips across Linux devices (Jetson, RPi 3B, RPi 4, RPi 5).
 """
 import glob
 import os
@@ -25,19 +25,35 @@ except ImportError:
 def find_working_chip(requested_chip, line_offset):
     """
     Finds an accessible gpiod.Chip instance that contains line_offset.
-    Checks requested_chip, /dev/<chip>, and all /dev/gpiochip* nodes.
+    Tries integer chip numbers, device paths (/dev/gpiochip*), and chip names.
     """
     import gpiod
 
-    candidates = [
-        requested_chip,
-        "/dev/" + os.path.basename(requested_chip) if not requested_chip.startswith("/") else requested_chip,
-    ]
+    candidates = []
+
+    # If requested_chip is e.g. "gpiochip0" or "0", include integer 0
+    req_str = str(requested_chip)
+    if req_str.isdigit():
+        candidates.append(int(req_str))
+    elif req_str.startswith("gpiochip") and req_str[8:].isdigit():
+        candidates.append(int(req_str[8:]))
+
+    candidates.append(requested_chip)
+
+    if not req_str.startswith("/"):
+        candidates.append("/dev/" + os.path.basename(req_str))
+
+    # Add all existing /dev/gpiochip* nodes
     for c in sorted(glob.glob("/dev/gpiochip*")):
         if c not in candidates:
             candidates.append(c)
 
-    last_error = None
+    # Add fallback integer indices 0..9
+    for i in range(10):
+        if i not in candidates:
+            candidates.append(i)
+
+    errors = []
     for cand in candidates:
         try:
             chip = gpiod.Chip(cand)
@@ -53,16 +69,18 @@ def find_working_chip(requested_chip, line_offset):
                 try:
                     line = chip.get_line(line_offset)
                     if line:
-                        return chip, cand
-                except Exception:
-                    pass
+                        return chip, str(cand)
+                except Exception as line_err:
+                    chip.close()
+                    errors.append("{}: get_line({}) failed: {}".format(cand, line_offset, line_err))
+                    continue
 
             chip.close()
-        except Exception as exc:
-            last_error = exc
+        except Exception as chip_err:
+            errors.append("{}: {}".format(cand, chip_err))
             continue
 
-    raise RuntimeError("No accessible GPIO chip found for line {}. Errors: {}".format(line_offset, last_error))
+    raise RuntimeError("No accessible GPIO chip found for line {}. Errors: {}".format(line_offset, "; ".join(errors[:4])))
 
 
 def get_pin_info():
@@ -74,6 +92,34 @@ def get_pin_info():
         "pin": PIN,
         "active_high": ACTIVE_HIGH
     }
+
+
+def diagnose_gpio():
+    """Prints diagnostic information about available GPIO chips on host."""
+    print("==================================================================")
+    print(" GPIO Diagnostics")
+    print("==================================================================")
+    print("Available /dev/gpiochip* nodes: {}".format(glob.glob("/dev/gpiochip*")))
+
+    try:
+        import gpiod
+        print("gpiod module loaded successfully.")
+        for cand in sorted(glob.glob("/dev/gpiochip*")) + [0, 1, 2, 3, 4]:
+            try:
+                c = gpiod.Chip(cand)
+                label = getattr(c, "label", "unknown")
+                if callable(label):
+                    label = label()
+                num_l = getattr(c, "num_lines", "unknown")
+                if callable(num_l):
+                    num_l = num_l()
+                print("  Chip {:<15} -> label: {:<20} lines: {}".format(str(cand), str(label), str(num_l)))
+                c.close()
+            except Exception as exc:
+                print("  Chip {:<15} -> error: {}".format(str(cand), exc))
+    except ImportError:
+        print("gpiod module is NOT installed (sudo apt install python3-gpiod gpiod)")
+    print("==================================================================")
 
 
 def set_relay_state(state_on):
@@ -92,7 +138,7 @@ def set_relay_state(state_on):
             line.request(consumer="edge-relay-switch", type=gpiod.LINE_REQ_DIR_OUT)
         except (TypeError, AttributeError):
             line.request("edge-relay-switch", gpiod.LINE_REQ_DIR_OUT)
-        
+
         line.set_value(target_value)
         print("Relay set to {} via gpiod ({}:line {})".format("ON" if state_on else "OFF", resolved_name, GPIO_LINE))
         return True
@@ -127,6 +173,7 @@ def set_relay_state(state_on):
             pass
 
         print("Relay GPIO control error ({}:{}): {}".format(GPIO_CHIP, GPIO_LINE, exc1), file=sys.stderr)
+        diagnose_gpio()
         return False
 
 
@@ -144,6 +191,8 @@ def main():
             set_relay_state(True)
         elif cmd == "off":
             set_relay_state(False)
+        elif cmd in ("--diag", "diag", "status"):
+            diagnose_gpio()
 
 
 if __name__ == "__main__":

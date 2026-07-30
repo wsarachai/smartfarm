@@ -2,7 +2,7 @@
 """
 DHT22 Temperature and Humidity Sensor interface for Edge Devices.
 Reads pin mapping from environment variables (.env / env_config).
-Auto-detects available /dev/gpiochip* devices on Raspberry Pi and Jetson.
+Auto-detects available GPIO chips across Linux devices (Jetson, RPi 3B, RPi 4, RPi 5).
 """
 import glob
 import os
@@ -23,20 +23,32 @@ except ImportError:
 def find_working_chip(requested_chip, line_offset):
     """
     Finds an accessible gpiod.Chip instance that contains line_offset.
-    Checks requested_chip, /dev/<chip>, and all /dev/gpiochip* nodes.
+    Tries integer chip numbers, device paths (/dev/gpiochip*), and chip names.
     """
     try:
         import gpiod
     except ImportError:
         return None, None
 
-    candidates = [
-        requested_chip,
-        "/dev/" + os.path.basename(requested_chip) if not requested_chip.startswith("/") else requested_chip,
-    ]
+    candidates = []
+    req_str = str(requested_chip)
+    if req_str.isdigit():
+        candidates.append(int(req_str))
+    elif req_str.startswith("gpiochip") and req_str[8:].isdigit():
+        candidates.append(int(req_str[8:]))
+
+    candidates.append(requested_chip)
+
+    if not req_str.startswith("/"):
+        candidates.append("/dev/" + os.path.basename(req_str))
+
     for c in sorted(glob.glob("/dev/gpiochip*")):
         if c not in candidates:
             candidates.append(c)
+
+    for i in range(10):
+        if i not in candidates:
+            candidates.append(i)
 
     for cand in candidates:
         try:
@@ -53,7 +65,7 @@ def find_working_chip(requested_chip, line_offset):
                 try:
                     line = chip.get_line(line_offset)
                     if line:
-                        return chip, cand
+                        return chip, str(cand)
                 except Exception:
                     pass
 
