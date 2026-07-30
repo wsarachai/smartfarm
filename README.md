@@ -21,7 +21,7 @@ The platform follows a modular, microservice-based edge architecture:
 │                                                                                                          │
 │   ┌──────────────────────────────────────────────┐        POST /water-stress     ┌────────────────────┐  │
 │   │ web-server (Docker Container: Port 3000)     │─────── POST /canopy ─────────►│ smartfarm-ai       │  │
-│   │                                              │─────── POST /disease ────────►│ (Docker: Port 5000)│  │
+│   │                                              │─────── POST /disease ────────►│ (Docker: Port 8000)│  │
 │   │ - Express.js API + Static React RTK UI       │◄────── JSON Responses ────────│ - PyTorch / TFLite │  │
 │   │ - Telemetry Ingestion & Control Endpoints    │                               └────────────────────┘  │
 │   │ - ESP32-CAM MJPEG Video Streaming Proxy      │                                                       │
@@ -51,14 +51,14 @@ The platform follows a modular, microservice-based edge architecture:
 
 ## 2. Directory Layout & Microservices
 
-| Component | Architecture & Language | Role |
-| :--- | :--- | :--- |
-| **[`web-server/`](web-server)** | Node.js (Express) + React (Redux Toolkit) | Central Control Web Server, Static UI Host, REST API, Stream Proxy |
-| **[`smartfarm-ai/`](smartfarm-ai)** | Python 3 (PyTorch / TFLite / OpenCV) | AI Decision Engine (Water Stress, Canopy Coverage, PlantVillage Disease Classifier) |
-| **[`edge-ctrl/`](edge-ctrl)** | C++17 Native Daemon + Python Tooling | Host Enclosure Cooling Fan Daemon, Thermal Safety Governor, DS3231 RTC Timekeeper |
-| **[`sensor-zone/`](sensor-zone)** | ESP-IDF (C/C++) | Field Sensor Node Firmware (Ingests Soil Moisture, Temp, Humidity) |
-| **[`pump-zone/`](pump-zone)** | ESP-IDF (C/C++) | Irrigation Actuator Firmware (Controls Water Pumps & Solenoid Valves) |
-| **[`esp32cam/`](esp32cam)** | Arduino (ESP32-CAM) | Live MJPEG Camera Streaming Firmware |
+| Component | Architecture & Language | Role | Default Port |
+| :--- | :--- | :--- | :--- |
+| **[`web-server/`](web-server)** | Node.js (Express) + React (Redux Toolkit) | Central Control Web Server, Static UI Host, REST API, Stream Proxy | **Port 3000** |
+| **[`smartfarm-ai/`](smartfarm-ai)** | Python 3 (PyTorch / TFLite / OpenCV) | AI Decision Engine (Water Stress, Canopy Coverage, PlantVillage Disease Classifier) | **Port 8000** |
+| **[`edge-ctrl/`](edge-ctrl)** | C++17 Native Daemon + Python Tooling | Host Enclosure Cooling Fan Daemon, Thermal Safety Governor, DS3231 RTC Timekeeper | Native Daemon |
+| **[`sensor-zone/`](sensor-zone)** | ESP-IDF (C/C++) | Field Sensor Node Firmware (Ingests Soil Moisture, Temp, Humidity) | Embedded |
+| **[`pump-zone/`](pump-zone)** | ESP-IDF (C/C++) | Irrigation Actuator Firmware (Controls Water Pumps & Solenoid Valves) | Embedded |
+| **[`esp32cam/`](esp32cam)** | Arduino (ESP32-CAM) | Live MJPEG Camera Streaming Firmware | Embedded (Port 81) |
 
 ---
 
@@ -153,7 +153,7 @@ systemctl status edge-ctrl
 
 ### Step 3: Set Up the AI Decision Service (`smartfarm-ai`)
 
-`smartfarm-ai` runs as an isolated microservice container on **Port 5000**.
+`smartfarm-ai` runs as an isolated microservice container on **Port 8000**.
 
 #### 3.1 Download AI Model Weights (PlantVillage Disease Model)
 Fetch the model checkpoint and class mappings:
@@ -179,7 +179,7 @@ cd ~/workspace/smartfarm/smartfarm-ai
 
 #### 3.3 Verify AI Microservice Health
 ```bash
-curl http://localhost:5000/health
+curl http://localhost:8000/health
 # Expected output: {"status":"ok"}
 ```
 
@@ -193,6 +193,8 @@ curl http://localhost:5000/health
 ```bash
 cd ~/workspace/smartfarm/web-server
 cp .env.example .env
+```
+
 Contents of `web-server/.env.example`:
 ```env
 # Backend environment configuration. Copy to .env and adjust as needed.
@@ -212,9 +214,9 @@ CAMERA_STREAM_URL=http://192.168.0.3:81/stream
 CAMERA_SNAPSHOT_URL=/api/v1/camera/frame.jpg
 
 # AI Decision Microservice (smartfarm-ai) Endpoints
-AI_SERVICE_URL=http://smartfarm-ai:5000/water-stress
-CANOPY_SERVICE_URL=http://smartfarm-ai:5000/canopy
-DISEASE_SERVICE_URL=http://smartfarm-ai:5000/disease
+AI_SERVICE_URL=http://smartfarm-ai:8000/water-stress
+CANOPY_SERVICE_URL=http://smartfarm-ai:8000/canopy
+DISEASE_SERVICE_URL=http://smartfarm-ai:8000/disease
 AI_SERVICE_TIMEOUT_MS=8000
 DISEASE_TIMEOUT_MS=30000
 ```
@@ -243,12 +245,12 @@ Once all services are up, verify full system integration:
    Open browser at `http://<DEVICE_IP>:3000` to load the control dashboard.
 2. **AI Microservice Status:**
    ```bash
-   curl -s http://localhost:5000/health
+   curl -s http://localhost:8000/health
    ```
 3. **Container Health:**
    ```bash
    docker ps
-   # Should list: smartfarm-web-server (Port 3000) & smartfarm-ai (Port 5000)
+   # Should list: smartfarm-web-server (Port 3000) & smartfarm-ai (Port 8000)
    ```
 4. **Host Fan Daemon:**
    ```bash
