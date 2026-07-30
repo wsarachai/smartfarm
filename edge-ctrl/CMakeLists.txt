@@ -27,16 +27,36 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(CURL   REQUIRED libcurl)
 pkg_check_modules(GPIOD  REQUIRED libgpiod)
 
-# nlohmann/json: prefer the vendored single header (see third_party/nlohmann/),
-# fall back to a system package if one is installed.
+# nlohmann/json: prefer vendored header, then system package / headers, or auto-download.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann/json.hpp")
   add_library(nlohmann_json INTERFACE)
   target_include_directories(nlohmann_json INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
   set(JSON_TARGET nlohmann_json)
 else()
-  find_package(nlohmann_json 3.2.0 REQUIRED)
-  set(JSON_TARGET nlohmann_json::nlohmann_json)
+  find_package(nlohmann_json QUIET)
+  if(TARGET nlohmann_json::nlohmann_json)
+    set(JSON_TARGET nlohmann_json::nlohmann_json)
+  elseif(EXISTS "/usr/include/nlohmann/json.hpp" OR EXISTS "/usr/local/include/nlohmann/json.hpp")
+    add_library(nlohmann_json INTERFACE)
+    target_include_directories(nlohmann_json INTERFACE "/usr/include" "/usr/local/include")
+    set(JSON_TARGET nlohmann_json)
+  else()
+    message(STATUS "nlohmann_json not found locally. Auto-downloading header...")
+    file(DOWNLOAD
+      "https://github.com/nlohmann/json/releases/latest/download/json.hpp"
+      "${CMAKE_BINARY_DIR}/nlohmann/json.hpp"
+      STATUS JSON_DL_STATUS
+    )
+    list(GET JSON_DL_STATUS 0 JSON_DL_CODE)
+    if(JSON_DL_CODE EQUAL 0)
+      add_library(nlohmann_json INTERFACE)
+      target_include_directories(nlohmann_json INTERFACE "${CMAKE_BINARY_DIR}")
+      set(JSON_TARGET nlohmann_json)
+    else()
+      message(FATAL_ERROR "Failed to find or download nlohmann_json. Please run: sudo apt install nlohmann-json3-dev")
+    endif()
+  endif()
 endif()
 
 # --- Target ------------------------------------------------------------------
