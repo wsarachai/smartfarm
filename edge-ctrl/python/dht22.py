@@ -38,16 +38,27 @@ def find_working_chip(requested_chip, line_offset):
         if c not in candidates:
             candidates.append(c)
 
-    last_error = None
     for cand in candidates:
         try:
             chip = gpiod.Chip(cand)
-            if line_offset < chip.num_lines():
-                return chip, cand
+            num_lines_attr = getattr(chip, "num_lines", None)
+            if callable(num_lines_attr):
+                total_lines = num_lines_attr()
+            elif isinstance(num_lines_attr, int):
+                total_lines = num_lines_attr
             else:
-                chip.close()
-        except Exception as exc:
-            last_error = exc
+                total_lines = 512
+
+            if line_offset < total_lines:
+                try:
+                    line = chip.get_line(line_offset)
+                    if line:
+                        return chip, cand
+                except Exception:
+                    pass
+
+            chip.close()
+        except Exception:
             continue
 
     return None, None

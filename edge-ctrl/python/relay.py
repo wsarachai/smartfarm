@@ -41,10 +41,23 @@ def find_working_chip(requested_chip, line_offset):
     for cand in candidates:
         try:
             chip = gpiod.Chip(cand)
-            if line_offset < chip.num_lines():
-                return chip, cand
+            num_lines_attr = getattr(chip, "num_lines", None)
+            if callable(num_lines_attr):
+                total_lines = num_lines_attr()
+            elif isinstance(num_lines_attr, int):
+                total_lines = num_lines_attr
             else:
-                chip.close()
+                total_lines = 512
+
+            if line_offset < total_lines:
+                try:
+                    line = chip.get_line(line_offset)
+                    if line:
+                        return chip, cand
+                except Exception:
+                    pass
+
+            chip.close()
         except Exception as exc:
             last_error = exc
             continue
@@ -75,7 +88,11 @@ def set_relay_state(state_on):
         import gpiod
         chip_obj, resolved_name = find_working_chip(GPIO_CHIP, GPIO_LINE)
         line = chip_obj.get_line(GPIO_LINE)
-        line.request(consumer="edge-relay-switch", type=gpiod.LINE_REQ_DIR_OUT)
+        try:
+            line.request(consumer="edge-relay-switch", type=gpiod.LINE_REQ_DIR_OUT)
+        except (TypeError, AttributeError):
+            line.request("edge-relay-switch", gpiod.LINE_REQ_DIR_OUT)
+        
         line.set_value(target_value)
         print("Relay set to {} via gpiod ({}:line {})".format("ON" if state_on else "OFF", resolved_name, GPIO_LINE))
         return True
