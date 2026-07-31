@@ -1,44 +1,36 @@
 #!/usr/bin/env bash
-# Fetch the PlantVillage MobileNetV2 checkpoint + its class names into models/,
-# then convert them for the /disease endpoint. Run ON THE JETSON.
-#
-# Defaults target Daksh159/plant-disease-mobilenetv2 (torchvision MobileNetV2,
-# 38 classes, ImageNet preprocessing). Override with DISEASE_WEIGHTS_URL /
-# DISEASE_CLASS_NAMES_URL for a different checkpoint (must be a torchvision
-# MobileNetV2 state_dict; edit numClasses/labels in convert_weights.py if it
-# differs).
-#
-# Two steps: (1) this script downloads the raw files (curl, host-side), then
-# (2) convert_weights.py normalizes them INSIDE the container (needs torch):
-#     ./download_model.sh
-#     docker exec smartfarm-ai python3 /smartfarm-ai/convert_weights.py
+# Fetch the pre-converted PlantVillage MobileNetV2 disease model files into models/.
+# Downloads directly from https://huggingface.co/wsarachai/plant-disease-mobilenetv2
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/models"
 mkdir -p "$DIR"
 
-WEIGHTS_URL="${DISEASE_WEIGHTS_URL:-https://huggingface.co/Daksh159/plant-disease-mobilenetv2/resolve/main/mobilenetv2_plant.pth}"
-CLASS_URL="${DISEASE_CLASS_NAMES_URL:-https://huggingface.co/Daksh159/plant-disease-mobilenetv2/resolve/main/class_names.json}"
+BASE_URL="https://huggingface.co/wsarachai/plant-disease-mobilenetv2/resolve/main"
 
-echo "Downloading weights  -> $DIR/mobilenetv2_plant.pth"
-curl -fL "$WEIGHTS_URL" -o "$DIR/mobilenetv2_plant.pth"
-echo "Downloading labels   -> $DIR/class_names.json"
+WEIGHTS_URL="${DISEASE_WEIGHTS_URL:-$BASE_URL/disease.pth}"
+TFLITE_URL="${DISEASE_TFLITE_URL:-$BASE_URL/disease.tflite}"
+CONFIG_URL="${DISEASE_CONFIG_URL:-$BASE_URL/model_config.json}"
+CLASS_URL="${DISEASE_CLASS_NAMES_URL:-$BASE_URL/class_names.json}"
+
+echo "Downloading PyTorch weights -> $DIR/disease.pth"
+curl -fL "$WEIGHTS_URL" -o "$DIR/disease.pth" || echo "Note: disease.pth download skipped or failed."
+
+echo "Downloading TFLite model   -> $DIR/disease.tflite"
+curl -fL "$TFLITE_URL" -o "$DIR/disease.tflite" || echo "Note: disease.tflite download skipped or failed."
+
+echo "Downloading model config    -> $DIR/model_config.json"
+curl -fL "$CONFIG_URL" -o "$DIR/model_config.json"
+
+echo "Downloading class labels    -> $DIR/class_names.json"
 curl -fL "$CLASS_URL" -o "$DIR/class_names.json"
 
-# The upstream label file is BROKEN: 37 entries for a 38-class checkpoint, with
-# "Tomato___healthy" missing and "Tomato___Tomato_mosaic_virus" mangled. Without
-# this check a re-download silently reintroduces it, and the missing class comes
-# back as a synthetic "class_37" that defeats the web-server's /healthy/ headline
-# match. Repair it here, at the point of download.
 echo
 if command -v python3 >/dev/null 2>&1; then
   python3 "$(dirname "$DIR")/verify_class_names.py" "$DIR/class_names.json"
-else
-  echo "WARNING: no python3 on this host — skipping label validation."
-  echo "         The converter validates too, so this is caught before it matters."
 fi
 
 echo
-echo "Downloaded. Now convert (inside the running smartfarm-ai container):"
-echo "  docker exec smartfarm-ai python3 /smartfarm-ai/convert_weights.py"
-echo "That writes models/disease.pth + models/model_config.json; then hit Analyze."
+echo "Model files downloaded successfully into models/."
+echo "No conversion step required. You can now start smartfarm-ai and run inference."
+

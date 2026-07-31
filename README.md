@@ -168,8 +168,6 @@ cd ~/workspace/smartfarm/smartfarm-ai
 - **On NVIDIA Jetson Nano / x86 (`.pth` PyTorch Backend):**
   ```bash
   docker compose up -d --build
-  # Convert model weights inside PyTorch container
-  docker exec smartfarm-ai python3 /smartfarm-ai/convert_weights.py
   ```
 
 - **On Raspberry Pi 3 Model B (`.tflite` TFLite Backend):**

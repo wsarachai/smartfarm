@@ -7,3 +7,6 @@
 *.jpg
 model_config.json
 .gitattributes
+class_names.json
+class_names.json.orig
+
