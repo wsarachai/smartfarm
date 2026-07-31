@@ -23,7 +23,7 @@ function fmtTime(t, range = 'current') {
   const d = new Date(t);
   const hours = String(d.getHours()).padStart(2, '0');
   const minutes = String(d.getMinutes()).padStart(2, '0');
-  if (range === 'day') {
+  if (range === 'day' || range === 'week') {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${month}/${day} ${hours}:${minutes}`;
@@ -182,7 +182,7 @@ export default function TrendChart() {
 
           {/* Segmented Time Range Selector */}
           <div className="flex items-center bg-surface-container-highest p-0.5 border border-outline-variant rounded">
-            {['current', 'hour', 'day'].map((range) => (
+            {['current', 'hour', 'day', 'week'].map((range) => (
               <button
                 key={range}
                 type="button"

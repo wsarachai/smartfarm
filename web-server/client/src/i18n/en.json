@@ -97,7 +97,8 @@
     "slot3": "Slot 3 (Amber)",
     "rangeCurrent": "Current",
     "rangeHour": "1 Hour",
-    "rangeDay": "1 Day"
+    "rangeDay": "1 Day",
+    "rangeWeek": "7 Days"
   },
   "systemHeader": {
     "statusLabel": "SYSTEM STATUS: {status}",

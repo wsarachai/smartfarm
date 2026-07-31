@@ -97,7 +97,8 @@
     "slot3": "ตัวชี้วัด 3 (เหลือง)",
     "rangeCurrent": "ปัจจุบัน",
     "rangeHour": "1 ชั่วโมง",
-    "rangeDay": "1 วัน"
+    "rangeDay": "1 วัน",
+    "rangeWeek": "7 วัน"
   },
   "systemHeader": {
     "statusLabel": "สถานะระบบ: {status}",

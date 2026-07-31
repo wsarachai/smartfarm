@@ -1,6 +1,6 @@
 // Persisted telemetry history store for Live Operations trend charts.
 // Stores snapshots of all device telemetry metrics with timestamp.
-// Loaded at boot and saved to data/telemetry-history.json.
+// Retains data up to 7 days (168 hours) and automatically prunes out-of-range points.
 
 const fs = require('fs');
 const path = require('path');
@@ -10,12 +10,17 @@ const HISTORY_PATH =
   process.env.TELEMETRY_HISTORY_PATH ||
   path.join(__dirname, '..', '..', 'data', 'telemetry-history.json');
 
-// Max points stored in memory & disk (~24 hours @ 30s cadence = 2880 points)
-const MAX_POINTS = Math.max(100, Number(process.env.TELEMETRY_HISTORY_MAX) || 2880);
+// 7 Days Retention Window (168 hours)
+const RETENTION_MS = Number(process.env.TELEMETRY_RETENTION_MS) || 7 * 24 * 60 * 60 * 1000;
 const SNAPSHOT_CADENCE_MS = 15 * 1000; // 15 seconds
 
 let points = []; // oldest -> newest: { t: timestamp_ms, values: { "deviceId::metric": number } }
 let lastSnapshotAt = 0;
+
+function pruneOldPoints() {
+  const cutoff = Date.now() - RETENTION_MS;
+  points = points.filter((p) => typeof p.t === 'number' && p.t >= cutoff);
+}
 
 function atomicWrite() {
   try {
@@ -31,7 +36,10 @@ function atomicWrite() {
 function load() {
   try {
     const parsed = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8'));
-    if (Array.isArray(parsed.points)) points = parsed.points.slice(-MAX_POINTS);
+    if (Array.isArray(parsed.points)) {
+      points = parsed.points;
+      pruneOldPoints();
+    }
   } catch {
     points = [];
   }
@@ -57,7 +65,7 @@ function captureSnapshot() {
   if (Object.keys(values).length === 0) return;
 
   points.push({ t: now, values });
-  while (points.length > MAX_POINTS) points.shift();
+  pruneOldPoints();
   atomicWrite();
 }
 
@@ -78,7 +86,7 @@ function downsample(rawPoints, bucketMs) {
   for (const [bucketTime, bucketPoints] of buckets.entries()) {
     const aggValues = {};
     const keys = new Set();
-    bucketPoints.forEach((p) => Object.keys(p.values).forEach((k) => keys.add(k)));
+    bucketPoints.forEach((p) => Object.keys(p.values || {}).forEach((k) => keys.add(k)));
 
     keys.forEach((key) => {
       const nums = bucketPoints.map((p) => p.values[key]).filter((v) => typeof v === 'number');
@@ -96,25 +104,37 @@ function downsample(rawPoints, bucketMs) {
 
 function getHistory(range = 'current') {
   const now = Date.now();
-  if (range === 'hour') {
+  const normalizedRange = range.toLowerCase();
+
+  if (normalizedRange === 'hour') {
     const cutoff = now - 60 * 60 * 1000;
     const filtered = points.filter((p) => p.t >= cutoff);
     return downsample(filtered, 60 * 1000); // 1-minute resolution (~60 points)
-  } else if (range === 'day') {
+  } else if (normalizedRange === 'day') {
     const cutoff = now - 24 * 60 * 60 * 1000;
     const filtered = points.filter((p) => p.t >= cutoff);
     return downsample(filtered, 15 * 60 * 1000); // 15-minute resolution (~96 points)
+  } else if (normalizedRange === 'week' || normalizedRange === '7days' || normalizedRange === '7d') {
+    const cutoff = now - 7 * 24 * 60 * 60 * 1000;
+    const filtered = points.filter((p) => p.t >= cutoff);
+    return downsample(filtered, 60 * 60 * 1000); // 1-hour resolution (~168 points)
   }
   // 'current' - last 10 minutes raw
   const cutoff = now - 10 * 60 * 1000;
   return points.filter((p) => p.t >= cutoff);
 }
 
-// Load persisted history at startup
+// Load persisted history at startup & prune out-of-range points
 load();
 
 // Register telemetry updates listener & interval capture
 setTelemetryListener(captureSnapshot);
 setInterval(captureSnapshot, 15000);
 
-module.exports = { load, captureSnapshot, getHistory, HISTORY_PATH, MAX_POINTS };
+// Hourly cleanup job to discard out-of-range data even when idle
+setInterval(() => {
+  pruneOldPoints();
+  atomicWrite();
+}, 60 * 60 * 1000);
+
+module.exports = { load, captureSnapshot, getHistory, pruneOldPoints, HISTORY_PATH, RETENTION_MS };
