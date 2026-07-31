@@ -6,3 +6,4 @@
 *.tflite
 *.jpg
 model_config.json
+.gitattributes

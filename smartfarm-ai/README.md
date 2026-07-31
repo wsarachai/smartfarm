@@ -81,8 +81,7 @@ just the ~9 MB output.
 ./download_model.sh                     # or copy models/mobilenetv2_plant.pth + class_names.json across
 python3 -m venv .venv && . .venv/bin/activate
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-pip install onnx onnx2tf tensorflow-cpu onnx_graphsurgeon sng4onnx \
-            simple_onnx_processing_tools onnxruntime psutil
+pip install onnx onnx2tf tensorflow-cpu onnx_graphsurgeon sng4onnx simple_onnx_processing_tools onnxruntime psutil
 python3 convert_to_tflite.py            # -> models/disease.tflite + model_config.json
 
 # then, on the Pi
