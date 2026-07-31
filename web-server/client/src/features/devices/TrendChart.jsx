@@ -5,6 +5,7 @@ import { selectHistory } from '../history/historySlice';
 import { metricMeta } from '../../lib/metricMeta';
 import { useT } from '../../i18n';
 import { useGetSettingsQuery, useUpdateSettingsMutation } from '../settings/settingsApi';
+import { useGetTelemetryHistoryQuery } from './devicesApi';
 
 const AXIS = '#bbcbbb'; // on-surface-variant
 const GRID = '#3d4a3e'; // outline-variant
@@ -18,23 +19,32 @@ const SLOT_COLORS = [
 
 const LOCAL_STORAGE_KEY = 'smartfarm_trend_indicators';
 
-function fmtTime(t) {
+function fmtTime(t, range = 'current') {
   const d = new Date(t);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(
-    d.getSeconds()
-  ).padStart(2, '0')}`;
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  if (range === 'day') {
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${month}/${day} ${hours}:${minutes}`;
+  }
+  if (range === 'hour') {
+    return `${hours}:${minutes}`;
+  }
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
 }
 
 function metaLabel(t, meta) {
   return meta.labelKey ? t(meta.labelKey) : meta.label;
 }
 
-function CustomTooltip({ active, payload, label, activeSlots, t }) {
+function CustomTooltip({ active, payload, label, activeSlots, t, range }) {
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="bg-surface-container border border-outline-variant p-3 font-data-mono text-xs shadow-xl rounded z-50">
       <div className="text-on-surface-variant mb-2 pb-1 border-b border-outline-variant/30 font-bold">
-        {fmtTime(label)}
+        {fmtTime(label, range)}
       </div>
       <div className="space-y-1.5">
         {payload.map((entry) => {
@@ -62,13 +72,23 @@ function CustomTooltip({ active, payload, label, activeSlots, t }) {
 
 export default function TrendChart() {
   const t = useT();
-  const points = useSelector(selectHistory);
+  const livePoints = useSelector(selectHistory);
   const { data: appSettings } = useGetSettingsQuery();
   const [updateSettings] = useUpdateSettingsMutation();
 
+  const [timeRange, setTimeRange] = useState('current'); // 'current', 'hour', 'day'
+
+  // Fetch historical telemetry from backend when timeRange is 'hour' or 'day'
+  const { data: historyPoints = [] } = useGetTelemetryHistoryQuery(timeRange, {
+    skip: timeRange === 'current',
+    pollingInterval: 30000,
+  });
+
+  const points = timeRange === 'current' ? livePoints : historyPoints;
+
   const seriesKeys = useMemo(() => {
     const keys = new Set();
-    points.forEach((p) => Object.keys(p.values).forEach((k) => keys.add(k)));
+    points.forEach((p) => Object.keys(p.values || {}).forEach((k) => keys.add(k)));
     return Array.from(keys).sort();
   }, [points]);
 
@@ -96,7 +116,6 @@ export default function TrendChart() {
   useEffect(() => {
     const serverInds = appSettings?.trend?.indicators;
     if (Array.isArray(serverInds) && serverInds.length === 3) {
-      // check if any indicator is populated
       if (serverInds.some((s) => s !== '')) {
         setSelectedIndicators(serverInds);
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverInds));
@@ -136,18 +155,18 @@ export default function TrendChart() {
         metric: key ? key.split('::')[1] : '',
         deviceId: key ? key.split('::')[0] : '',
       }))
-      .filter((s) => s.key && seriesKeys.includes(s.key));
-  }, [selectedIndicators, seriesKeys]);
+      .filter((s) => s.key);
+  }, [selectedIndicators]);
 
   // Build aggregated data array for Recharts
   const data = useMemo(() => {
     if (activeSlots.length === 0 || points.length === 0) return [];
     return points
-      .filter((p) => activeSlots.some((slot) => slot.key in p.values))
+      .filter((p) => activeSlots.some((slot) => slot.key in (p.values || {})))
       .map((p) => {
         const entry = { t: p.t };
         activeSlots.forEach((slot) => {
-          if (slot.key in p.values) {
+          if (slot.key in (p.values || {})) {
             entry[`v_${slot.index}`] = p.values[slot.key];
           }
         });
@@ -158,7 +177,27 @@ export default function TrendChart() {
   return (
     <div className="panel industrial-top overflow-hidden relative min-h-[320px]">
       <div className="p-5 flex flex-wrap gap-3 justify-between items-center border-b border-outline-variant/30">
-        <h3 className="font-headline-sm text-headline-sm text-on-background">{t('trend.title')}</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="font-headline-sm text-headline-sm text-on-background">{t('trend.title')}</h3>
+
+          {/* Segmented Time Range Selector */}
+          <div className="flex items-center bg-surface-container-highest p-0.5 border border-outline-variant rounded">
+            {['current', 'hour', 'day'].map((range) => (
+              <button
+                key={range}
+                type="button"
+                onClick={() => setTimeRange(range)}
+                className={`px-2.5 py-1 text-xs font-data-mono transition-colors rounded ${
+                  timeRange === range
+                    ? 'bg-primary text-on-primary font-bold shadow'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                {t(`trend.range${range.charAt(0).toUpperCase() + range.slice(1)}`)}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {[0, 1, 2].map((slotIdx) => {
@@ -197,7 +236,7 @@ export default function TrendChart() {
       <div className="h-64 w-full p-2">
         {data.length < 2 || activeSlots.length === 0 ? (
           <div className="h-full flex items-center justify-center text-on-surface-variant font-data-mono text-xs">
-            {seriesKeys.length === 0
+            {seriesKeys.length === 0 && points.length === 0
               ? t('trend.waitingNumeric')
               : activeSlots.length === 0
               ? t('trend.none')
@@ -209,7 +248,7 @@ export default function TrendChart() {
               <CartesianGrid stroke={GRID} strokeOpacity={0.5} vertical={false} />
               <XAxis
                 dataKey="t"
-                tickFormatter={fmtTime}
+                tickFormatter={(tVal) => fmtTime(tVal, timeRange)}
                 stroke={AXIS}
                 tick={{ fontSize: 10, fontFamily: 'JetBrains Mono' }}
                 minTickGap={40}
@@ -220,7 +259,7 @@ export default function TrendChart() {
                 width={40}
                 domain={['auto', 'auto']}
               />
-              <Tooltip content={<CustomTooltip activeSlots={activeSlots} t={t} />} />
+              <Tooltip content={<CustomTooltip activeSlots={activeSlots} t={t} range={timeRange} />} />
               {activeSlots.map((slot) => (
                 <Line
                   key={slot.index}

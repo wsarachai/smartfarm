@@ -94,7 +94,10 @@
     "none": "— None —",
     "slot1": "Slot 1 (Blue)",
     "slot2": "Slot 2 (Green)",
-    "slot3": "Slot 3 (Amber)"
+    "slot3": "Slot 3 (Amber)",
+    "rangeCurrent": "Current",
+    "rangeHour": "1 Hour",
+    "rangeDay": "1 Day"
   },
   "systemHeader": {
     "statusLabel": "SYSTEM STATUS: {status}",

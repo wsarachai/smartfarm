@@ -7,6 +7,9 @@ export const devicesApi = createApi({
     getDevices: builder.query({
       query: () => '/devices',
     }),
+    getTelemetryHistory: builder.query({
+      query: (range = 'current') => `/devices/history?range=${range}`,
+    }),
     sendCommand: builder.mutation({
       query: (body) => ({
         url: '/control',
@@ -17,4 +20,4 @@ export const devicesApi = createApi({
   }),
 });
 
-export const { useGetDevicesQuery, useSendCommandMutation } = devicesApi;
+export const { useGetDevicesQuery, useGetTelemetryHistoryQuery, useSendCommandMutation } = devicesApi;

@@ -1,4 +1,15 @@
 const devices = new Map();
+let onTelemetryUpdate = null;
+
+function setTelemetryListener(fn) {
+  onTelemetryUpdate = fn;
+}
+
+function notifyListener() {
+  if (typeof onTelemetryUpdate === 'function') {
+    try { onTelemetryUpdate(); } catch {}
+  }
+}
 
 function upsertTelemetry({ device_id, timestamp, metrics }) {
   const existing = devices.get(device_id) || {
@@ -9,6 +20,7 @@ function upsertTelemetry({ device_id, timestamp, metrics }) {
   existing.metrics = { ...existing.metrics, ...metrics };
   existing.lastSeen = timestamp || new Date().toISOString();
   devices.set(device_id, existing);
+  notifyListener();
   return existing;
 }
 
@@ -40,6 +52,7 @@ function reflectState({ device_id, metrics }) {
   existing.metrics = { ...existing.metrics, ...metrics };
   existing.lastSeen = new Date().toISOString();
   devices.set(device_id, existing);
+  notifyListener();
   return existing;
 }
 
@@ -47,4 +60,4 @@ function listDevices() {
   return Array.from(devices.values());
 }
 
-module.exports = { upsertTelemetry, applyCommand, reflectState, listDevices };
+module.exports = { upsertTelemetry, applyCommand, reflectState, listDevices, setTelemetryListener };
