@@ -18,19 +18,14 @@ export default function SensorCard({ device }) {
     setSortMode((prev) => (prev === 'none' ? 'asc' : prev === 'asc' ? 'desc' : 'none'));
   };
 
-  const sortedRows = [...rows].sort(([, valA], [, valB]) => {
+  const sortedRows = [...rows].sort(([keyA], [keyB]) => {
     if (sortMode === 'none') return 0;
-    const numA = typeof valA === 'number' ? valA : Number(valA);
-    const numB = typeof valB === 'number' ? valB : Number(valB);
-    const isNumA = !isNaN(numA);
-    const isNumB = !isNaN(numB);
-
-    if (isNumA && isNumB) {
-      return sortMode === 'asc' ? numA - numB : numB - numA;
-    }
-    if (isNumA) return -1;
-    if (isNumB) return 1;
-    return 0;
+    const metaA = metricMeta(keyA);
+    const metaB = metricMeta(keyB);
+    const nameA = metaA.labelKey ? t(metaA.labelKey) : metaA.label || keyA;
+    const nameB = metaB.labelKey ? t(metaB.labelKey) : metaB.label || keyB;
+    const comp = nameA.localeCompare(nameB);
+    return sortMode === 'asc' ? comp : -comp;
   });
 
   const sortTitle =
