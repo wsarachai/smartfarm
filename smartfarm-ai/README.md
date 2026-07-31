@@ -41,30 +41,52 @@ so future GPU/torch vision endpoints (canopy coverage, disease detection — see
 
 ## Set up the disease model
 
-Downloads pre-converted model files directly from [wsarachai/plant-disease-mobilenetv2](https://huggingface.co/wsarachai/plant-disease-mobilenetv2) on Hugging Face (MobileNetV2, 38 PlantVillage classes, ImageNet preprocessing).
+Downloads pre-converted model files directly from [wsarachai/plant-disease-mobilenetv2](https://huggingface.co/buckets/wsarachai/plant-disease-mobilenetv2) on Hugging Face (MobileNetV2, 38 PlantVillage classes, ImageNet preprocessing).
 
-### Direct Model Download (No local conversion needed)
+### 1. Download Model Assets (Host)
 
-Run `download_model.sh` on your host device:
+Run `download_model.sh` on your host device to fetch weights into the local `./models` directory (which is mounted into the container via volume):
 
 ```bash
 cd smartfarm-ai && ./download_model.sh
 ```
 
 This script fetches pre-packaged model files directly into `models/`:
-- `disease.pth` — PyTorch model checkpoint
-- `disease.tflite` — TensorFlow Lite model for ARM / Raspberry Pi
+- `disease.pth` — PyTorch model checkpoint (Jetson / x86)
+- `disease.tflite` — TensorFlow Lite model (Raspberry Pi / 32-bit ARM)
 - `model_config.json` — Architecture and backend runtime configuration
 - `class_names.json` — Corrected 38-class PlantVillage labels
 
-Then hit **Analyze** on the dashboard — the model lazy-loads automatically.
+---
+
+### 2. Launch Docker Container (Hardware-Specific)
+
+Running `./download_model.sh` alone downloads files to the host, but `smartfarm-ai` runs inside a Docker container so the `web-server` container can reach it at `http://smartfarm-ai:8000` via the shared `smartfarm-net` network.
+
+You **must build and start the Docker container** for your target board:
+
+- **NVIDIA Jetson Nano / x86 (`.pth` PyTorch Backend):**
+  ```bash
+  cd smartfarm-ai && docker compose up -d --build
+  ```
+
+- **Raspberry Pi 3B / 32-bit ARM (`.tflite` TFLite Backend):**
+  ```bash
+  cd smartfarm-ai && docker compose -f docker-compose.rpi.yaml up -d --build
+  ```
+
+Once running, hit **Analyze** on the dashboard — the model lazy-loads automatically on first request.
 
 ---
 
-### Backend Runtimes by Target Hardware
+### 3. Verification & System Health
 
-- **Jetson Nano / x86 / aarch64 (`.pth`, torch backend):** Uses PyTorch runtime loading `models/disease.pth`.
-- **Raspberry Pi 3B / 32-bit ARM (`.tflite`, tflite backend):** Uses `tflite-runtime` interpreter loading `models/disease.tflite`.
+Verify that the AI service container is running and healthy:
+
+```bash
+curl http://localhost:8000/health
+# Expected response: {"status":"ok"}
+```
 
 ### Note on Upstream Label Corrections
 
@@ -74,29 +96,16 @@ The web-server sends already-averaged fresh inputs + the thresholds; this servic
 holds no state. When it's unreachable the web-server degrades gracefully (shows
 "AI offline").
 
-## Run (on the Jetson)
-
-Bring the base up first (it creates the shared `smartfarm-net`), then this service:
-
-```bash
-cd web-server     && docker compose -f docker-compose.yaml up -d      # web-server + network
-cd ../smartfarm-ai && docker compose -f docker-compose.ai.yaml up -d  # AI service on :8000
-```
-
-The web-server reaches it at `http://smartfarm-ai:8000` over the shared network.
-
-### Dev: JupyterLab
+## Dev: JupyterLab (Jetson Ad-hoc)
 
 The service replaces JupyterLab as the default command. To develop models
-interactively, launch Jupyter ad-hoc in the running container:
+interactively on Jetson, launch Jupyter ad-hoc in the running container:
 
 ```bash
 docker exec -it smartfarm-ai jupyter lab --ip=0.0.0.0 --allow-root
 ```
 
-(or temporarily set `entrypoint`/`ports 8888` back in the compose file).
-
-## Local test (no Jetson)
+## Local test (Standalone Python without Docker)
 
 The decision service is pure stdlib, so it runs on any Python 3.6+:
 

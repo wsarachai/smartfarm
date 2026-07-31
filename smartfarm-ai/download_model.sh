@@ -6,12 +6,12 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/models"
 mkdir -p "$DIR"
 
-BASE_URL="https://huggingface.co/wsarachai/plant-disease-mobilenetv2/resolve/main"
+BASE_URL="https://huggingface.co/buckets/wsarachai/plant-disease-mobilenetv2/resolve"
 
-WEIGHTS_URL="${DISEASE_WEIGHTS_URL:-$BASE_URL/disease.pth}"
-TFLITE_URL="${DISEASE_TFLITE_URL:-$BASE_URL/disease.tflite}"
-CONFIG_URL="${DISEASE_CONFIG_URL:-$BASE_URL/model_config.json}"
-CLASS_URL="${DISEASE_CLASS_NAMES_URL:-$BASE_URL/class_names.json}"
+WEIGHTS_URL="${DISEASE_WEIGHTS_URL:-$BASE_URL/disease.pth?download=true}"
+TFLITE_URL="${DISEASE_TFLITE_URL:-$BASE_URL/disease.tflite?download=true}"
+CONFIG_URL="${DISEASE_CONFIG_URL:-$BASE_URL/model_config.json?download=true}"
+CLASS_URL="${DISEASE_CLASS_NAMES_URL:-$BASE_URL/class_names.json?download=true}"
 
 echo "Downloading PyTorch weights -> $DIR/disease.pth"
 curl -fL "$WEIGHTS_URL" -o "$DIR/disease.pth" || echo "Note: disease.pth download skipped or failed."
