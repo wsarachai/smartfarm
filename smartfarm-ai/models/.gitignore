@@ -6,5 +6,3 @@
 *.tflite
 *.jpg
 model_config.json
-class_names.json
-class_names.json.orig
