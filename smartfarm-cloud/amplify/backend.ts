@@ -113,10 +113,25 @@ new CfnPolicy(customResources, 'HubIotPolicy', {
         Action: 'iot:Receive',
         Resource: 'arn:aws:iot:*:*:topic/$aws/things/${iot:Connection.Thing.ThingName}/shadow/*',
       },
+      // MQTT publish/subscribe authorization uses iot:Publish/iot:Subscribe/
+      // iot:Receive on topic ARNs — NOT iot:UpdateThingShadow/iot:GetThingShadow,
+      // which are the *Data Plane REST/HTTPS API* actions (what smartfarm-cloud's
+      // dashboard-api Lambda uses via UpdateThingShadowCommand, correctly, since
+      // it calls the HTTPS API — see its addToRolePolicy grants). A prior version
+      // of this policy granted those two actions here instead of iot:Publish; since
+      // they don't apply to MQTT topic ARNs at all, that statement was a no-op —
+      // the hub could receive shadow deltas but was never actually authorized to
+      // publish its "reported" outcome back. AWS IoT Core disconnects a client
+      // outright on any unauthorized action (not just silently drops the message),
+      // and since a failed report leaves desired≠reported, the same delta gets
+      // redelivered on every resubscribe-after-reconnect — producing a permanent,
+      // fast reconnect loop the moment any command was ever sent. Found by live
+      // debugging: connected cleanly, then looped immediately after the first
+      // Device Shadow command was sent, never recovering.
       {
         Effect: 'Allow',
-        Action: ['iot:UpdateThingShadow', 'iot:GetThingShadow'],
-        Resource: 'arn:aws:iot:*:*:topic/$aws/things/${iot:Connection.Thing.ThingName}/shadow/*',
+        Action: 'iot:Publish',
+        Resource: 'arn:aws:iot:*:*:topic/$aws/things/${iot:Connection.Thing.ThingName}/shadow/update',
       },
     ],
   },
