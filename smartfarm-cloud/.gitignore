@@ -1,0 +1,11 @@
+# Next.js
+.next/
+out/
+
+# Amplify Gen2 — generated at `ampx sandbox` / deploy time, never hand-edited
+amplify_outputs*
+.amplify/
+amplify/#current-cloud-backend/
+
+# npm cache used by amplify.yml
+.npm/
