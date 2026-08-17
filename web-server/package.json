@@ -12,6 +12,7 @@
     "deploy": "node scripts/deploy.js"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "mqtt": "^5.15.2"
   }
 }

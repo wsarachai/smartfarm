@@ -21,6 +21,7 @@ const diseaseStore = require('./src/store/diseaseStore');
 const irrigationScheduler = require('./src/scheduler/irrigationScheduler');
 const waterStress = require('./src/insights/waterStress');
 const canopy = require('./src/insights/canopy');
+const awsIotBridge = require('./src/cloud/awsIotBridge');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -61,6 +62,9 @@ irrigationScheduler.start();
 // Start the AI insight estimators (advisory; delegate decisions to smartfarm-ai).
 waterStress.start();
 canopy.start();
+// Optional AWS IoT Core bridge (see src/cloud/awsIotBridge.js); no-ops if
+// AWS_IOT_* env vars aren't set, so this never blocks/delays local startup.
+awsIotBridge.start();
 
 app.listen(PORT, () => {
   console.log(`Smart Farm Control Center listening on port ${PORT}`);
