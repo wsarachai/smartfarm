@@ -88,14 +88,10 @@ function publishTelemetry(cfg, t) {
   });
 }
 
-function reportOutcome(t, command, outcome) {
+function reportOutcome(t, deviceId, action, outcome) {
   if (!client) return;
   const reported = {
-    command: {
-      ...command,
-      ...outcome,
-      at: new Date().toISOString(),
-    },
+    [deviceId]: { ...action, ...outcome, at: new Date().toISOString() },
   };
   const payload = JSON.stringify({ state: { reported } });
   client.publish(t.shadowUpdate, payload, { qos: 1 }, (err) => {
@@ -116,13 +112,8 @@ function pumpAutoModeOn() {
   }
 }
 
-async function executeCommand(command) {
-  const { device_id, action } = command || {};
-  if (!device_id || typeof action !== 'object' || action === null) {
-    return { ok: false, error: 'malformed command: device_id and action are required' };
-  }
-
-  if (device_id === pumpControl.PUMP_DEVICE_ID) {
+async function executeCommand(deviceId, action) {
+  if (deviceId === pumpControl.PUMP_DEVICE_ID) {
     const state = action.state;
     if (state === 'on' && pumpAutoModeOn()) {
       return { ok: false, error: 'auto mode is on — manual start is disabled' };
@@ -133,10 +124,16 @@ async function executeCommand(command) {
       : { ok: true, relay_status: result.relay_status };
   }
 
-  const device = deviceStore.applyCommand({ device_id, action });
+  const device = deviceStore.applyCommand({ device_id: deviceId, action });
   return { ok: true, device };
 }
 
+// A shadow delta's `state` is keyed by device_id, one desired sub-document per
+// device (e.g. {"main-pump": {"state": "on"}}) — this is how
+// smartfarm-cloud's sendPumpCommand actually writes it (UpdateThingShadow
+// with state.desired[deviceId] = {...}), not a generic {command:{device_id,
+// action}} RPC envelope. Each key is handled independently so one shadow
+// update can carry commands for more than one device.
 function onShadowDelta(t, payloadBuf) {
   let msg;
   try {
@@ -146,15 +143,18 @@ function onShadowDelta(t, payloadBuf) {
     return;
   }
 
-  const command = msg && msg.state && msg.state.command;
-  if (!command || typeof command !== 'object') return;
+  const desired = msg && msg.state;
+  if (!desired || typeof desired !== 'object') return;
 
-  executeCommand(command)
-    .then((outcome) => reportOutcome(t, command, outcome))
-    .catch((err) => {
-      console.error(`${LOG_PREFIX} command execution error: ${err.message}`);
-      reportOutcome(t, command, { ok: false, error: err.message });
-    });
+  Object.entries(desired).forEach(([deviceId, action]) => {
+    if (!action || typeof action !== 'object') return;
+    executeCommand(deviceId, action)
+      .then((outcome) => reportOutcome(t, deviceId, action, outcome))
+      .catch((err) => {
+        console.error(`${LOG_PREFIX} command execution error: ${err.message}`);
+        reportOutcome(t, deviceId, action, { ok: false, error: err.message });
+      });
+  });
 }
 
 function connect(cfg) {
