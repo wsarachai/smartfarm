@@ -18,10 +18,21 @@ const backend = defineBackend({
   dashboardApi,
 });
 
-// Custom resources live in their own stack (Amplify Gen2's documented escape
-// hatch for anything outside auth/data/functions) rather than piggybacking on
-// a generated resource's stack.
-const customResources = backend.createStack('CloudBridgeResources');
+// Custom resources go directly in the root stack, NOT a new nested stack
+// (backend.createStack(...) — the originally-tried approach): the table's
+// consumers (ingestTelemetry, dashboardApi) live in Amplify's own nested
+// "function" stack, and dashboardApi is also referenced by the nested "data"
+// stack. A second custom nested stack that both reads their Lambda ARNs
+// (for the IoT Topic Rule target and IAM grants) AND is read BY them (env
+// vars for the table name) is a dependency cycle between SIBLING nested
+// stacks, which CloudFormation can't order
+// ([CloudformationStackCircularDependencyError] between CloudBridgeResources,
+// data, and function — hit on an earlier attempt). The root stack is the
+// common PARENT of all of them, and parent↔child nested-stack references are
+// normal CloudFormation parameter/output passing, not a sibling cycle — so
+// resources placed here can be freely referenced by every nested stack in
+// either direction without reintroducing the problem.
+const customResources = backend.stack;
 
 // --- Telemetry table --------------------------------------------------------
 // Raw CDK, not `a.model()`: Amplify Data's model-backed DynamoDB tables don't
