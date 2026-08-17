@@ -78,13 +78,13 @@ this step before continuing.
 ## Step 3 — Register the hub as an IoT Thing
 
 ```bash
-aws iot create-thing --thing-name jetson-01
+aws iot create-thing --thing-name rasp-01
 ```
 
 ## Step 4 — Create the X.509 certificate and keys
 
 ```bash
-mkdir -p ~/smartfarm-certs/jetson-01 && cd ~/smartfarm-certs/jetson-01
+mkdir -p ~/smartfarm-certs/rasp-01 && cd ~/smartfarm-certs/rasp-01
 
 aws iot create-keys-and-certificate \
   --set-as-active \
@@ -105,16 +105,16 @@ aws iot attach-policy \
   --target "<certificateArn from Step 4>"
 ```
 
-This is what confines this cert to only `farms/jetson-01/*` and its own shadow topics
+This is what confines this cert to only `farms/rasp-01/*` and its own shadow topics
 (see `HubIotPolicy` in `smartfarm-cloud/amplify/backend.ts` — the policy is generic,
-but each cert can only act as the Thing it's attached to, so `jetson-01`'s cert can
-never touch `jetson-02`'s topics).
+but each cert can only act as the Thing it's attached to, so `rasp-01`'s cert can
+never touch `rasp-02`'s topics).
 
 ## Step 6 — Attach the certificate to the Thing
 
 ```bash
 aws iot attach-thing-principal \
-  --thing-name jetson-01 \
+  --thing-name rasp-01 \
   --principal "<certificateArn from Step 4>"
 ```
 
@@ -124,7 +124,7 @@ aws iot attach-thing-principal \
 curl -o AmazonRootCA1.pem https://www.amazontrust.com/repository/AmazonRootCA1.pem
 ```
 
-(Still in `~/smartfarm-certs/jetson-01/` — you should now have four files there:
+(Still in `~/smartfarm-certs/rasp-01/` — you should now have four files there:
 `certificate.pem.crt`, `private.pem.key`, `public.pem.key` (unused by the bridge, keep
 or discard), `AmazonRootCA1.pem`.)
 
@@ -149,7 +149,7 @@ AWS_IOT_ENDPOINT=xxxxxxxxxxxxx-ats.iot.<region>.amazonaws.com
 AWS_IOT_CERT_PATH=./certs/certificate.pem.crt
 AWS_IOT_KEY_PATH=./certs/private.pem.key
 AWS_IOT_CA_PATH=./certs/AmazonRootCA1.pem
-AWS_IOT_THING_NAME=jetson-01
+AWS_IOT_THING_NAME=rasp-01
 ```
 
 `AWS_IOT_HUB_ID` is optional — it defaults to `AWS_IOT_THING_NAME`, which is correct
@@ -157,27 +157,38 @@ unless you specifically want the telemetry `hubId` to differ from the IoT Thing 
 
 ## Step 10 — Restart `web-server` and verify the connection
 
+For local testing, use `npm run dev`, **not** `npm start` — `start` runs plain `node
+server.js` and never loads `.env`, so the bridge will report "not configured" even with
+everything set up correctly. Only `dev` (`node --env-file=.env server.js`) loads it,
+matching this project's existing convention for every other `.env`-configured value
+(`PUMP_URL`, etc.). For a real Docker deployment, `docker-compose.yaml` needs these
+same `AWS_IOT_*` vars passed through as container environment instead.
+
 ```bash
 cd web-server
-npm start        # or: docker compose up -d --build
+npm run dev       # local testing — loads .env
+# or, for a real deployment: docker compose up -d --build (with AWS_IOT_* set in the container env)
 ```
 
 Look for this in the logs:
 
 ```
-[aws-iot] connected to xxxxxxxxxxxxx-ats.iot.<region>.amazonaws.com as "jetson-01"
+[aws-iot] connected to xxxxxxxxxxxxx-ats.iot.<region>.amazonaws.com as "rasp-01"
 ```
 
-If instead you see `not configured (AWS_IOT_* env vars missing/invalid)`, double-check
-the four file paths and thing name in `.env`. If you see repeated `connection error`
-lines, jump to Troubleshooting below.
+If instead you see `not configured (AWS_IOT_* env vars missing/invalid)`, you're
+probably running `npm start` instead of `npm run dev` — see above. If the env vars
+*are* loading (double-check file paths and thing name in `.env`) but you only see
+repeated `[aws-iot] reconnecting…` lines with **no** `connection error` message ever
+printed, jump to Troubleshooting below — that specific silent-loop symptom has a single
+near-always cause.
 
 To confirm telemetry is actually arriving in AWS, open **AWS IoT Console → MQTT test
-client → Subscribe to a topic** and subscribe to `farms/jetson-01/telemetry`, or from
+client → Subscribe to a topic** and subscribe to `farms/rasp-01/telemetry`, or from
 the CLI:
 
 ```bash
-aws iot-data get-thing-shadow --thing-name jetson-01 /dev/stdout
+aws iot-data get-thing-shadow --thing-name rasp-01 /dev/stdout
 ```
 
 ## Step 11 — Verify the command path end-to-end
@@ -186,7 +197,7 @@ Simulate what the cloud dashboard does — write desired state to the shadow:
 
 ```bash
 aws iot-data update-thing-shadow \
-  --thing-name jetson-01 \
+  --thing-name rasp-01 \
   --cli-binary-format raw-in-base64-out \
   --payload '{"state":{"desired":{"main-pump":{"state":"on"}}}}' \
   /dev/stdout
@@ -196,7 +207,7 @@ Watch the hub's logs — you should see the pump command execute (or, if
 `irrigation.auto` is on, a refusal). Then check what got reported back:
 
 ```bash
-aws iot-data get-thing-shadow --thing-name jetson-01 /dev/stdout
+aws iot-data get-thing-shadow --thing-name rasp-01 /dev/stdout
 ```
 
 `state.reported.main-pump` should show the outcome (`ok`, `relay_status`, `at`).
@@ -206,10 +217,11 @@ aws iot-data get-thing-shadow --thing-name jetson-01 /dev/stdout
 | Symptom | Likely cause |
 |---|---|
 | `policy not found` in Step 2's check | `smartfarm-cloud` sandbox hasn't finished deploying — rerun `ampx sandbox` |
-| `[aws-iot] not configured` at boot | One of the five required env vars is missing, or a file path is wrong/unreadable |
-| Repeated `connection error` in logs | Wrong `AWS_IOT_ENDPOINT` region, cert not attached to a Thing (Step 6 skipped), or policy not attached to the cert (Step 5 skipped) |
+| `[aws-iot] not configured` at boot | You ran `npm start` instead of `npm run dev` (see Step 10) — otherwise, one of the five required env vars is missing, or a file path is wrong/unreadable |
+| Repeated `[aws-iot] reconnecting…` with **no** `connection error` message ever printed | **Cert not attached to the Thing (Step 6 skipped or failed silently).** This is the single most common cause and is easy to confirm: `aws iot list-thing-principals --thing-name rasp-01` — an empty `principals: []` means exactly this. TLS always succeeds with any valid AWS-issued cert (so `openssl s_client -connect <endpoint>:8883 -cert ... -key ... -CAfile ...` reporting `Verification: OK` does **not** rule this out), but without a Thing attachment, `${iot:Connection.Thing.ThingName}` can't resolve, so `iot:Connect` is silently denied and AWS just drops the socket post-handshake — mqtt.js surfaces this as a bare reconnect loop, not an `error` event. Fix: `aws iot attach-thing-principal --thing-name rasp-01 --principal <certificateArn>` |
+| Repeated `connection error` in logs **with a message** | Wrong `AWS_IOT_ENDPOINT` (region/typo), or the cert itself is INACTIVE/revoked — check `aws iot describe-certificate --certificate-id <id>` |
 | TLS handshake fails specifically | Hub's system clock is significantly wrong — mutual TLS cares about validity windows; check `edge-ctrl`'s DS3231 RTC sync is running |
-| Shadow updates accepted but hub never reacts | Confirm the delta actually reached `$aws/things/jetson-01/shadow/update/delta` — subscribe to it in the MQTT test client while running Step 11 |
+| Shadow updates accepted but hub never reacts | Confirm the delta actually reached `$aws/things/rasp-01/shadow/update/delta` — subscribe to it in the MQTT test client while running Step 11 |
 | `AccessDeniedException` on any `aws iot`/`aws iot-data` CLI call above | Your CLI user's IAM permissions don't include IoT — this is separate from the hub's device policy; grant the CLI user `iot:*` or use an admin role for setup |
 
 ## Security notes
@@ -223,6 +235,6 @@ aws iot-data get-thing-shadow --thing-name jetson-01 /dev/stdout
   its certificate rather than reusing it:
   ```bash
   aws iot update-certificate --certificate-id <id> --new-status INACTIVE
-  aws iot detach-thing-principal --thing-name jetson-01 --principal <certificateArn>
+  aws iot detach-thing-principal --thing-name rasp-01 --principal <certificateArn>
   aws iot delete-certificate --certificate-id <id>
   ```

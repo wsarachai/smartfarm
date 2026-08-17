@@ -9,3 +9,6 @@ amplify/#current-cloud-backend/
 
 # npm cache used by amplify.yml
 .npm/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
