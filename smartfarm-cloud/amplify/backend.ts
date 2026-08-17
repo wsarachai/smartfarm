@@ -76,7 +76,10 @@ dashboardLambda.addToRolePolicy(
 // "single hub today, multi-hub-ready schema" design.
 new CfnPolicy(customResources, 'HubIotPolicy', {
   policyName: 'smartfarm-hub-policy',
-  policyDocument: JSON.stringify({
+  // CfnPolicy.policyDocument wants a plain object (CDK serializes it into the
+  // CloudFormation template itself) — a pre-stringified JSON string fails the
+  // L1 construct's runtime prop validation.
+  policyDocument: {
     Version: '2012-10-17',
     Statement: [
       {
@@ -105,7 +108,7 @@ new CfnPolicy(customResources, 'HubIotPolicy', {
         Resource: 'arn:aws:iot:*:*:topic/$aws/things/${iot:Connection.Thing.ThingName}/shadow/*',
       },
     ],
-  }),
+  },
 });
 
 // --- IoT: telemetry ingestion rule ------------------------------------------
