@@ -153,6 +153,7 @@ field, potentially offline):
 ## 5. Related docs
 
 - [`aws-cloud-bridge.md`](aws-cloud-bridge.md) — cloud pipeline design detail (this repo's docs/ folder)
+- [`aws-iot-setup.md`](aws-iot-setup.md) — step-by-step AWS IoT Core provisioning for a hub
 - [`../README.md`](../README.md) — end-to-end deployment/setup guide
 - [`../web-server/DEV.md`](../web-server/DEV.md) — Express routes, Redux slices, pump scheduling
 - [`../web-server/docs/ai-features-roadmap.md`](../web-server/docs/ai-features-roadmap.md) — AI feature roadmap

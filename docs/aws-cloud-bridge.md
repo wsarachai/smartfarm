@@ -3,7 +3,8 @@
 Design detail for the off-LAN monitoring/control pipeline: `web-server`'s
 `src/cloud/awsIotBridge.js` (hub side) and `smartfarm-cloud/` (AWS side, Amplify Gen2 +
 Next.js). See [`architecture.md`](architecture.md) for how this fits into the whole
-system. This feature is **additive** — the hub runs identically with or without it.
+system, and [`aws-iot-setup.md`](aws-iot-setup.md) for the step-by-step provisioning
+instructions. This feature is **additive** — the hub runs identically with or without it.
 
 ## Why it exists
 
@@ -112,6 +113,8 @@ missing/invalid → one log line, local operation unaffected):
 | `AWS_IOT_MQTT_PORT` | Defaults to `8883` |
 
 ## Provisioning (one-time, manual, per hub — can't be automated from a laptop)
+
+Full step-by-step commands are in [`aws-iot-setup.md`](aws-iot-setup.md). Summary:
 
 1. Register the hub as an AWS IoT **Thing**, generate its X.509 cert + private key.
 2. Attach `smartfarm-cloud`'s `HubIotPolicy` (in `amplify/backend.ts` — scoped via the
