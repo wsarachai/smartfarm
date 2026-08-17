@@ -21,9 +21,13 @@ smartfarm-cloud/
 │   ├── layout.tsx
 │   ├── providers.tsx           # Amplify.configure + <Authenticator> wrapper
 │   └── page.tsx                # telemetry table + pump on/off
-├── lib/hubConfig.ts            # single hub id, kept out of hardcoded paths
-└── amplify.yml                 # Amplify Hosting buildspec (backend+frontend)
+└── lib/hubConfig.ts            # single hub id, kept out of hardcoded paths
 ```
+
+Amplify Hosting's build spec lives at the **repo root** (`../amplify.yml`), not here —
+Hosting is configured as a monorepo app (app root = `smartfarm-cloud`), and in that mode
+it reads a repo-root spec in the `applications:`-wrapped monorepo format, not a
+single-app spec inside the app's own directory.
 
 ## Why a raw CDK table instead of `a.model()`
 
@@ -62,14 +66,23 @@ project creates (scoped to that thing's own `farms/{hubId}/*` topics via the
 current/future hub), and copy the cert/key/root CA onto the hub for
 `web-server/src/cloud/awsIotBridge.js`.
 
-## Not implemented here (needs live AWS credentials to go further)
+## Status
 
-- Nothing has been run against real AWS — `ampx sandbox` was never executed
-  in this environment, so `amplify_outputs.json` doesn't exist and the
-  project has never been `npm install`ed, type-checked, or built.
-- The one-time physical provisioning steps (Thing registration, cert
-  generation, attaching the policy, copying certs to the hub) are manual by
-  design and unactionable without console/CLI access to a real account.
-- Amplify Hosting itself (git-connect + domain) is intentionally not
-  configured — `amplify.yml` is written to be ready for it, but connecting
-  the app is an account-level action.
+Deployed and verified end-to-end against real AWS: `ampx sandbox` (identifier `keng`)
+is live, telemetry ingestion and the pump command path (Device Shadow → hub →
+`pumpControl.command()` → reported outcome) have both been confirmed working with a
+real hub (`rasp-01`). See [`../docs/aws-cloud-bridge.md`](../docs/aws-cloud-bridge.md)
+and [`../docs/aws-iot-setup.md`](../docs/aws-iot-setup.md) for the debugging history —
+several real bugs were found and fixed this way (a Device Shadow payload-shape
+mismatch, an IoT policy missing `iot:Publish` on `shadow/update`, a nested-stack
+circular dependency, and this file's monorepo build-spec format).
+
+- The one-time physical provisioning steps (Thing registration, cert generation,
+  attaching the policy, copying certs to the hub) remain manual by design — see
+  `docs/aws-iot-setup.md`.
+- Amplify Hosting (git-connect) is in progress — connecting via the Console creates a
+  **separate `main`-branch backend environment** (`ampx pipeline-deploy`), distinct from
+  the `keng` sandbox. IoT policy/rule names are suffixed per-environment
+  (`smartfarm-hub-policy-<stack-suffix>`) specifically so both can coexist without
+  colliding.
+- A custom domain isn't configured yet.
