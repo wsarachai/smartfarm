@@ -34,6 +34,17 @@ const backend = defineBackend({
 // either direction without reintroducing the problem.
 const customResources = backend.stack;
 
+// IoT policy/rule names are unique per AWS account+region — NOT scoped per
+// CloudFormation stack like a normal logical ID. A literal name here would
+// collide the moment a second environment exists (e.g. this sandbox alongside
+// an Amplify-Hosting-triggered "main" branch pipeline-deploy, each its own
+// stack). Suffix with the stack's own name, which Amplify already makes
+// unique per environment, so any number of environments can coexist. Policy
+// names allow hyphens; IoT rule names are restricted to alphanumeric +
+// underscore, hence the separate sanitized variant.
+const envSuffix = customResources.stackName.slice(-24).replace(/^[^a-zA-Z0-9]+/, '');
+const envSuffixRuleSafe = envSuffix.replace(/[^a-zA-Z0-9_]/g, '_');
+
 // --- Telemetry table --------------------------------------------------------
 // Raw CDK, not `a.model()`: Amplify Data's model-backed DynamoDB tables don't
 // expose a way to turn on native attribute TTL, which the 90-day retention
@@ -86,7 +97,7 @@ dashboardLambda.addToRolePolicy(
 // privilege without a per-hub policy to author and maintain, matching the
 // "single hub today, multi-hub-ready schema" design.
 new CfnPolicy(customResources, 'HubIotPolicy', {
-  policyName: 'smartfarm-hub-policy',
+  policyName: `smartfarm-hub-policy-${envSuffix}`,
   // CfnPolicy.policyDocument wants a plain object (CDK serializes it into the
   // CloudFormation template itself) — a pre-stringified JSON string fails the
   // L1 construct's runtime prop validation.
@@ -147,7 +158,7 @@ ingestLambda.addPermission('IotRuleInvoke', {
 });
 
 new CfnTopicRule(customResources, 'TelemetryIngestRule', {
-  ruleName: 'smartfarm_telemetry_ingest',
+  ruleName: `smartfarm_telemetry_ingest_${envSuffixRuleSafe}`,
   topicRulePayload: {
     sql: "SELECT *, topic(2) AS hubId FROM 'farms/+/telemetry'",
     awsIotSqlVersion: '2016-03-23',
