@@ -120,7 +120,16 @@ Full step-by-step commands are in [`aws-iot-setup.md`](aws-iot-setup.md). Summar
 2. Attach `smartfarm-cloud`'s `HubIotPolicy` (in `amplify/backend.ts` — scoped via the
    `${iot:Connection.Thing.ThingName}` policy variable, so every hub's cert is
    automatically confined to its own `farms/{hubId}/*` and shadow topics without a
-   per-hub policy to author).
+   per-hub policy to author). Grants `iot:Connect`, `iot:Publish` on
+   `farms/{hubId}/*` and `.../shadow/update`, and `iot:Subscribe`/`iot:Receive` on
+   `.../shadow/*` — the hub needs `iot:Publish` on `shadow/update` specifically to
+   report command outcomes back (a distinct MQTT-layer permission from the
+   `iot:UpdateThingShadow`/`iot:GetThingShadow` Data Plane API actions
+   `dashboard-api`'s Lambda uses — those don't apply to MQTT topics at all; missing
+   the MQTT `iot:Publish` grant here was a real bug caught by live end-to-end
+   testing, since AWS IoT Core disconnects a client outright on any unauthorized
+   action rather than just dropping the one message, which turned a single
+   unreportable command into a permanent reconnect loop).
 3. Copy the cert/key/root-CA onto the physical hub; set the env vars above.
 
 ## Deliberate v1 limitations
