@@ -1,5 +1,5 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
-import { dashboardApi } from '../functions/dashboard-api/resource';
+import { dashboardApi } from '../functions/dashboard-api/resource.ts';
 
 // No `a.model()` here on purpose: the telemetry table needs DynamoDB TTL,
 // which Amplify Data's model-backed tables don't expose, so that table is a

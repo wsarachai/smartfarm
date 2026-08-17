@@ -3,10 +3,13 @@ import { AttributeType, BillingMode, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { CfnPolicy, CfnTopicRule } from 'aws-cdk-lib/aws-iot';
 import { Effect, PolicyStatement, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import type { Function as CdkFunction } from 'aws-cdk-lib/aws-lambda';
-import { auth } from './auth/resource';
-import { data } from './data/resource';
-import { ingestTelemetry } from './functions/ingest-telemetry/resource';
-import { dashboardApi } from './functions/dashboard-api/resource';
+// Explicit .ts extensions: ampx's CDK Assembly step runs these files through
+// Node's own native TypeScript loader, which — unlike tsx/esbuild/Next's
+// bundler — does not resolve extensionless relative specifiers.
+import { auth } from './auth/resource.ts';
+import { data } from './data/resource.ts';
+import { ingestTelemetry } from './functions/ingest-telemetry/resource.ts';
+import { dashboardApi } from './functions/dashboard-api/resource.ts';
 
 const backend = defineBackend({
   auth,
