@@ -8,12 +8,11 @@ import { HUB_ID, PUMP_DEVICE_ID } from '../lib/hubConfig';
 
 const client = generateClient<Schema>();
 
-type TelemetryRow = {
-  hubId?: string | null;
-  deviceId?: string | null;
-  timestamp?: string | null;
-  metrics?: unknown;
-};
+// Derived from the generated query's actual return type, rather than
+// hand-duplicated, so it can't drift from what getTelemetryHistory really
+// returns (e.g. Amplify's nullable-field typing on required-looking fields).
+type TelemetryHistoryData = NonNullable<Awaited<ReturnType<typeof client.queries.getTelemetryHistory>>['data']>;
+type TelemetryRow = NonNullable<TelemetryHistoryData[number]>;
 
 export default function DashboardPage() {
   const { signOut, user } = useAuthenticator((ctx) => [ctx.user]);
@@ -31,7 +30,7 @@ export default function DashboardPage() {
         hours: 24,
       });
       if (errors?.length) throw new Error(errors[0].message);
-      setTelemetry((rows ?? []).filter((r): r is TelemetryRow => r !== null));
+      setTelemetry((rows ?? []).filter((r): r is TelemetryRow => r != null));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load telemetry');
     } finally {

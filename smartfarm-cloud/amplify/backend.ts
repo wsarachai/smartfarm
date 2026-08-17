@@ -2,6 +2,7 @@ import { defineBackend } from '@aws-amplify/backend';
 import { AttributeType, BillingMode, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { CfnPolicy, CfnTopicRule } from 'aws-cdk-lib/aws-iot';
 import { Effect, PolicyStatement, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
+import type { Function as CdkFunction } from 'aws-cdk-lib/aws-lambda';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { ingestTelemetry } from './functions/ingest-telemetry/resource';
@@ -31,8 +32,12 @@ const telemetryTable = new Table(customResources, 'TelemetryTable', {
   timeToLiveAttribute: 'ttl',
 });
 
-const ingestLambda = backend.ingestTelemetry.resources.lambda;
-const dashboardLambda = backend.dashboardApi.resources.lambda;
+// Amplify Gen2 narrows resources.lambda to the CDK IFunction interface (no
+// addEnvironment), even though the underlying construct is a concrete
+// NodejsFunction — cast to the concrete type to reach it, same as Amplify's
+// own documented pattern for this exact case.
+const ingestLambda = backend.ingestTelemetry.resources.lambda as CdkFunction;
+const dashboardLambda = backend.dashboardApi.resources.lambda as CdkFunction;
 
 telemetryTable.grantWriteData(ingestLambda);
 telemetryTable.grantReadData(dashboardLambda);
