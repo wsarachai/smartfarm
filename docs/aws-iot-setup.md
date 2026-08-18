@@ -161,13 +161,22 @@ For local testing, use `npm run dev`, **not** `npm start` — `start` runs plain
 server.js` and never loads `.env`, so the bridge will report "not configured" even with
 everything set up correctly. Only `dev` (`node --env-file=.env server.js`) loads it,
 matching this project's existing convention for every other `.env`-configured value
-(`PUMP_URL`, etc.). For a real Docker deployment, `docker-compose.yaml` needs these
-same `AWS_IOT_*` vars passed through as container environment instead.
+(`PUMP_URL`, etc.).
 
 ```bash
 cd web-server
 npm run dev       # local testing — loads .env
-# or, for a real deployment: docker compose up -d --build (with AWS_IOT_* set in the container env)
+```
+
+For a **real Docker deployment**, no extra config beyond what's already in `.env` and
+`certs/` is needed — `docker-compose.yaml` mounts `./certs` read-only into the container
+at `/app/certs` (matching `AWS_IOT_CERT_PATH`/`_KEY_PATH`/`_CA_PATH`'s `./certs/...`
+values) and reads `AWS_IOT_ENDPOINT`/`AWS_IOT_THING_NAME` via `${...}` substitution from
+the same `.env` file docker compose auto-loads from its own directory:
+
+```bash
+cd web-server
+docker compose up -d --build
 ```
 
 Look for this in the logs:
