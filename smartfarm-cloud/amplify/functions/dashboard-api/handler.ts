@@ -1,4 +1,3 @@
-import type { AppSyncResolverHandler } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { IoTClient, DescribeEndpointCommand } from '@aws-sdk/client-iot';
@@ -34,14 +33,30 @@ interface SendCommandArgs {
 
 type Args = GetHistoryArgs & Partial<SendCommandArgs>;
 
-export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
-  switch (event.info.fieldName) {
+// NOT AppSyncResolverHandler from @types/aws-lambda — that type models
+// AppSync's direct Lambda resolver invocation ({info: {fieldName, ...}}).
+// Amplify Gen2's a.handler.function() instead wires this Lambda in as a
+// pipeline function (see the "Invoke" data source's request mapping
+// template), which sends typeName/fieldName/arguments/etc. as TOP-LEVEL
+// event keys, not nested under `info`. event.info.fieldName is undefined
+// on every real invocation with the direct-resolver type — confirmed via
+// CloudWatch logs showing that exact TypeError, and via
+// `aws appsync get-function` on the deployed pipeline function showing the
+// real payload shape, before writing this fix.
+interface PipelineFunctionEvent<A> {
+  typeName: string;
+  fieldName: string;
+  arguments: A;
+}
+
+export const handler = async (event: PipelineFunctionEvent<Args>) => {
+  switch (event.fieldName) {
     case 'getTelemetryHistory':
       return getTelemetryHistory(event.arguments as GetHistoryArgs);
     case 'sendPumpCommand':
       return sendPumpCommand(event.arguments as SendCommandArgs);
     default:
-      throw new Error(`Unsupported field: ${event.info.fieldName}`);
+      throw new Error(`Unsupported field: ${event.fieldName}`);
   }
 };
 
