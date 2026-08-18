@@ -1,3 +1,10 @@
+# npm install, not npm ci: npm ci's stricter lockfile validation fails on
+# this dependency graph ("Missing: X from lock file" for @aws-cdk/toolkit-lib's
+# own transitive deps) even against a freshly regenerated lockfile — reproduced
+# and confirmed locally across a clean cache, so it's an npm lockfile-writer
+# instability for this tree, not a real package.json/lockfile mismatch to fix.
+# npm install resolves directly from package.json and has been the one
+# actually powering every verified deploy this project has had so far.
 version: 1
 applications:
   - appRoot: smartfarm-cloud
@@ -5,13 +12,13 @@ applications:
       phases:
         build:
           commands:
-            - npm ci --cache .npm --prefer-offline
+            - npm install --cache .npm --prefer-offline
             - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
     frontend:
       phases:
         preBuild:
           commands:
-            - npm ci --cache .npm --prefer-offline
+            - npm install --cache .npm --prefer-offline
         build:
           commands:
             - npm run build
