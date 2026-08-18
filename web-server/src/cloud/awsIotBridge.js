@@ -76,15 +76,28 @@ function topics(thingName) {
   };
 }
 
+// One MQTT publish per device, matching ingest-telemetry/handler.ts's expected
+// flat {hubId, device_id, timestamp, metrics} shape exactly — the IoT Rule
+// invokes the Lambda once per message, so a single publish carrying a whole
+// devices[] array (the original version of this function) silently produced
+// rows with no deviceId and empty metrics: the Lambda read event.device_id/
+// event.metrics, which only exist on the flat per-device shape. Caught by
+// inspecting actual DynamoDB rows, not by any local check, since MQTT publish
+// "succeeding" says nothing about whether the payload shape matches what the
+// consumer expects.
 function publishTelemetry(cfg, t) {
   if (!connected) return; // don't buffer real-time readings across an outage
-  const payload = {
-    hubId: cfg.hubId,
-    at: new Date().toISOString(),
-    devices: deviceStore.listDevices(),
-  };
-  client.publish(t.telemetry(cfg.hubId), JSON.stringify(payload), { qos: 0 }, (err) => {
-    if (err) console.error(`${LOG_PREFIX} telemetry publish failed: ${err.message}`);
+  const topic = t.telemetry(cfg.hubId);
+  deviceStore.listDevices().forEach((device) => {
+    const payload = {
+      hubId: cfg.hubId,
+      device_id: device.device_id,
+      timestamp: device.lastSeen || new Date().toISOString(),
+      metrics: device.metrics || {},
+    };
+    client.publish(topic, JSON.stringify(payload), { qos: 0 }, (err) => {
+      if (err) console.error(`${LOG_PREFIX} telemetry publish failed: ${err.message}`);
+    });
   });
 }
 
