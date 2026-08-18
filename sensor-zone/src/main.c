@@ -3,6 +3,7 @@
 
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -124,6 +125,7 @@ void app_main(void)
 {
     // Suppress verbose per-pin config logs from the ESP-IDF GPIO driver.
     esp_log_level_set("gpio", ESP_LOG_WARN);
+    ESP_LOGW(TAG, "Previous reset reason: %d", esp_reset_reason());
 
     rgb_led_init();
 

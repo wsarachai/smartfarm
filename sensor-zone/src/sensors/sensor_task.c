@@ -28,25 +28,33 @@ static void sensor_task_fn(void *pvParameters)
         ESP_LOGE(TAG, "Soil moisture ADC init failed: %s", esp_err_to_name(soil_err));
     }
 
+    float last_temperature = 0.0f;
+    float last_humidity = 0.0f;
     int reading = 0;
 
     while (1)
     {
         reading++;
 
-        float humidity = 0.0f;
-        float temperature = 0.0f;
+        float humidity = last_humidity;
+        float temperature = last_temperature;
         float soil_moisture = 0.0f;
 
         bool dht_ok = dht22_read(&humidity, &temperature);
-        esp_err_t soil_ok = soil_moisture_adc_read_percent(&soil_moisture);
-
         if (!dht_ok)
         {
-            ESP_LOGW(TAG, "[%d] DHT22 read failed — skipping POST", reading);
-            vTaskDelay(pdMS_TO_TICKS(SENSOR_POLL_INTERVAL_MS));
-            continue;
+            ESP_LOGW(TAG, "[%d] DHT22 read failed — using last good values (%.1fC, %.1f%%)",
+                     reading, last_temperature, last_humidity);
+            humidity = last_humidity;
+            temperature = last_temperature;
         }
+        else
+        {
+            last_temperature = temperature;
+            last_humidity = humidity;
+        }
+
+        esp_err_t soil_ok = soil_moisture_adc_read_percent(&soil_moisture);
 
         if (soil_ok != ESP_OK)
         {
