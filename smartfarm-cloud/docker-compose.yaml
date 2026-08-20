@@ -25,14 +25,20 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
   dashboard:
-    build: .
+    build:
+      context: .
+      # Must be a build arg, not a runtime `environment:` entry — NEXT_PUBLIC_*
+      # vars are inlined into the client bundle at `next build` time (see
+      # Dockerfile). Change this value AND rebuild (`--build`) to repoint the
+      # dashboard at a different hub; a plain `up -d` restart won't pick it up.
+      args:
+        NEXT_PUBLIC_HUB_ID: rasp-01
     container_name: smartfarm-dashboard
     restart: unless-stopped
     depends_on:
       - postgres
       - mosquitto
     environment:
-      NEXT_PUBLIC_HUB_ID: rasp-01
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MQTT_URL: ws://mosquitto:9001
       MQTT_USERNAME: dashboard-backend

@@ -15,6 +15,14 @@ RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
+# NEXT_PUBLIC_* vars are inlined into the client-side JS bundle at build
+# time, not read at container runtime — setting NEXT_PUBLIC_HUB_ID under
+# docker-compose's `environment:` (a runtime-only mechanism) does nothing to
+# the actual browser bundle. Caught live: the browser page silently queried
+# hubId=default-hub (the code fallback) while manual curl tests with an
+# explicit ?hubId= param worked fine, masking the bug. Must be a build ARG.
+ARG NEXT_PUBLIC_HUB_ID
+ENV NEXT_PUBLIC_HUB_ID=$NEXT_PUBLIC_HUB_ID
 # `npm run build` already runs `prisma generate` first (see package.json).
 RUN npm run build
 
