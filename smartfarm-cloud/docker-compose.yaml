@@ -16,9 +16,9 @@ services:
     container_name: smartfarm-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: smartfarm
-      POSTGRES_PASSWORD: smartfarm
-      POSTGRES_DB: smartfarm
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -33,7 +33,7 @@ services:
       - mosquitto
     environment:
       NEXT_PUBLIC_HUB_ID: rasp-01
-      DATABASE_URL: postgresql://smartfarm:smartfarm@postgres:5432/smartfarm
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MQTT_URL: ws://mosquitto:9001
       MQTT_USERNAME: dashboard-backend
       MQTT_PASSWORD: ${DASHBOARD_MQTT_PASSWORD}
