@@ -16,18 +16,33 @@ import { db } from './db';
 // limitations" — no Device Shadow equivalent): a command published while the
 // hub is offline is simply lost, not queued or redelivered.
 
-const globalForMqtt = globalThis as unknown as { mqttClient?: MqttClient };
+type LatestReading = { deviceId: string; timestamp: string; metrics: Record<string, unknown> };
+type CommandResult = { deviceId: string; ok: boolean; error?: string; at: string; [k: string]: unknown };
+
+// Everything server-lifetime lives on globalThis, not plain module-level
+// consts — Next.js can load separate bundled instances of this module for
+// instrumentation.ts (where telemetry is written) vs. API routes (where it's
+// read back), which would otherwise split a module-level Map into two
+// independent copies: writes landing in one, reads coming from an empty
+// other. Caught live on itsci-data.local: telemetry was confirmed arriving
+// and parsing correctly (broker + hub logs both clean), but
+// GET /api/telemetry/latest always returned []. globalThis is a true
+// process-wide object regardless of which bundle chunk touches it, same
+// reasoning as lib/db.ts's PrismaClient singleton.
+const globalForMqtt = globalThis as unknown as {
+  mqttClient?: MqttClient;
+  latestByHub?: Map<string, Map<string, LatestReading>>;
+  lastResultByHub?: Map<string, Map<string, CommandResult>>;
+};
 
 // deviceId -> latest reading, per hub. Filled from every telemetry message so
 // GET /api/telemetry/latest can answer without a DB round trip on every poll.
-type LatestReading = { deviceId: string; timestamp: string; metrics: Record<string, unknown> };
-const latestByHub = new Map<string, Map<string, LatestReading>>();
+const latestByHub = globalForMqtt.latestByHub ?? (globalForMqtt.latestByHub = new Map());
 
 // deviceId -> most recent command outcome, per hub. Best-effort, in-memory
 // only — not persisted, since it's just for the dashboard to show "last
 // command: ok/failed" rather than an audit trail.
-type CommandResult = { deviceId: string; ok: boolean; error?: string; at: string; [k: string]: unknown };
-const lastResultByHub = new Map<string, Map<string, CommandResult>>();
+const lastResultByHub = globalForMqtt.lastResultByHub ?? (globalForMqtt.lastResultByHub = new Map());
 
 const LOG_PREFIX = '[mqtt]';
 
@@ -50,6 +65,10 @@ function handleTelemetry(hubId: string, payloadBuf: Buffer) {
 
   if (!latestByHub.has(hubId)) latestByHub.set(hubId, new Map());
   latestByHub.get(hubId)!.set(msg.device_id, { deviceId: msg.device_id, timestamp, metrics });
+  // Success-path log, deliberately kept (not just error-path) — its absence
+  // is what made the globalThis bug above take this long to isolate: every
+  // layer looked healthy from its own error logs alone.
+  console.log(`${LOG_PREFIX} telemetry: ${hubId}/${msg.device_id}`);
 
   db.telemetryReading
     .create({
