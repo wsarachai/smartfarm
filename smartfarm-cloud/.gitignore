@@ -2,13 +2,12 @@
 .next/
 out/
 
-# Amplify Gen2 — generated at `ampx sandbox` / deploy time, never hand-edited
-amplify_outputs*
-.amplify/
-amplify/#current-cloud-backend/
-
-# npm cache used by amplify.yml
-.npm/
-
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Mosquitto runtime state + credentials (not secret-shaped like the ESP32
+# projects' secrets.h, but password hashes and persisted broker data still
+# don't belong in git — see docs/mqtt-cloud-bridge.md for how to recreate).
+mosquitto/config/passwd
+mosquitto/data/
+mosquitto/log/

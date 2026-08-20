@@ -1,40 +1,39 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { generateClient } from 'aws-amplify/data';
-import { useAuthenticator } from '@aws-amplify/ui-react';
-import type { Schema } from '../amplify/data/resource';
 import { HUB_ID, PUMP_DEVICE_ID } from '../lib/hubConfig';
 
-const client = generateClient<Schema>();
+interface TelemetryRow {
+  deviceId: string;
+  timestamp: string;
+  metrics: Record<string, unknown>;
+}
 
-// Derived from the generated query's actual return type, rather than
-// hand-duplicated, so it can't drift from what getTelemetryHistory really
-// returns (e.g. Amplify's nullable-field typing on required-looking fields).
-type TelemetryHistoryData = NonNullable<Awaited<ReturnType<typeof client.queries.getTelemetryHistory>>['data']>;
-type TelemetryRow = NonNullable<TelemetryHistoryData[number]>;
+interface LatestResponse {
+  brokerConnected: boolean;
+  readings: TelemetryRow[];
+}
+
+const LATEST_POLL_MS = 5000;
 
 export default function DashboardPage() {
-  const { signOut, user } = useAuthenticator((ctx) => [ctx.user]);
-  const [telemetry, setTelemetry] = useState<TelemetryRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [latest, setLatest] = useState<LatestResponse | null>(null);
+  const [history, setHistory] = useState<TelemetryRow[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [pumpBusy, setPumpBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadHistory = useCallback(async () => {
-    setLoading(true);
+    setLoadingHistory(true);
     setError(null);
     try {
-      const { data: rows, errors } = await client.queries.getTelemetryHistory({
-        hubId: HUB_ID,
-        hours: 24,
-      });
-      if (errors?.length) throw new Error(errors[0].message);
-      setTelemetry((rows ?? []).filter((r): r is TelemetryRow => r != null));
+      const res = await fetch(`/api/telemetry/history?hubId=${HUB_ID}&hours=24`);
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load telemetry');
+      setHistory(await res.json());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load telemetry');
     } finally {
-      setLoading(false);
+      setLoadingHistory(false);
     }
   }, []);
 
@@ -42,16 +41,40 @@ export default function DashboardPage() {
     loadHistory();
   }, [loadHistory]);
 
+  // Lightweight polling for live values, matching the local web-server
+  // dashboard's pattern — plain interval, cleaned up on unmount so it can't
+  // leak across navigations.
+  useEffect(() => {
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/telemetry/latest?hubId=${HUB_ID}`);
+        if (!res.ok || cancelled) return;
+        setLatest(await res.json());
+      } catch {
+        // transient network hiccup — next tick retries, nothing to surface
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, LATEST_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   const sendPump = async (state: 'on' | 'off') => {
     setPumpBusy(true);
     setError(null);
     try {
-      const { errors } = await client.mutations.sendPumpCommand({
-        hubId: HUB_ID,
-        deviceId: PUMP_DEVICE_ID,
-        state,
+      const res = await fetch('/api/pump/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hubId: HUB_ID, deviceId: PUMP_DEVICE_ID, state }),
       });
-      if (errors?.length) throw new Error(errors[0].message);
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to send pump command');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to send pump command');
     } finally {
@@ -61,14 +84,10 @@ export default function DashboardPage() {
 
   return (
     <main style={{ padding: '2rem', maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h1>SmartFarm Cloud</h1>
-        <div>
-          <span style={{ marginRight: '1rem', fontSize: '0.9rem' }}>{user?.signInDetails?.loginId}</span>
-          <button onClick={signOut}>Sign out</button>
-        </div>
-      </div>
-      <p style={{ color: '#666' }}>Hub: {HUB_ID}</p>
+      <h1>SmartFarm Cloud</h1>
+      <p style={{ color: '#666' }}>
+        Hub: {HUB_ID} · Broker: {latest?.brokerConnected ? 'connected' : 'disconnected'}
+      </p>
 
       <section>
         <h2>Pump control</h2>
@@ -79,15 +98,43 @@ export default function DashboardPage() {
           Turn OFF
         </button>
         <p style={{ fontSize: '0.85rem', color: '#666' }}>
-          Writes the pump&apos;s desired state to the hub&apos;s Device Shadow; the hub applies it (and
-          runs it through its usual safety/auto-off logic) the moment it&apos;s next online.
+          Publishes to the hub&apos;s command topic; the hub applies it (and runs it through its
+          usual safety/auto-off logic) only if it&apos;s online right now — there&apos;s no
+          offline queueing.
         </p>
       </section>
 
       <section>
+        <h2>Latest readings</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>Last seen</th>
+              <th>Metrics</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(latest?.readings.length ?? 0) === 0 && (
+              <tr>
+                <td colSpan={3}>No live readings yet.</td>
+              </tr>
+            )}
+            {latest?.readings.map((row) => (
+              <tr key={row.deviceId}>
+                <td>{row.deviceId}</td>
+                <td>{row.timestamp}</td>
+                <td>{JSON.stringify(row.metrics)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
         <h2>Recent telemetry (24h)</h2>
-        <button onClick={loadHistory} disabled={loading}>
-          {loading ? 'Loading…' : 'Refresh'}
+        <button onClick={loadHistory} disabled={loadingHistory}>
+          {loadingHistory ? 'Loading…' : 'Refresh'}
         </button>
         {error && <p style={{ color: 'crimson' }}>{error}</p>}
         <table>
@@ -99,12 +146,12 @@ export default function DashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {telemetry.length === 0 && !loading && (
+            {history.length === 0 && !loadingHistory && (
               <tr>
                 <td colSpan={3}>No telemetry in the last 24h.</td>
               </tr>
             )}
-            {telemetry.map((row, i) => (
+            {history.map((row, i) => (
               <tr key={`${row.deviceId}-${row.timestamp}-${i}`}>
                 <td>{row.timestamp}</td>
                 <td>{row.deviceId}</td>

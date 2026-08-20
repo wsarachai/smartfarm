@@ -1,7 +1,6 @@
 node_modules
 client/node_modules
 client/dist
-certs
 npm-debug.log
 .git
 .gitignore

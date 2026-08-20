@@ -1,0 +1,44 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9001:9001" # websockets — cloudflared connects here
+      - "127.0.0.1:1883:1883" # plain mqtt — localhost only
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartfarm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smartfarm
+      POSTGRES_PASSWORD: smartfarm
+      POSTGRES_DB: smartfarm
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  dashboard:
+    build: .
+    container_name: smartfarm-dashboard
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - mosquitto
+    environment:
+      NEXT_PUBLIC_HUB_ID: rasp-01
+      DATABASE_URL: postgresql://smartfarm:smartfarm@postgres:5432/smartfarm
+      MQTT_URL: ws://mosquitto:9001
+      MQTT_USERNAME: dashboard-backend
+      MQTT_PASSWORD: ${DASHBOARD_MQTT_PASSWORD}
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  postgres-data:

@@ -25,11 +25,8 @@ services:
 
     # Camera config + dashboard settings persist here. Host-mounted so they
     # survive container recreation; the server writes them atomically on edits.
-    # ./certs is the AWS IoT device cert/key/root-CA from docs/aws-iot-setup.md
-    # (read-only — the container only ever reads them, never writes).
     volumes:
       - ./data:/data
-      - ./certs:/app/certs:ro
 
     environment:
       NODE_ENV: production
@@ -63,18 +60,17 @@ services:
       CANOPY_SERVICE_URL: http://smartfarm-ai:8000/canopy
       DISEASE_SERVICE_URL: http://smartfarm-ai:8000/disease
 
-      # AWS IoT Core bridge (src/cloud/awsIotBridge.js) — optional; blank
-      # ENDPOINT/THING_NAME leaves it disabled with local operation entirely
-      # unaffected. Read from a .env file next to this compose file (docker
-      # compose auto-loads it for ${...} substitution) — the same .env
-      # docs/aws-iot-setup.md has you fill in for `npm run dev`, so one file
-      # covers both. Cert/key/CA paths are fixed relative to the ./certs
-      # mount above, not overridable per-deployment like ENDPOINT/THING_NAME.
-      AWS_IOT_ENDPOINT: ${AWS_IOT_ENDPOINT:-}
-      AWS_IOT_THING_NAME: ${AWS_IOT_THING_NAME:-}
-      AWS_IOT_CERT_PATH: ./certs/certificate.pem.crt
-      AWS_IOT_KEY_PATH: ./certs/private.pem.key
-      AWS_IOT_CA_PATH: ./certs/AmazonRootCA1.pem
+      # Self-hosted MQTT cloud bridge (src/cloud/mqttBridge.js) — optional;
+      # blank MQTT_URL/MQTT_HUB_ID leaves it disabled with local operation
+      # entirely unaffected. Read from a .env file next to this compose file
+      # (docker compose auto-loads it for ${...} substitution) — see
+      # docs/mqtt-cloud-bridge.md for how to create this hub's broker
+      # credentials. No certs needed (plain username/password over wss://,
+      # unlike the AWS IoT bridge this replaced).
+      MQTT_URL: ${MQTT_URL:-}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_HUB_ID: ${MQTT_HUB_ID:-}
 
     healthcheck:
       test:

@@ -10,9 +10,6 @@ data/
 # Local dev env (backend). Copy .env.example -> .env and fill for `npm run dev`.
 .env
 
-# AWS IoT device cert/key/CA (see docs/aws-iot-setup.md) — never commit these.
-certs/
-
 # Logs / misc
 *.log
 .DS_Store

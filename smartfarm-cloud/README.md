@@ -1,88 +1,80 @@
 # smartfarm-cloud — remote monitoring & control
 
-The cloud half of the AWS bridge (see `../docs` on the hub side / the plan
-this was built from). A Next.js dashboard on **AWS Amplify Hosting**, backed
-by an **Amplify Gen2** backend: Cognito auth, a DynamoDB telemetry table,
-and two Lambdas wired to AWS IoT Core. No always-on server — everything here
-is Lambda/Amplify-managed.
+The cloud half of the MQTT bridge (see [`../docs/mqtt-cloud-bridge.md`](../docs/mqtt-cloud-bridge.md)
+for the full design). A self-hosted Next.js dashboard, Postgres (via Prisma), and a
+Mosquitto broker — all Docker Compose, no AWS, no managed backend. Deployed on
+`itsci-data.local`, exposed publicly at `smartfarm.sarachai.com` through a Cloudflare
+Tunnel, gated by Cloudflare Access (not app-level auth).
 
 ```
 smartfarm-cloud/
-├── amplify/
-│   ├── backend.ts              # defineBackend + raw CDK escape hatches
-│   │                           #   (telemetry table, IoT policy, IoT rule)
-│   ├── auth/resource.ts        # Cognito user pool (email/password)
-│   ├── data/resource.ts        # custom query/mutation schema (no a.model())
-│   └── functions/
-│       ├── ingest-telemetry/   # IoT Rule target: writes telemetry → DynamoDB
-│       └── dashboard-api/      # AppSync Lambda resolver: history read +
-│                                #   pump command write (Device Shadow)
-├── app/                        # Next.js App Router, auth-gated at the root
-│   ├── layout.tsx
-│   ├── providers.tsx           # Amplify.configure + <Authenticator> wrapper
-│   └── page.tsx                # telemetry table + pump on/off
-└── lib/hubConfig.ts            # single hub id, kept out of hardcoded paths
+├── docker-compose.yaml     # mosquitto + postgres + dashboard, one stack
+├── Dockerfile              # multi-stage: build the Next.js app, then runtime
+├── mosquitto/config/       # mosquitto.conf + acl (committed) — passwd is gitignored
+├── prisma/schema.prisma    # TelemetryReading model
+├── instrumentation.ts      # starts the persistent MQTT client on server boot
+├── lib/
+│   ├── db.ts                # Prisma client singleton
+│   ├── mqtt.ts               # MQTT subscribe (telemetry/results) + publish (commands)
+│   └── hubConfig.ts          # HUB_ID / PUMP_DEVICE_ID
+└── app/
+    ├── layout.tsx           # no auth wrapper — Cloudflare Access gates the edge
+    ├── page.tsx              # telemetry table + live readings + pump control
+    └── api/
+        ├── telemetry/history/route.ts  # GET, Postgres-backed
+        ├── telemetry/latest/route.ts   # GET, in-memory cache (polled)
+        └── pump/command/route.ts       # POST, publishes to MQTT (fire-and-forget)
 ```
 
-Amplify Hosting's build spec lives at the **repo root** (`../amplify.yml`), not here —
-Hosting is configured as a monorepo app (app root = `smartfarm-cloud`), and in that mode
-it reads a repo-root spec in the `applications:`-wrapped monorepo format, not a
-single-app spec inside the app's own directory.
+## Why Postgres/Prisma instead of a JSON file
 
-## Why a raw CDK table instead of `a.model()`
+The rest of this repo (`web-server`) deliberately avoids a database — bounded,
+atomically-written JSON files, chosen to minimize SD-card wear on the Jetson/Pi hub. That
+constraint doesn't apply here: `itsci-data.local` is a normal PC with a real disk, and
+telemetry history needs date-range queries (`WHERE timestamp >= ...`) that a growing JSON
+file handles poorly. Prisma was chosen over a raw `pg` client for the type safety +
+migration workflow; the schema is small enough that this is a preference call, not a hard
+requirement.
 
-Amplify Data's model-backed DynamoDB tables don't expose a way to enable
-native attribute TTL, and the 90-day retention requirement needs exactly
-that. So `TelemetryTable` is a plain `aws-cdk-lib/aws-dynamodb.Table`
-construct added directly in `backend.ts` (partition key `hubId`, sort key
-`timestamp`, `timeToLiveAttribute: 'ttl'`), per the plan's documented
-fallback. It's written only by `ingest-telemetry` and read only by
-`dashboard-api`, never touched directly by the GraphQL client, so nothing is
-lost by not modeling it as an `a.model()` type.
+## Why no in-app auth
 
-## Why a custom query/mutation instead of hand-wired API Gateway
+Cognito used to gate the dashboard. Its self-hosted replacement is **Cloudflare Access**
+on the `smartfarm.sarachai.com` hostname — configured entirely in the Cloudflare
+dashboard, not in this codebase. `app/layout.tsx` renders directly with no login/session
+wrapper; the only thing standing between the public internet and this app is Access.
 
-The dashboard's read (`getTelemetryHistory`) and write (`sendPumpCommand`)
-paths are exposed as **custom Amplify Data operations** (`a.query()` /
-`a.mutation()` backed by `a.handler.function(dashboardApi)`) rather than a
-separate API Gateway + Cognito authorizer stack. This reuses the AppSync API
-Amplify Data already provisions — Cognito user-pool authorization
-(`allow.authenticated()`) and a typed `generateClient<Schema>()` for the
-frontend come for free, with no hand-rolled REST auth wiring. `dashboard-api`
-is one Lambda handling both operations, switched on `event.info.fieldName`.
+## Setup
 
-## Setup (needs a live AWS account — not run here)
+**1. Broker credentials.** The `dashboard-backend` MQTT user must already exist on the
+broker (see [`../docs/mqtt-cloud-bridge.md`](../docs/mqtt-cloud-bridge.md) for the
+`mosquitto_passwd` commands) — `mosquitto/config/passwd` is gitignored, not
+regenerated automatically.
 
+**2. Env.**
 ```
-npm install
-npx ampx sandbox        # provisions a personal dev backend, writes amplify_outputs.json
-npm run dev
+cp .env.local.example .env.local   # for local `npm run dev`
+cp .env.example .env               # for `docker compose` variable substitution — DASHBOARD_MQTT_PASSWORD
 ```
 
-Then, per the plan's manual provisioning step: register the hub as an IoT
-Thing, generate its X.509 cert, attach the `smartfarm-hub-policy` this
-project creates (scoped to that thing's own `farms/{hubId}/*` topics via the
-`${iot:Connection.Thing.ThingName}` policy variable — one policy covers every
-current/future hub), and copy the cert/key/root CA onto the hub for
-`web-server/src/cloud/awsIotBridge.js`.
+**3. First-time Postgres migration.** With `postgres` running (`docker compose up -d postgres`)
+and `DATABASE_URL` pointing at it:
+```
+npx prisma migrate dev --name init
+```
+This generates `prisma/migrations/` (committed to git) — `prisma migrate deploy` (run
+automatically by the Dockerfile's `CMD`) only *applies* existing migrations, it doesn't
+generate new ones, so this step has to happen once from a dev machine before the first
+deploy.
+
+**4. Run the whole stack.**
+```
+docker compose up -d --build
+```
 
 ## Status
 
-Deployed and verified end-to-end against real AWS: `ampx sandbox` (identifier `keng`)
-is live, telemetry ingestion and the pump command path (Device Shadow → hub →
-`pumpControl.command()` → reported outcome) have both been confirmed working with a
-real hub (`rasp-01`). See [`../docs/aws-cloud-bridge.md`](../docs/aws-cloud-bridge.md)
-and [`../docs/aws-iot-setup.md`](../docs/aws-iot-setup.md) for the debugging history —
-several real bugs were found and fixed this way (a Device Shadow payload-shape
-mismatch, an IoT policy missing `iot:Publish` on `shadow/update`, a nested-stack
-circular dependency, and this file's monorepo build-spec format).
-
-- The one-time physical provisioning steps (Thing registration, cert generation,
-  attaching the policy, copying certs to the hub) remain manual by design — see
-  `docs/aws-iot-setup.md`.
-- Amplify Hosting (git-connect) is in progress — connecting via the Console creates a
-  **separate `main`-branch backend environment** (`ampx pipeline-deploy`), distinct from
-  the `keng` sandbox. IoT policy/rule names are suffixed per-environment
-  (`smartfarm-hub-policy-<stack-suffix>`) specifically so both can coexist without
-  colliding.
-- A custom domain isn't configured yet.
+Migrated off AWS Amplify Gen2 (Cognito, DynamoDB, Lambda, AppSync, IoT Core) to this
+fully self-hosted stack — see [`../docs/mqtt-cloud-bridge.md`](../docs/mqtt-cloud-bridge.md)
+for the wire contract and the "deliberate v1 limitations" this migration carried over
+(single hub, pump-only actuation, no offline command queueing) plus the new gaps it
+introduced (no telemetry TTL enforcement yet).

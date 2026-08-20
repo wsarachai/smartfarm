@@ -4,35 +4,24 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "sandbox": "ampx sandbox",
-    "deploy": "ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID"
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev"
   },
   "dependencies": {
-    "aws-amplify": "^6.6.0",
-    "@aws-amplify/ui-react": "^6.5.0",
+    "@prisma/client": "^5.19.0",
+    "mqtt": "^5.10.1",
     "next": "^14.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@aws-amplify/backend": "^1.5.0",
-    "@aws-amplify/backend-cli": "^1.2.9",
-    "@aws-sdk/client-dynamodb": "^3.616.0",
-    "@aws-sdk/lib-dynamodb": "^3.616.0",
-    "@aws-sdk/client-iot": "^3.616.0",
-    "@aws-sdk/client-iot-data-plane": "^3.616.0",
-    "@types/aws-lambda": "^8.10.140",
     "@types/node": "^20.14.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "aws-cdk": "^2.150.0",
-    "aws-cdk-lib": "^2.150.0",
-    "constructs": "^10.3.0",
-    "esbuild": "^0.23.0",
-    "typescript": "^5.5.4",
-    "tsx": "^4.16.5"
+    "prisma": "^5.19.0",
+    "typescript": "^5.5.4"
   }
 }

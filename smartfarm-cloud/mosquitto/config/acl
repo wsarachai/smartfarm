@@ -1,0 +1,9 @@
+user hub-rasp01
+topic write farms/rasp-01/telemetry
+topic write farms/rasp-01/command/result
+topic read farms/rasp-01/command
+
+user dashboard-backend
+topic read farms/+/telemetry
+topic read farms/+/command/result
+topic write farms/+/command

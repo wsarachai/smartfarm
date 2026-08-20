@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Replaces DynamoDB's TelemetryTable (hubId partition key, timestamp sort
+// key, 90-day TTL). Postgres has no native per-row TTL — retention is a
+// follow-up (a scheduled DELETE), not implemented in v1.
+model TelemetryReading {
+  id        BigInt   @id @default(autoincrement())
+  hubId     String
+  deviceId  String
+  timestamp DateTime
+  metrics   Json
+
+  @@index([hubId, timestamp])
+  @@map("telemetry_readings")
+}

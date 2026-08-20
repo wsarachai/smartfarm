@@ -22,22 +22,26 @@ a layer above or below it is unreachable:
                     │ off-LAN, over the internet   │  on-LAN                     │
                     ▼                              │                             │
    ┌────────────────────────────────┐              │                             │
-   │ CLOUD (AWS, smartfarm-cloud/)  │              │                             │
-   │  optional, additive — the farm  │              │                             │
-   │  runs fully without it          │              │                             │
+   │ CLOUD (self-hosted,             │              │                             │
+   │ smartfarm-cloud/) — optional,   │              │                             │
+   │ additive — the farm runs fully  │              │                             │
+   │ without it                      │              │                             │
    │                                  │              │                             │
-   │  Next.js dashboard (Amplify     │              │                             │
-   │  Hosting, Cognito-gated)        │              │                             │
+   │  Next.js dashboard (Docker on   │              │                             │
+   │  itsci-data.local, Cloudflare   │              │                             │
+   │  Access-gated)                  │              │                             │
    │         │                        │              │                             │
    │         ▼                        │              │                             │
-   │  Lambda (history read /          │              │                             │
-   │  command write) ─── DynamoDB     │              │                             │
-   │         │            (90d TTL)   │              │                             │
-   │         ▼                        │              │                             │
-   │  AWS IoT Core (Device Shadow,    │              │                             │
-   │  MQTT broker, per-hub X.509)     │              │                             │
+   │  Postgres (telemetry history) ◀──MQTT client     │                             │
+   │                                  (subscribe/pub) │                             │
+   │                                  — full detail   │                             │
+   │                                  in mqtt-cloud-  │                             │
+   │                                  bridge.md        │                             │
+   │  Mosquitto broker (Docker,      │              │                             │
+   │  same host, Cloudflare Tunnel)  │              │                             │
    └────────────────┬─────────────────┘              │                             │
-                    │ MQTT (mutual TLS)                │                             │
+                    │ MQTT over wss:// (Cloudflare    │                             │
+                    │ Tunnel — hub is remote)          │                             │
                     ▼                                  ▼                             ▼
    ┌──────────────────────────────────────────────────────────────────────────────────┐
    │ LOCAL HUB — NVIDIA Jetson Nano / Raspberry Pi 3B (web-server/, smartfarm-ai/,      │
@@ -66,7 +70,7 @@ a layer above or below it is unreachable:
 
 - **Field devices** only sense or actuate — no local intelligence, no scheduling, no state beyond what's needed to reconnect Wi-Fi.
 - **The local hub** owns everything: ingestion, state, scheduling, safety, the dashboard, and *calls out* to AI for decisions. It runs fully standalone; nothing above this line is required.
-- **The cloud** is a bolt-on for off-LAN visibility/control. Built on this branch (`feat/aws-cloud-bridge`) — see [`aws-cloud-bridge.md`](aws-cloud-bridge.md) for its own design detail. If AWS is unreachable, the hub is unaffected.
+- **The cloud** is a bolt-on for off-LAN visibility/control, fully self-hosted (no AWS) — see [`mqtt-cloud-bridge.md`](mqtt-cloud-bridge.md) for its own design detail. If the broker/dashboard is unreachable, the hub is unaffected.
 
 ## 2. Components
 
@@ -75,7 +79,7 @@ a layer above or below it is unreachable:
 | [`web-server/`](../web-server) | Node.js (Express) + React (Redux Toolkit) | Central control server: telemetry ingestion, device/actuator control, irrigation scheduling, camera proxy, settings, cloud bridge | Hub (Docker) |
 | [`smartfarm-ai/`](../smartfarm-ai) | Python 3 (stdlib `http.server`, PyTorch/TFLite, PIL+numpy) | AI decision microservice — water stress (rule-based), canopy coverage (HSV thresholding), disease detection (PlantVillage CNN) | Hub (Docker) |
 | [`edge-ctrl/`](../edge-ctrl) | C++17 native daemon + Python tooling | Enclosure cooling fan control, thermal safety governor, DS3231 RTC sync | Hub (native systemd service, no Docker) |
-| [`smartfarm-cloud/`](../smartfarm-cloud) | AWS Amplify Gen2 (Cognito, Lambda, DynamoDB, IoT Core) + Next.js | Off-LAN dashboard: telemetry history + remote pump control | AWS (serverless) |
+| [`smartfarm-cloud/`](../smartfarm-cloud) | Next.js + Postgres (Prisma) + Mosquitto, Docker | Off-LAN dashboard: telemetry history + remote pump control, self-hosted | `itsci-data.local` (Docker) |
 | [`sensor-zone/`](../sensor-zone) | ESP-IDF (C), ESP-WROOM-32 | Reads DHT22 (temp/humidity) + soil-moisture ADC, POSTs telemetry | Field |
 | [`pump-zone/`](../pump-zone) | ESP-IDF (C), ESP-WROOM-32 | Relay-driven pump actuator, HTTP server, RGB status LED | Field |
 | [`pump-zone-esp01/`](../pump-zone-esp01) | Arduino (C++), ESP-01/01S | Cheaper drop-in replacement for `pump-zone` — same `/api/v1/relay` contract, adds a local dead-man safety cutoff + OTA | Field |
@@ -84,6 +88,24 @@ a layer above or below it is unreachable:
 
 `esp-idf-iot/`, referenced as a "reference workspace" in some older notes, does not
 exist in this checkout — don't rely on that reference.
+
+### 2.1 Self-hosted modules (inside `smartfarm-cloud/`)
+
+The single `smartfarm-cloud` row above is one Docker Compose stack of three services on
+`itsci-data.local`, replacing what used to be a multi-service AWS Amplify Gen2 app
+(Cognito, AppSync, 2 Lambdas, DynamoDB, IoT Core, Amplify Hosting). Full wire contract
+and ACL detail in [`mqtt-cloud-bridge.md`](mqtt-cloud-bridge.md).
+
+| Service | Resource | Role | Defined in |
+|---|---|---|---|
+| **dashboard** | Next.js app (Docker, `next start`) | Serves the UI + API routes; runs a persistent in-process MQTT client (via `instrumentation.ts`) instead of a Lambda-per-request model | [`../smartfarm-cloud/Dockerfile`](../smartfarm-cloud/Dockerfile) |
+| **dashboard** | `app/api/telemetry/history`, `app/api/telemetry/latest`, `app/api/pump/command` | Plain Next.js route handlers — no GraphQL/AppSync layer | [`../smartfarm-cloud/app/api`](../smartfarm-cloud/app/api) |
+| **postgres** | `TelemetryReading` table (Prisma) | Telemetry store: `hubId`+`timestamp` indexed, no TTL enforcement yet (a gap vs. the old DynamoDB TTL — see mqtt-cloud-bridge.md) | [`../smartfarm-cloud/prisma/schema.prisma`](../smartfarm-cloud/prisma/schema.prisma) |
+| **mosquitto** | Broker, `password_file` + `acl_file` | Replaces AWS IoT Core entirely — plain MQTT auth/ACLs instead of X.509 + IAM policies, no Device Shadow (commands are fire-and-forget) | [`../smartfarm-cloud/mosquitto/config`](../smartfarm-cloud/mosquitto/config) |
+
+Auth is **not** one of these services — it's Cloudflare Access, gating
+`smartfarm.sarachai.com` entirely at the edge, outside this repo. The app itself has no
+login/session/user model.
 
 ## 3. Data flows
 
@@ -101,8 +123,8 @@ timer, and logs every attempt (`pumpLog.js`, persisted). The generic `POST
 /api/v1/control` endpoint exists for any other `device_id` but is currently
 state-only (`deviceStore.applyCommand()`) — it updates what the dashboard displays, not
 real hardware, until that device type gets its own relay route the way the pump did.
-Cloud-originated commands (via AWS IoT Device Shadow) are routed through this same
-split in `awsIotBridge.js`, not a parallel path.
+Cloud-originated commands (via the self-hosted MQTT bridge) are routed through this same
+split in `mqttBridge.js`, not a parallel path.
 
 **Camera:** `esp32cam` pushes JPEG frames (~1/10s) to `POST /api/v1/camera/frame` (RAM
 ring buffer, single slot, no SD writes); the hub serves `/frame.jpg` (snapshot,
@@ -124,9 +146,10 @@ hits. `irrigation.auto` is a server-global switch — in AUTO, manual `ON` (from
 dashboard *or* the cloud) is refused with `409`; manual `OFF` always works as an
 emergency stop.
 
-**Cloud sync (hub ⇄ AWS, additive):** see [`aws-cloud-bridge.md`](aws-cloud-bridge.md)
-for the full design. In short: real-time telemetry publish up, Device Shadow delta for
-commands down, everything keyed by `hubId` for a currently-single hub.
+**Cloud sync (hub ⇄ self-hosted MQTT broker, additive):** see
+[`mqtt-cloud-bridge.md`](mqtt-cloud-bridge.md) for the full design. In short: real-time
+telemetry publish up, fire-and-forget command publish down (no offline queueing),
+everything keyed by `hubId` for a currently-single hub.
 
 ## 4. Design principles
 
@@ -152,11 +175,10 @@ field, potentially offline):
 
 ## 5. Related docs
 
-- [`aws-cloud-bridge.md`](aws-cloud-bridge.md) — cloud pipeline design detail (this repo's docs/ folder)
-- [`aws-iot-setup.md`](aws-iot-setup.md) — step-by-step AWS IoT Core provisioning for a hub
+- [`mqtt-cloud-bridge.md`](mqtt-cloud-bridge.md) — cloud pipeline design detail (this repo's docs/ folder)
 - [`../README.md`](../README.md) — end-to-end deployment/setup guide
 - [`../web-server/DEV.md`](../web-server/DEV.md) — Express routes, Redux slices, pump scheduling
 - [`../web-server/docs/ai-features-roadmap.md`](../web-server/docs/ai-features-roadmap.md) — AI feature roadmap
 - [`../smartfarm-ai/README.md`](../smartfarm-ai/README.md) — AI service API reference
 - [`../edge-ctrl/docs/hardware-spec.md`](../edge-ctrl/docs/hardware-spec.md) — pinout matrix, Linux driver details
-- [`../smartfarm-cloud/README.md`](../smartfarm-cloud/README.md) — cloud project setup (Amplify sandbox, provisioning)
+- [`../smartfarm-cloud/README.md`](../smartfarm-cloud/README.md) — cloud project setup (Docker Compose, Prisma migrations)
