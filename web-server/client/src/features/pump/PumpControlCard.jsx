@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Power, Timer } from 'lucide-react';
+import { Fan, Power, Timer } from 'lucide-react';
 import Led from '../../components/Led';
 import WidgetCard from '../../components/WidgetCard';
 import { useT } from '../../i18n';
@@ -90,6 +90,16 @@ export default function PumpControlCard() {
                 <span className="font-data-mono text-sm tabular-nums">{formatMs(remainingMs)}</span>
               </div>
             ) : null}
+          </div>
+
+          <div className="mt-4 flex justify-center">
+            <div
+              className={`w-14 h-14 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${
+                isOn ? 'border-primary' : 'border-outline-variant'
+              }`}
+            >
+              <Fan size={24} className={isOn ? 'text-primary animate-spin' : 'text-on-surface-variant'} />
+            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
