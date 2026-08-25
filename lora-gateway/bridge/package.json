@@ -1,0 +1,19 @@
+{
+  "name": "lora-gateway-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reads JSON telemetry lines from the LoRa gateway's USB serial port and POSTs them to the Smart Farm web-server.",
+  "main": "bridge.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bridge.js",
+    "start:env": "node --env-file=.env bridge.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@serialport/parser-readline": "^12.0.0",
+    "serialport": "^12.0.0"
+  }
+}
