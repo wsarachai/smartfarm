@@ -1,6 +1,9 @@
 /* ds18b20.c — see ds18b20.h. Classic 1-Wire bit-bang, timings per the datasheet. */
 #include "ds18b20.h"
-#include "board.h"
+#include <Arduino.h>
+
+/* 1-Wire slot timing uses Arduino's microsecond busy-delay (STM32duino). */
+#define delay_us(us) delayMicroseconds(us)
 
 #define CMD_SKIP_ROM        0xCC
 #define CMD_CONVERT_T       0x44

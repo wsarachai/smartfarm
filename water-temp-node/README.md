@@ -74,10 +74,23 @@ gateway's copy.
 
 ```
 cd water-temp-node
-pio run                 # first run pulls the ststm32 platform + STM32WL HAL (slow, one-time)
+pio run                 # first run pulls the STM32duino core (large, one-time)
 pio run -t upload       # flash over the onboard ST-LINK (USB)
 pio device monitor      # 115200 — shows the per-wake debug log
 ```
+
+**Verified: compiles clean** — RAM 2.3%, Flash 10.2% of the STM32WL55JC.
+
+### Why `framework = arduino`, not `stm32cube`
+
+PlatformIO's ststm32 platform has **no** STM32Cube framework for the STM32WL
+family (no `framework-stm32cubewl` package exists — the `nucleo_wl55jc` board only
+advertises `arduino`/`zephyr`). **STM32duino *is* the STM32Cube HAL underneath**,
+so the HAL SubGHz driver, DS18B20, and battery code compile unchanged; we only
+enable `HAL_SUBGHZ` via `include/hal_conf_extra.h` (STM32duino's HAL override
+hook). Deep sleep (Stop2) + RTC wake are done with **raw HAL** in `main.cpp` — we
+avoid the STM32duino Low Power/RTC libraries because their 2.0.0 releases
+hard-`#error` against the core PlatformIO bundles.
 
 An **external ST-Link V2** works too (same `upload_protocol = stlink`): wire
 SWDIO=PA13, SWCLK=PA14, NRST, GND, 3V3 and remove the onboard ST-LINK jumpers.
@@ -91,11 +104,11 @@ SWDIO=PA13, SWCLK=PA14, NRST, GND, 3V3 and remove the onboard ST-LINK jumpers.
 
 ## Status / caveats
 
-- **Not yet compiled or hardware-verified** (consistent with the sibling firmware
-  in this repo). The first `pio run` pulls the toolchain; confirm the STM32WL HAL
-  and `HAL_SUBGHZ_*` symbols resolve before trusting it.
+- **Compiles clean, but not yet hardware-verified.** `pio run` succeeds (RAM
+  2.3%, Flash 10.2%); the radio, sleep current, and DS18B20 timing still need a
+  real board. Do the first flash + monitor before trusting it.
 - The LoRa driver ([`src/lora/subghz_lora.c`](src/lora/subghz_lora.c)) is a lean,
-  self-contained SX126x command driver over ST's `HAL_SUBGHZ` — it does **not**
-  vendor the full STM32CubeWL SubGHz_Phy middleware. RF-switch truth table and
-  TCXO config are taken verbatim from ST's NUCLEO-WL55JC BSP.
+  self-contained SX126x command driver over `HAL_SUBGHZ` — it does **not** vendor
+  the full STM32CubeWL SubGHz_Phy middleware. RF-switch truth table and TCXO
+  config are taken verbatim from ST's NUCLEO-WL55JC BSP.
 - Advisory sensor only — this node never actuates anything.

@@ -15,10 +15,12 @@ POSTs them to `/api/v1/telemetry`.
 
 ## Firmware (the WL55 gateway)
 
-Same board/toolchain as [`../water-temp-node`](../water-temp-node). It shares the
-LoRa code byte-for-byte — `src/lora/{lora_params.h,lora_packet.h,subghz_lora.*}`
-and `src/board.*`, `include/stm32wlxx_hal_conf.h` are **copies** kept in sync with
-the node. If you change the PHY or packet format, change **both** copies.
+Same board/toolchain as [`../water-temp-node`](../water-temp-node) — PlatformIO
+`framework = arduino` (STM32duino, which *is* the STM32Cube HAL underneath; see
+the node README for why not `stm32cube`). It shares the LoRa code byte-for-byte —
+`src/lora/{lora_params.h,lora_packet.h,subghz_lora.*}` and
+`include/hal_conf_extra.h` are **copies** kept in sync with the node. If you
+change the PHY or packet format, change **both** copies.
 
 Output line format (rssi/snr added here from the LoRa RX; invalid temps omitted):
 
@@ -27,7 +29,7 @@ Output line format (rssi/snr added here from the LoRa RX; invalid temps omitted)
 ```
 
 Lines starting with `#` are diagnostics (the bridge logs and ignores them).
-On-board **LED2 (PB9)** blinks on each valid RX.
+The on-board **`LED_BUILTIN`** blinks on each valid RX.
 
 Map more nodes in [`include/gateway_config.h`](include/gateway_config.h); an
 unknown `node_id` falls back to `water-node-<id>`.
@@ -36,10 +38,12 @@ unknown `node_id` falls back to `water-node-<id>`.
 
 ```
 cd lora-gateway
-pio run
+pio run                 # first run pulls the STM32duino core (large, one-time)
 pio run -t upload       # onboard ST-LINK (USB)
 pio device monitor      # 115200 — you'll see the JSON lines directly
 ```
+
+**Verified: compiles clean** — RAM 1.9%, Flash 9.4% of the STM32WL55JC.
 
 ## Bridge (the host forwarder) — `bridge/`
 
@@ -88,8 +92,8 @@ WantedBy=multi-user.target
 
 ## Status / caveats
 
-- **Not yet compiled or hardware-verified.** Same caveat as the node — validate
-  the STM32WL HAL build and a real RX before trusting it.
+- **Compiles clean, but not yet hardware-verified.** Same caveat as the node —
+  `pio run` succeeds; validate a real RX + the bridge end-to-end before trusting it.
 - The gateway must be on the **same LoRa channel/PHY** as the node (it is, via the
   shared `lora_params.h` copy) and reasonably close for SF9/125 kHz range.
 - No auth on the serial→HTTP path; it assumes a trusted host (the Jetson).
