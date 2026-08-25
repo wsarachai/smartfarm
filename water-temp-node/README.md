@@ -104,38 +104,87 @@ SWDIO=PA13, SWCLK=PA14, NRST, GND, 3V3 and remove the onboard ST-LINK jumpers.
 
 ## DS18B20 bring-up test on an STM32F103C8T6 (Blue Pill)
 
-While the NUCLEO-WL55JC1 boards are on back-order, a second PlatformIO env lets
-you validate the DS18B20 wiring + the **same `ds18b20.cpp` driver** the node
-ships, on a cheap Blue Pill — no LoRa, no sleep, just the sensor.
+While the NUCLEO-WL55JC1 boards are on back-order, extra PlatformIO envs let you
+validate the DS18B20 wiring + the **same `ds18b20.cpp` driver** the node ships, on
+a cheap Blue Pill — no LoRa, no sleep, just the sensor. **Hardware-verified:** both
+probes read real, independent room temperature (`hot=23.75 C  cold=23.87 C`).
+
+Two envs, differing only in how the readings get off the board — both reuse
+`src/ds18b20.cpp` unchanged (`build_src_filter` compiles only that driver +
+`src/test/ds18b20_test_main.cpp`; the WL55 firmware is filtered out, and vice-versa):
+
+| Env | Output path | When to use |
+|-----|-------------|-------------|
+| `bluepill_f103c8` | **USB CDC** (`Serial`, the board's micro-USB) | if the board's native USB enumerates |
+| `bluepill_f103c8_semihosting` | **semihosting over SWD** (the ST-Link) | no working USB / UART / adapter |
+
+Output (~1 Hz), either path:
 
 ```
-pio run -e bluepill_f103c8 -t upload    # ST-Link V2 on the SWD header
-pio device monitor -e bluepill_f103c8   # USB CDC COM port (the board's micro-USB)
+DS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, internal ~40k pull-up
+hot=23.75 C  cold=23.87 C
+hot=23.75 C  cold=FAULT(no presence)
 ```
+(the banner reads `external 4.7k pull-up` when `DS18B20_INTERNAL_PULLUP` is off)
 
-It reuses `src/ds18b20.cpp` unchanged (the `[env:bluepill_f103c8]`
-`build_src_filter` compiles only that driver + `src/test/ds18b20_test_main.cpp`;
-the WL55 firmware is filtered out, and vice-versa). Output (~1 Hz):
-
-```
-DS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, 4.7k pull-ups
-hot=41.31 C  cold=22.62 C
-hot=41.31 C  cold=FAULT(no presence)
-```
-
-Wiring (direct 3V3, **no** MOSFET gate — that's only for battery saving):
+### Wiring (direct 3V3, **no** MOSFET gate — that's only for battery saving)
 
 | Function                        | Blue Pill pin |
 |---------------------------------|---------------|
-| DS18B20 **hot** data (+4.7k)    | PB6           |
-| DS18B20 **cold** data (+4.7k)   | PB7           |
+| DS18B20 **hot** data            | PB6           |
+| DS18B20 **cold** data           | PB7           |
 | Heartbeat LED (onboard)         | PC13          |
-| Serial                          | USB CDC (micro-USB) |
 
-**USB caveat:** many Blue Pill *clones* have a wrong USB pull-up (R10 = 10k
-instead of 1.5k) and won't enumerate — add a 1.5k from PA12→3V3, or switch the
-env to USART1 (PA9/PA10) + a USB-TTL adapter. Verified: `pio run -e
-bluepill_f103c8` compiles clean (Flash 39.3%); not yet hardware-verified.
+Each probe: VDD→3V3, GND→GND, DQ→PB6/PB7, plus a **4.7 kΩ pull-up** DQ→3V3.
+**No 4.7 kΩ on hand?** The `_semihosting` env sets `-D DS18B20_INTERNAL_PULLUP`,
+which uses the MCU's internal ~40 kΩ pull-up instead — enough for a **short,
+single-probe** bench bus (that's how the reads above were captured). Fit the real
+4.7 kΩ and drop the flag for the WL55 node / any real cable length.
+
+### Option A — USB CDC (`bluepill_f103c8`)
+
+```
+pio run -e bluepill_f103c8 -t upload     # ST-Link V2 on the SWD header
+pio device monitor -e bluepill_f103c8    # the board's micro-USB COM port
+```
+
+**USB caveat:** many Blue Pill *clones* have a wrong USB pull-up (R10 = 10 kΩ
+instead of 1.5 kΩ) and never enumerate — no COM port appears at all. Fix with a
+1.5 kΩ from PA12→3V3, or just use the semihosting env below (no USB needed).
+
+### Option B — semihosting over SWD (`bluepill_f103c8_semihosting`)
+
+Prints through the **ST-Link/SWD** you already use to flash — no USB, UART, or
+adapter. The output shows only while a **debugger is attached** (the board's
+`BKPT` faults standalone), so this is a bench-viewing mode.
+
+**CLI:**
+```
+pio run -e bluepill_f103c8_semihosting -t upload
+# then stream the readings (Ctrl+C to stop):
+openocd -f interface/stlink.cfg -f target/stm32f1x.cfg \
+        -c "init" -c "arm semihosting enable" -c "reset run"
+```
+(OpenOCD ships with PlatformIO at
+`~/.platformio/packages/tool-openocd/bin/openocd` — pass its
+`.../openocd/scripts` dir via `-s` if run from outside PlatformIO.)
+
+**VSCode (PlatformIO extension):**
+1. Bottom **status bar** → switch the active env to `env:bluepill_f103c8_semihosting`.
+2. **Run → Start Debugging** (**F5**). It builds, flashes, and the env's
+   `debug_extra_cmds = monitor arm semihosting enable` turns semihosting on.
+3. It halts at `main()` — press **Continue (F5)**.
+4. Readings stream into the **Debug Console** (`Ctrl+Shift+Y`); if empty, check the
+   OpenOCD **Terminal** tab. Stop with the ■ button.
+
+> Use **Debug (F5)**, not the Upload/Monitor buttons — the Monitor button grabs a
+> serial COM port (semihosting isn't one), so it shows nothing here.
+
+### Driver note
+`ds18b20_read()` rejects an all-zero scratchpad: a data line stuck low (missing
+pull-up / short) returns all zeros, which passes CRC (`crc8(0..0)=0`) and would
+otherwise decode to a **fake 0.00 °C**. It now reports a fault instead — this
+guard benefits the WL55 node too.
 
 ## Status / caveats
 

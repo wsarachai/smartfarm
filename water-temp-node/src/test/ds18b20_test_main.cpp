@@ -74,7 +74,11 @@ void setup(void)
     ds18b20_init(&bus_hot);
     ds18b20_init(&bus_cold);
 
-    out("\r\nDS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, 4.7k pull-ups\r\n");
+#ifdef DS18B20_INTERNAL_PULLUP
+    out("\r\nDS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, internal ~40k pull-up\r\n");
+#else
+    out("\r\nDS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, external 4.7k pull-up\r\n");
+#endif
 }
 
 void loop(void)
