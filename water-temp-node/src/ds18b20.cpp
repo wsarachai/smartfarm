@@ -18,7 +18,14 @@ void ds18b20_init(const ds_bus_t *bus)
     GPIO_InitTypeDef g = {0};
     g.Pin   = bus->pin;
     g.Mode  = GPIO_MODE_OUTPUT_OD;   /* open-drain: '1' releases, '0' pulls low */
+#ifdef DS18B20_INTERNAL_PULLUP
+    /* Bench fallback when no external 4.7k is on hand: use the MCU's internal
+     * pull-up (~40k). Weaker than 4.7k -> only reliable on a SHORT, single-device
+     * bus. The shipped node leaves this off and uses the external 4.7k. */
+    g.Pull  = GPIO_PULLUP;
+#else
     g.Pull  = GPIO_NOPULL;           /* external 4.7k on the sensor rail        */
+#endif
     g.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(bus->port, &g);
     ow_release(bus);
@@ -106,7 +113,14 @@ int ds18b20_read(const ds_bus_t *bus, int16_t *out_c100)
     ow_write_byte(bus, CMD_READ_SCRATCH);
 
     uint8_t sp[9];
-    for (int i = 0; i < 9; i++) sp[i] = ow_read_byte(bus);
+    uint8_t any = 0;
+    for (int i = 0; i < 9; i++) { sp[i] = ow_read_byte(bus); any |= sp[i]; }
+
+    /* An all-zero scratchpad passes the CRC (crc8(0..0)=0) and would decode to a
+     * FAKE 0.00 C — the signature of a data line stuck low (missing pull-up or a
+     * short). A real DS18B20 never returns all-zero (reserved bytes are non-zero,
+     * power-on temp is +85 C), so reject it as a fault. */
+    if (any == 0) return 0;
 
     if (ds_crc8(sp, 8) != sp[8]) return 0;         /* corrupt / absent probe */
 

@@ -5,48 +5,58 @@
  * it exercises the SAME ds18b20.cpp driver the real node ships, so a good read
  * here means the driver + wiring are sound before the WL55 hardware arrives.
  *
- * Built ONLY in the [env:bluepill_f103c8] env (see platformio.ini build_src_filter);
- * the WL55 env excludes src/test/. Reads two probes once per second and prints
- * over USB CDC (the Blue Pill's micro-USB). No LoRa, no sleep — just the sensor.
+ * Built ONLY in the F103 envs (see platformio.ini build_src_filter); the WL55 env
+ * excludes src/test/. Reads two probes once per second. Output goes to whichever
+ * path the env selects:
+ *   [env:bluepill_f103c8]              -> USB CDC 'Serial' (the board's micro-USB)
+ *   [env:bluepill_f103c8_semihosting]  -> semihosting over SWD (-DUSE_SEMIHOSTING),
+ *                                         viewed in the OpenOCD console via the
+ *                                         ST-Link. No USB / UART / adapter needed.
  *
  * Wiring (direct 3V3, no power-gate MOSFET):
  *   PB6 --[4.7k]--+-- DQ + VDD  (probe A = "hot")   ,  3V3
  *   PB7 --[4.7k]--+-- DQ + VDD  (probe B = "cold")  ,  3V3
  *   GND common. PC13 = onboard LED (active-low) heartbeat.
- *
- * Flash: pio run -e bluepill_f103c8 -t upload   (ST-Link on SWD)
- * View:  pio device monitor -e bluepill_f103c8  (USB CDC COM port)
  */
 #include <Arduino.h>
+#include <stdio.h>
 #include "../ds18b20.h"
 
-/* DS18B20 12-bit conversion time. Kept local so this test needs no WL headers. */
 #define TEST_CONVERT_MS   750
 
 static const ds_bus_t bus_hot  = { GPIOB, GPIO_PIN_6 };
 static const ds_bus_t bus_cold = { GPIOB, GPIO_PIN_7 };
 
-/* Print "<int>.<NN> C" for a centi value without relying on float printf. */
-static void print_centi(int centi)
+/* ---- output abstraction: semihosting (SWD) or USB CDC 'Serial' -------------- */
+#ifdef USE_SEMIHOSTING
+/* ARM semihosting call: BKPT 0xAB with r0=op, r1=arg. Requires a debugger
+ * (OpenOCD with `arm semihosting enable`) to be attached and running the target;
+ * without one the BKPT faults, so this env is for on-the-bench viewing via SWD. */
+static inline int semihost_call(int op, void *arg)
 {
-    int neg = centi < 0;
-    int a = neg ? -centi : centi;
-    if (neg) Serial.print('-');
-    Serial.print(a / 100);
-    Serial.print('.');
-    if ((a % 100) < 10) Serial.print('0');
-    Serial.print(a % 100);
-    Serial.print(F(" C"));
+    register int   r0 asm("r0") = op;
+    register void *r1 asm("r1") = arg;
+    asm volatile("bkpt 0xAB" : "+r"(r0) : "r"(r1) : "memory", "cc");
+    return r0;
 }
+static void out(const char *s) { semihost_call(0x04 /*SYS_WRITE0*/, (void *)s); }
+#else
+static void out(const char *s) { Serial.print(s); }
+#endif
 
-/* Print one probe's result: a temperature or a specific FAULT reason. */
-static void print_probe(const char *label, int presence, int read_ok, int16_t c100)
+/* Format one probe's result into dst: a temperature, or a specific FAULT reason. */
+static void format_probe(char *dst, int cap, const char *label,
+                         int presence, int read_ok, int16_t c100)
 {
-    Serial.print(label);
-    Serial.print('=');
-    if (!presence)      Serial.print(F("FAULT(no presence)"));
-    else if (!read_ok)  Serial.print(F("FAULT(crc)"));
-    else                print_centi(c100);
+    if (!presence) {
+        snprintf(dst, cap, "%s=FAULT(no presence)", label);
+    } else if (!read_ok) {
+        snprintf(dst, cap, "%s=FAULT(crc)", label);
+    } else {
+        int neg = c100 < 0;
+        int a = neg ? -c100 : c100;
+        snprintf(dst, cap, "%s=%s%d.%02d C", label, neg ? "-" : "", a / 100, a % 100);
+    }
 }
 
 void setup(void)
@@ -55,15 +65,16 @@ void setup(void)
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, HIGH);    /* PC13 is active-low: HIGH = off */
 
+#ifndef USE_SEMIHOSTING
     Serial.begin(115200);               /* USB CDC ignores the baud value */
     uint32_t t0 = millis();
     while (!Serial && (millis() - t0) < 3000) { /* wait up to 3s for the host */ }
+#endif
 
     ds18b20_init(&bus_hot);
     ds18b20_init(&bus_cold);
 
-    Serial.println();
-    Serial.println(F("DS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, 4.7k pull-ups"));
+    out("\r\nDS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, 4.7k pull-ups\r\n");
 }
 
 void loop(void)
@@ -77,10 +88,11 @@ void loop(void)
     int okh = ph && ds18b20_read(&bus_hot,  &th);
     int okc = pc && ds18b20_read(&bus_cold, &tc);
 
-    print_probe("hot",  ph, okh, th);
-    Serial.print(F("  "));
-    print_probe("cold", pc, okc, tc);
-    Serial.println();
+    char lh[32], lc[32], line[80];
+    format_probe(lh, sizeof(lh), "hot",  ph, okh, th);
+    format_probe(lc, sizeof(lc), "cold", pc, okc, tc);
+    snprintf(line, sizeof(line), "%s  %s\r\n", lh, lc);
+    out(line);
 
     /* Heartbeat: brief LED flash when at least one probe read cleanly. */
     if (okh || okc) {
