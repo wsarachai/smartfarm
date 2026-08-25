@@ -7,7 +7,10 @@
 #define DS18B20_H
 
 #include <stdint.h>
-#include "stm32wlxx_hal.h"
+/* <Arduino.h> pulls in the correct per-family HAL (stm32wlxx / stm32f1xx ...),
+ * so this driver is portable across STM32duino boards — the WL55 node and the
+ * F103C8T6 bring-up test both use it unchanged. */
+#include <Arduino.h>
 
 typedef struct {
     GPIO_TypeDef *port;

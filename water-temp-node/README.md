@@ -102,6 +102,41 @@ SWDIO=PA13, SWCLK=PA14, NRST, GND, 3V3 and remove the onboard ST-LINK jumpers.
 - `DS_*` pins, `DS_POWER_SETTLE_MS`, `DS_CONVERT_MS`.
 - `DEBUG_UART_ENABLED` — comment out to drop serial logging entirely.
 
+## DS18B20 bring-up test on an STM32F103C8T6 (Blue Pill)
+
+While the NUCLEO-WL55JC1 boards are on back-order, a second PlatformIO env lets
+you validate the DS18B20 wiring + the **same `ds18b20.cpp` driver** the node
+ships, on a cheap Blue Pill — no LoRa, no sleep, just the sensor.
+
+```
+pio run -e bluepill_f103c8 -t upload    # ST-Link V2 on the SWD header
+pio device monitor -e bluepill_f103c8   # USB CDC COM port (the board's micro-USB)
+```
+
+It reuses `src/ds18b20.cpp` unchanged (the `[env:bluepill_f103c8]`
+`build_src_filter` compiles only that driver + `src/test/ds18b20_test_main.cpp`;
+the WL55 firmware is filtered out, and vice-versa). Output (~1 Hz):
+
+```
+DS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, 4.7k pull-ups
+hot=41.31 C  cold=22.62 C
+hot=41.31 C  cold=FAULT(no presence)
+```
+
+Wiring (direct 3V3, **no** MOSFET gate — that's only for battery saving):
+
+| Function                        | Blue Pill pin |
+|---------------------------------|---------------|
+| DS18B20 **hot** data (+4.7k)    | PB6           |
+| DS18B20 **cold** data (+4.7k)   | PB7           |
+| Heartbeat LED (onboard)         | PC13          |
+| Serial                          | USB CDC (micro-USB) |
+
+**USB caveat:** many Blue Pill *clones* have a wrong USB pull-up (R10 = 10k
+instead of 1.5k) and won't enumerate — add a 1.5k from PA12→3V3, or switch the
+env to USART1 (PA9/PA10) + a USB-TTL adapter. Verified: `pio run -e
+bluepill_f103c8` compiles clean (Flash 39.3%); not yet hardware-verified.
+
 ## Status / caveats
 
 - **Compiles clean, but not yet hardware-verified.** `pio run` succeeds (RAM
