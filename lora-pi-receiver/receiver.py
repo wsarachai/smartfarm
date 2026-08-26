@@ -65,6 +65,13 @@ def build_metrics(pkt, rssi, snr):
         m["temp_cold"] = round(pkt["temp_cold_c100"] / 100.0, 2)
     if pkt["flags"] & lora_packet.FLAG_BATT and pkt["battery_mv"] > 0:
         m["battery_v"] = round(pkt["battery_mv"] / 1000.0, 3)
+    # v2 BME280 fields
+    if pkt["flags"] & lora_packet.FLAG_AIR:
+        m["air_temp"] = round(pkt["air_temp_c100"] / 100.0, 2)
+    if pkt["flags"] & lora_packet.FLAG_HUM:
+        m["humidity"] = round(pkt["humidity_x100"] / 100.0, 2)
+    if pkt["flags"] & lora_packet.FLAG_PRESS:
+        m["pressure"] = round(pkt["pressure_dhpa"] / 10.0, 1)  # hPa
     m["rssi"] = rssi
     m["snr"] = round(snr, 1)
     m["seq"] = pkt["seq"]

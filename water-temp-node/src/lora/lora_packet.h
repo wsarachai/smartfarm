@@ -24,9 +24,26 @@
 #define LORA_PKT_MAGIC     0xA1
 #define LORA_PKT_LEN       12
 
+/*
+ * v2 (magic 0xA2, 18 bytes) — additive: same first 10 bytes as v1, then appends
+ * a BME280 block (ambient air temp / humidity / pressure). v1 is UNCHANGED so the
+ * WL55 923 MHz path is untouched; only the F103 + BME280 433 MHz prototype sends
+ * v2. Extra layout:
+ *   10-11 air_temp   int16 BE, centi-degC
+ *   12-13 humidity   uint16 BE, %RH x100 (0..10000)
+ *   14-15 pressure   uint16 BE, hPa x10 (deci-hPa, e.g. 1013.2 hPa -> 10132)
+ *   16    reserved   0
+ *   17    crc8       over bytes 0..16
+ */
+#define LORA_PKT_MAGIC_V2  0xA2
+#define LORA_PKT_LEN_V2    18
+
 #define LORA_FLAG_HOT      0x01
 #define LORA_FLAG_COLD     0x02
 #define LORA_FLAG_BATT     0x04
+#define LORA_FLAG_AIR      0x08   /* v2: air_temp valid  */
+#define LORA_FLAG_HUM      0x10   /* v2: humidity valid  */
+#define LORA_FLAG_PRESS    0x20   /* v2: pressure valid  */
 
 /* Sentinel written into a temp field when that probe failed to read. */
 #define LORA_TEMP_INVALID  ((int16_t)0x8000)
@@ -38,6 +55,10 @@ typedef struct {
     int16_t  temp_hot_c100;   /* centi-degC */
     int16_t  temp_cold_c100;  /* centi-degC */
     uint16_t battery_mv;
+    /* v2 (BME280); set the matching flags. Ignored by the v1 packer. */
+    int16_t  air_temp_c100;   /* centi-degC   */
+    uint16_t humidity_x100;   /* %RH x100     */
+    uint16_t pressure_dhpa;   /* hPa x10      */
 } lora_payload_t;
 
 /* CRC-8/SMBUS (poly 0x07, init 0x00, no reflect). Used for the frame checksum. */
@@ -69,6 +90,30 @@ static inline int lora_packet_pack(const lora_payload_t *p, uint8_t out[LORA_PKT
     out[10] = 0x00;
     out[11] = lora_crc8(out, 11);
     return LORA_PKT_LEN;
+}
+
+/* Serialize p into an 18-byte v2 buffer (v1 fields + BME280). Returns LORA_PKT_LEN_V2. */
+static inline int lora_packet_pack_v2(const lora_payload_t *p, uint8_t out[LORA_PKT_LEN_V2])
+{
+    out[0]  = LORA_PKT_MAGIC_V2;
+    out[1]  = p->node_id;
+    out[2]  = p->seq;
+    out[3]  = p->flags;
+    out[4]  = (uint8_t)((uint16_t)p->temp_hot_c100 >> 8);
+    out[5]  = (uint8_t)((uint16_t)p->temp_hot_c100 & 0xFF);
+    out[6]  = (uint8_t)((uint16_t)p->temp_cold_c100 >> 8);
+    out[7]  = (uint8_t)((uint16_t)p->temp_cold_c100 & 0xFF);
+    out[8]  = (uint8_t)(p->battery_mv >> 8);
+    out[9]  = (uint8_t)(p->battery_mv & 0xFF);
+    out[10] = (uint8_t)((uint16_t)p->air_temp_c100 >> 8);
+    out[11] = (uint8_t)((uint16_t)p->air_temp_c100 & 0xFF);
+    out[12] = (uint8_t)(p->humidity_x100 >> 8);
+    out[13] = (uint8_t)(p->humidity_x100 & 0xFF);
+    out[14] = (uint8_t)(p->pressure_dhpa >> 8);
+    out[15] = (uint8_t)(p->pressure_dhpa & 0xFF);
+    out[16] = 0x00;
+    out[17] = lora_crc8(out, 17);
+    return LORA_PKT_LEN_V2;
 }
 
 /*

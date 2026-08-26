@@ -99,9 +99,15 @@ and the gpiochip (add it to the `spi`/`gpio` groups, or run as root).
 | `RESET_PIN` / `DIO0_PIN` | `22` / `25` | BCM |
 | `NODE_MAP` | `{"1":"water-temp-01"}` | node_id → dashboard id |
 
+## Frame versions
+- **v1** (magic `0xA1`, 12 B): DS18B20 water temps only.
+- **v2** (magic `0xA2`, 18 B): adds a **BME280** block — `air_temp` (°C), `humidity` (%), `pressure` (hPa). The node sends v2 when a BME280 is present (I²C2, addr 0x76); `receiver.py` emits the extra metrics only when the frame's flag bits are set.
+
+`lora_packet.py` decodes **both** — no receiver change needed to keep older v1 nodes working.
+
 ## Files
 - `sx127x.py` — SX1278 driver (spidev + gpiozero); Python port of the node's `sx1278.cpp`.
-- `lora_packet.py` — decode of the 12-byte frame; port of `lora_packet.h` (kept byte-compatible).
+- `lora_packet.py` — decode of the v1/v2 frame; port of `lora_packet.h` (kept byte-compatible).
 - `receiver.py` — RX loop → decode → map → POST.
 - `lora-pi-receiver.service` — systemd unit. `requirements.txt`, `.env.example`.
 
