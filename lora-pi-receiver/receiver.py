@@ -22,20 +22,31 @@ from sx127x import SX127x
 import lora_packet
 
 # ---- config (env with defaults; both ends must share the LoRa PHY) ----------
-SERVER_URL = os.environ.get("SERVER_URL", "http://localhost:3000/api/v1/telemetry")
-LORA_FREQ_HZ = int(os.environ.get("LORA_FREQ_HZ", "433000000"))
-LORA_SF = int(os.environ.get("LORA_SF", "9"))
-LORA_BW_CODE = int(os.environ.get("LORA_BW_CODE", "7"))    # 7 = 125 kHz
-LORA_CR_CODE = int(os.environ.get("LORA_CR_CODE", "1"))    # 1 = 4/5
-LORA_PREAMBLE = int(os.environ.get("LORA_PREAMBLE", "8"))
-LORA_SYNCWORD = int(os.environ.get("LORA_SYNCWORD", "0x12"), 0)
-SPI_BUS = int(os.environ.get("SPI_BUS", "0"))
-SPI_DEV = int(os.environ.get("SPI_DEV", "0"))
-RESET_PIN = int(os.environ.get("RESET_PIN", "22"))
-DIO0_PIN = int(os.environ.get("DIO0_PIN", "25"))
+def _clean(v):
+    # Tolerate a trailing inline "# comment" + whitespace. systemd's
+    # EnvironmentFile (unlike a shell) keeps inline comments in the value, so a
+    # `.env` line like `LORA_BW_CODE=7  # 125 kHz` would otherwise crash int().
+    return v.split("#", 1)[0].strip()
+
+
+def env_int(name, default, base=10):
+    return int(_clean(os.environ.get(name, default)), base)
+
+
+SERVER_URL = _clean(os.environ.get("SERVER_URL", "http://localhost:3000/api/v1/telemetry"))
+LORA_FREQ_HZ = env_int("LORA_FREQ_HZ", "433000000")
+LORA_SF = env_int("LORA_SF", "9")
+LORA_BW_CODE = env_int("LORA_BW_CODE", "7")        # 7 = 125 kHz
+LORA_CR_CODE = env_int("LORA_CR_CODE", "1")        # 1 = 4/5
+LORA_PREAMBLE = env_int("LORA_PREAMBLE", "8")
+LORA_SYNCWORD = env_int("LORA_SYNCWORD", "0x12", 0)
+SPI_BUS = env_int("SPI_BUS", "0")
+SPI_DEV = env_int("SPI_DEV", "0")
+RESET_PIN = env_int("RESET_PIN", "22")
+DIO0_PIN = env_int("DIO0_PIN", "25")
 
 # node_id -> friendly device_id (JSON in env, e.g. {"1":"water-temp-01"})
-NODE_MAP = json.loads(os.environ.get("NODE_MAP", '{"1":"water-temp-01"}'))
+NODE_MAP = json.loads(_clean(os.environ.get("NODE_MAP", '{"1":"water-temp-01"}')))
 
 
 def log(*args):
