@@ -5,10 +5,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Adjust WorkingDirectory/User to your install. User must be in the 'spi' and
-# 'gpio' groups (or use root) to reach /dev/spidev0.0 and the gpiochip.
-WorkingDirectory=/opt/smartfarm/lora-pi-receiver
-EnvironmentFile=/opt/smartfarm/lora-pi-receiver/.env
+# EDIT User + the two paths to match YOUR install. The example matches a clone at
+# /home/pi/workspace/smartfarm/lora-pi-receiver run as the 'pi' user (pi is in the
+# 'spi' and 'gpio' groups by default, so it can reach /dev/spidev0.0 + the gpiochip).
+User=pi
+WorkingDirectory=/home/pi/workspace/smartfarm/lora-pi-receiver
+# .env is OPTIONAL — all settings have sensible defaults. The leading '-' means
+# systemd won't fail to start if the file is absent.
+EnvironmentFile=-/home/pi/workspace/smartfarm/lora-pi-receiver/.env
 ExecStart=/usr/bin/python3 receiver.py
 Restart=always
 RestartSec=5
