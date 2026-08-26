@@ -141,6 +141,44 @@ which uses the MCU's internal ~40 kΩ pull-up instead — enough for a **short,
 single-probe** bench bus (that's how the reads above were captured). Fit the real
 4.7 kΩ and drop the flag for the WL55 node / any real cable length.
 
+### Long DS18B20 runs (up to ~20 m)
+
+The sensor can sit **10–20 m** from the MCU on plain 1-Wire (per Maxim/ADI
+**AN148**) — you do **not** need RS-485 for this. In particular a **MAX485 cannot
+go on the DS18B20 data line**: 1-Wire is bidirectional open-drain with the
+direction reversing *inside each bit slot*, while a MAX485 is a directional
+differential UART transceiver (needs `DE/RE` control) and the DS18B20 only speaks
+single-ended 1-Wire. RS-485 only helps if a small MCU at the sensor end digitizes
+the reading first and sends it as serial/Modbus (an architecture change, warranted
+only past ~30 m).
+
+For a reliable 10–20 m run:
+
+1. **External pull-up ~2.2 kΩ** (1.5–3.3 kΩ) DQ→VDD **at the MCU end** — lower than
+   4.7 kΩ so the line rises fast enough over the cable capacitance; keep ≥1.5 kΩ so
+   the DS18B20 can still pull a valid low. **Do not** use the internal ~40 kΩ
+   (`DS18B20_INTERNAL_PULLUP`) on a long run.
+2. **Twisted pair: DQ twisted with GND** (its return); VDD on a separate conductor.
+   Cat5/telephone cable, one pair = DQ+GND. Biggest single reliability factor.
+3. **3-wire power (VDD)** — already how the node is wired; never parasitic on long lines.
+4. Optional: ~**100 Ω series** at the MCU DQ pin (reflection damping) + **100 nF**
+   across VDD/GND at the sensor end.
+5. Each probe is its **own point-to-point line** (separate GPIO) — no stubs, the
+   most forgiving topology.
+
+```
+MCU DQ ──[100Ω opt]──┬─────── twisted pair (DQ + GND) ─────── DQ (DS18B20)
+       [2.2k]→VDD ────┘
+VDD ───────────────────── separate conductor ──────────────── VDD (+100nF)
+GND ───────────────────── (paired with DQ) ─────────────────── GND
+```
+
+**Firmware:** no timing change needed (standard-speed slots are valid to ~100 m).
+When you fit the external pull-up, **remove `-D DS18B20_INTERNAL_PULLUP`** from the
+node env so `ds18b20_init()` uses `GPIO_NOPULL` + your resistor. If passive 2.2 kΩ
+proves marginal past ~20–30 m, escalate to a **DS2483/DS2482** (I²C→1-Wire) or
+**DS2480B** (UART→1-Wire) line-driver IC with hardware active pull-up.
+
 ### Option A — USB CDC (`bluepill_f103c8`)
 
 ```
