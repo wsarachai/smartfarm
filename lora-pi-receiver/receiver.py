@@ -45,6 +45,10 @@ SPI_DEV = env_int("SPI_DEV", "0")
 RESET_PIN = env_int("RESET_PIN", "22")
 DIO0_PIN = env_int("DIO0_PIN", "25")
 
+# Site elevation (m) for reducing BME280 station pressure to mean sea level.
+# 0 = disabled (report station pressure only).
+ALTITUDE_M = float(_clean(os.environ.get("ALTITUDE_M", "0")))
+
 # node_id -> friendly device_id (JSON in env, e.g. {"1":"water-temp-01"})
 NODE_MAP = json.loads(_clean(os.environ.get("NODE_MAP", '{"1":"water-temp-01"}')))
 
@@ -55,6 +59,13 @@ def log(*args):
 
 def device_id(node_id):
     return NODE_MAP.get(str(node_id), "water-node-%d" % node_id)
+
+
+def pressure_to_msl(p_station_hpa, altitude_m, temp_c):
+    """Reduce station pressure to mean sea level (temperature-corrected formula,
+    the standard 'reduction to sea level' used by weather stations)."""
+    return p_station_hpa * (1.0 - (0.0065 * altitude_m) /
+                            (temp_c + 0.0065 * altitude_m + 273.15)) ** -5.257
 
 
 def build_metrics(pkt, rssi, snr):
@@ -71,7 +82,13 @@ def build_metrics(pkt, rssi, snr):
     if pkt["flags"] & lora_packet.FLAG_HUM:
         m["humidity"] = round(pkt["humidity_x100"] / 100.0, 2)
     if pkt["flags"] & lora_packet.FLAG_PRESS:
-        m["pressure"] = round(pkt["pressure_dhpa"] / 10.0, 1)  # hPa
+        station_hpa = pkt["pressure_dhpa"] / 10.0
+        m["pressure"] = round(station_hpa, 1)  # raw station pressure, hPa
+        if ALTITUDE_M > 0:
+            # use measured air temp if present, else the 15 C standard atmosphere
+            temp_c = (pkt["air_temp_c100"] / 100.0
+                      if pkt["flags"] & lora_packet.FLAG_AIR else 15.0)
+            m["pressure_msl"] = round(pressure_to_msl(station_hpa, ALTITUDE_M, temp_c), 1)
     m["rssi"] = rssi
     m["snr"] = round(snr, 1)
     m["seq"] = pkt["seq"]

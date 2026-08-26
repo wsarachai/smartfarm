@@ -98,6 +98,7 @@ and the gpiochip (add it to the `spi`/`gpio` groups, or run as root).
 | `SPI_BUS` / `SPI_DEV` | `0` / `0` | `/dev/spidev0.0` (CE0) |
 | `RESET_PIN` / `DIO0_PIN` | `22` / `25` | BCM |
 | `NODE_MAP` | `{"1":"water-temp-01"}` | node_id → dashboard id |
+| `ALTITUDE_M` | `0` | site elevation (m); >0 adds `pressure_msl` (sea-level-reduced) |
 
 ## Frame versions
 - **v1** (magic `0xA1`, 12 B): DS18B20 water temps only.
