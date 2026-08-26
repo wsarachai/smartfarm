@@ -26,17 +26,17 @@ Standalone by design (like `lora-gateway/bridge` and the AI poller) — the
 3.3 V **only** (never 5 V), and **attach an antenna** before the node transmits
 near it. BCM numbering / physical header pin:
 
-| SX1278 | Pi (BCM) | Pin | Note |
-|--------|----------|-----|------|
-| VCC    | 3V3      | 1   | 3.3 V only |
-| GND    | GND      | 6   | |
-| NSS    | GPIO8 / CE0 | 24 | `/dev/spidev0.0` auto-manages CS |
-| SCK    | GPIO11   | 23  | SPI0 SCLK |
-| MISO   | GPIO9    | 21  | |
-| MOSI   | GPIO10   | 19  | |
-| RESET  | GPIO22   | 15  | `RESET_PIN` |
-| DIO0   | GPIO25   | 22  | `DIO0_PIN` |
-| ANT    | antenna  | —   | required |
+| SX1278 | Pi (BCM)    | Pin | Note        |
+|--------|-------------|-----|-------------|
+| VCC    | 3V3         | 1   | 3.3 V only  |
+| GND    | GND         | 6   |             |
+| NSS    | GPIO8 / CE0 | 24  | `/dev/spidev0.0` auto-manages CS |
+| SCK    | GPIO11      | 23  | SPI0 SCLK   |
+| MISO   | GPIO9       | 21  |             |
+| MOSI   | GPIO10      | 19  |             |
+| RESET  | GPIO22      | 15  | `RESET_PIN` |
+| DIO0   | GPIO25      | 22  | `DIO0_PIN`  |
+| ANT    | antenna     | —   | required    |
 
 ## Setup (on the Pi)
 
@@ -44,13 +44,22 @@ near it. BCM numbering / physical header pin:
 # 1. Enable SPI
 sudo raspi-config          # Interface Options -> SPI -> Enable   (or: dtparam=spi=on)
 
-# 2. Install
-sudo mkdir -p /opt/smartfarm && sudo cp -r lora-pi-receiver /opt/smartfarm/
-cd /opt/smartfarm/lora-pi-receiver
-python3 -m pip install -r requirements.txt      # spidev, gpiozero, lgpio
-cp .env.example .env                            # edit if needed (PHY must match the node)
+# 2. Install the deps.
+#    Raspberry Pi OS Bookworm blocks system-wide `pip` (PEP 668 /
+#    "externally-managed-environment"). Our 3 deps are all Debian-packaged and are
+#    hardware libs, so apt is the simplest + most reliable path (no venv needed):
+sudo apt update
+sudo apt install -y python3-spidev python3-gpiozero python3-lgpio
 
-# 3. Run it (foreground test first)
+#    ...OR, if you prefer an isolated venv (use --system-site-packages so it still
+#    sees the apt hardware backends):
+#      python3 -m venv --system-site-packages .venv
+#      .venv/bin/pip install -r requirements.txt
+#      # then run with .venv/bin/python and point the systemd ExecStart there.
+
+# 3. Config + run (foreground test first)
+cd /opt/smartfarm/lora-pi-receiver   # (or wherever you cloned it)
+cp .env.example .env                 # edit if needed (PHY must match the node)
 python3 receiver.py
 ```
 

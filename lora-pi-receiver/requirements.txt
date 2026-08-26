@@ -1,4 +1,10 @@
 # Raspberry Pi LoRa receiver deps. HTTP uses the stdlib (urllib) — no requests.
+#
+# On Raspberry Pi OS Bookworm, system-wide `pip install` is blocked (PEP 668).
+# Preferred install is apt (these are all Debian-packaged hardware libs):
+#   sudo apt install -y python3-spidev python3-gpiozero python3-lgpio
+# This requirements.txt is for a venv install instead:
+#   python3 -m venv --system-site-packages .venv && .venv/bin/pip install -r requirements.txt
 spidev>=3.5
 gpiozero>=2.0
 # gpiozero's default pin backend on Raspberry Pi OS Bookworm (sysfs GPIO is gone):
