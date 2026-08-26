@@ -1,0 +1,5 @@
+# Raspberry Pi LoRa receiver deps. HTTP uses the stdlib (urllib) — no requests.
+spidev>=3.5
+gpiozero>=2.0
+# gpiozero's default pin backend on Raspberry Pi OS Bookworm (sysfs GPIO is gone):
+lgpio>=0.2.2.0

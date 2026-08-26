@@ -1,0 +1,17 @@
+[Unit]
+Description=Smart Farm LoRa Pi receiver (SX1278 -> web-server telemetry)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust WorkingDirectory/User to your install. User must be in the 'spi' and
+# 'gpio' groups (or use root) to reach /dev/spidev0.0 and the gpiochip.
+WorkingDirectory=/opt/smartfarm/lora-pi-receiver
+EnvironmentFile=/opt/smartfarm/lora-pi-receiver/.env
+ExecStart=/usr/bin/python3 receiver.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
