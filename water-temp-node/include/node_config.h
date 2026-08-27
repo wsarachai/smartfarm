@@ -45,6 +45,47 @@
 /* DS18B20 12-bit conversion time (ms). Drop to ~94 ms if you set 9-bit res. */
 #define DS_CONVERT_MS           750
 
+/* ---- I2C sensor bus (SHT45 + SCD41 share it) ------------------------------ */
+/* I2C2 on PA11/PA12. Chosen over I2C1 (PA9/PA10 are the DS18B20 probes) and
+ * I2C3 (PB10/PB11 -- PB11 is the Nucleo's LED3, which would sit on SDA). Both
+ * parts hang off the SAME gated VSENS rail as the probes, so the whole sensor
+ * front-end is still switched by one MOSFET. */
+#define I2C_SDA_PIN             PA11
+#define I2C_SCL_PIN             PA12
+#define I2C_CLOCK_HZ            100000   /* 100 kHz: kind to a long, gated bus */
+
+/* SHT45 (air temp + humidity). 0x45 on the -B variant. */
+#define SHT45_ADDR              0x44
+
+/* SCD41 (CO2). */
+#define SCD41_ADDR              0x62
+
+/*
+ * CO2 measurement is the expensive part of a wake, so it is optional and
+ * separately paced. Comment out CO2_ENABLED to drop the SCD41 entirely.
+ *
+ * CO2_EVERY_N_WAKES: measure CO2 only on every Nth wake, sending the last known
+ * value in between (flag stays set). 1 = every wake. At WAKE_INTERVAL_S=900 a
+ * value of 4 gives one CO2 reading per hour, which is all a greenhouse trend
+ * needs, and cuts the sensor's share of the battery budget by 4x.
+ *
+ * See README, "CO2 on a battery node", for the arithmetic behind this.
+ */
+#define CO2_ENABLED             1
+#define CO2_EVERY_N_WAKES       4
+
+/* Discard one measurement before the real one (datasheet: the first single shot
+ * after power-up is unsettled). Costs a second SCD41_SINGLE_SHOT_MS. Turning it
+ * off halves the CO2 energy cost and makes the readings worse -- do not, unless
+ * you have left the sensor permanently powered. */
+#define CO2_SINGLE_SHOT_WARMUP  1
+
+/* ---- Sensor rail settle time for the I2C parts --------------------------- */
+/* The SCD41 wants 1000 ms after VDD before it will accept a command -- 100x the
+ * DS18B20's DS_POWER_SETTLE_MS. We start the 1-Wire conversions first and spend
+ * this wait usefully, so it costs MCU-awake time but no extra rail-on time. */
+#define I2C_POWER_SETTLE_MS     1000
+
 /* ---- Debug UART (optional, LPUART1 on the ST-LINK VCP) -------------------- */
 /* Comment out to drop all serial logging (saves a few uA + code). */
 #define DEBUG_UART_ENABLED      1

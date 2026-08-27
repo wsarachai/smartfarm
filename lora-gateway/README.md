@@ -25,8 +25,21 @@ change the PHY or packet format, change **both** copies.
 Output line format (rssi/snr added here from the LoRa RX; invalid temps omitted):
 
 ```
-{"device_id":"water-temp-01","metrics":{"temp_hot":41.30,"temp_cold":22.60,"battery_v":3.140,"rssi":-92,"snr":8.5,"seq":42}}
+{"device_id":"water-temp-01","metrics":{"temp_hot":41.30,"temp_cold":22.60,"battery_v":3.140,"air_temp":24.13,"humidity":58.20,"co2":812,"rssi":-92,"snr":8.5,"seq":42}}
 ```
+
+Which metrics appear depends on the frame version and its valid-flags — the node
+decides, the gateway only forwards:
+
+| Version | Magic | Bytes | Metrics it can carry |
+|---|---|---|---|
+| v1 | `0xA1` | 12 | `temp_hot`, `temp_cold`, `battery_v` |
+| v2 | `0xA2` | 18 | + `air_temp`, `humidity`, `pressure` |
+| v3 | `0xA3` | 20 | + `co2` |
+
+Each version only **appends**, so a field never moves and `lora_packet_unpack()`
+accepts all three. An older node in the field keeps working against a current
+gateway with no change at either end.
 
 Lines starting with `#` are diagnostics (the bridge logs and ignores them).
 The on-board **`LED_BUILTIN`** blinks on each valid RX.

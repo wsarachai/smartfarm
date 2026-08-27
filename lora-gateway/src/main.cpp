@@ -9,8 +9,14 @@
  *
  * Line format (rssi/snr added here from the LoRa RX):
  *   {"device_id":"water-temp-01","metrics":{"temp_hot":41.30,"temp_cold":22.60,
- *    "battery_v":3.140,"rssi":-92,"snr":8.5,"seq":42}}
+ *    "battery_v":3.140,"air_temp":24.13,"humidity":58.20,"co2":812,
+ *    "rssi":-92,"snr":8.5,"seq":42}}
  * Non-JSON lines (starting with '#') are diagnostics the bridge ignores.
+ *
+ * Which metrics appear depends on the frame version and its valid-flags — the
+ * node decides, this just forwards. v1 frames carry water temps + battery; v2
+ * adds air temp/humidity/pressure; v3 adds CO2. lora_packet_unpack() accepts
+ * all three, so an older node in the field keeps working unchanged.
  *
  * The LoRa driver (src/lora/subghz_lora.c) is our own HAL_SUBGHZ command driver;
  * STM32duino IS the STM32Cube HAL underneath, so it compiles unchanged.
@@ -65,6 +71,30 @@ static int build_json(char *out, int cap, const lora_payload_t *p,
                       (unsigned)(p->battery_mv % 1000));
         first = 0;
     }
+    if (p->flags & LORA_FLAG_AIR) {
+        n += snprintf(out + n, cap - n, "%s\"air_temp\":", first ? "" : ",");
+        n += append_centi(out + n, cap - n, p->air_temp_c100);
+        first = 0;
+    }
+    if (p->flags & LORA_FLAG_HUM) {
+        n += snprintf(out + n, cap - n, "%s\"humidity\":%u.%02u",
+                      first ? "" : ",",
+                      (unsigned)(p->humidity_x100 / 100),
+                      (unsigned)(p->humidity_x100 % 100));
+        first = 0;
+    }
+    if (p->flags & LORA_FLAG_PRESS) {
+        n += snprintf(out + n, cap - n, "%s\"pressure\":%u.%u",
+                      first ? "" : ",",
+                      (unsigned)(p->pressure_dhpa / 10),
+                      (unsigned)(p->pressure_dhpa % 10));
+        first = 0;
+    }
+    if (p->flags & LORA_FLAG_CO2) {
+        n += snprintf(out + n, cap - n, "%s\"co2\":%u",
+                      first ? "" : ",", (unsigned)p->co2_ppm);
+        first = 0;
+    }
     int sneg = snr_tenths < 0;
     int sa = sneg ? -snr_tenths : snr_tenths;
     n += snprintf(out + n, cap - n,
@@ -95,7 +125,7 @@ void setup(void)
 
 void loop(void)
 {
-    uint8_t buf[LORA_PKT_LEN + 4];
+    uint8_t buf[LORA_PKT_LEN_MAX + 4];   /* longest frame any version sends */
     uint8_t len = 0;
     int     rssi = 0;
     float   snr = 0.0f;
@@ -105,7 +135,7 @@ void loop(void)
         lora_payload_t p;
         if (lora_packet_unpack(buf, len, &p)) {
             int snr_tenths = (int)(snr * 10.0f + (snr >= 0 ? 0.5f : -0.5f));
-            char line[192];
+            char line[288];   /* room for every optional metric at once */
             build_json(line, sizeof(line), &p, rssi, snr_tenths);
             Serial.println(line);
 #if defined(LED_BUILTIN)

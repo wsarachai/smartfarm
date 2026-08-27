@@ -2,10 +2,11 @@
 """
 receiver.py — Raspberry Pi LoRa gateway for the Smart Farm.
 
-Drives an SX1278 on the Pi's SPI0, receives the sensor node's 12-byte LoRa
-frame, decodes it, maps node_id -> device_id, and POSTs {device_id, metrics} to
-the web-server's telemetry endpoint. Standalone (like lora-gateway/bridge and the
-AI poller) so the web-server stays hardware-agnostic — it needs ZERO changes.
+Drives an SX1278 on the Pi's SPI0, receives the sensor node's LoRa frame (v1, v2
+or v3 — see lora_packet.py), decodes it, maps node_id -> device_id, and POSTs
+{device_id, metrics} to the web-server's telemetry endpoint. Standalone (like
+lora-gateway/bridge and the AI poller) so the web-server stays hardware-agnostic
+— it needs ZERO changes.
 
   node (SX1278 433) --LoRa--> Pi SX1278 (SPI0) --> this --HTTP--> web-server:3000
 
@@ -61,6 +62,20 @@ def device_id(node_id):
     return NODE_MAP.get(str(node_id), "water-node-%d" % node_id)
 
 
+_last_shape = {}
+
+
+def log_shape_change(pkt):
+    """Log the frame version + temp/RH source once, and again only if it changes
+    (a node swap, a firmware update, or an SHT45 that stopped answering)."""
+    shape = (pkt["version"], bool(pkt["flags"] & lora_packet.FLAG_SHT))
+    if _last_shape.get(pkt["node_id"]) == shape:
+        return
+    _last_shape[pkt["node_id"]] = shape
+    log("# node %d: frame v%d, air temp/humidity from %s"
+        % (pkt["node_id"], shape[0], "SHT45" if shape[1] else "BME280"))
+
+
 def pressure_to_msl(p_station_hpa, altitude_m, temp_c):
     """Reduce station pressure to mean sea level (temperature-corrected formula,
     the standard 'reduction to sea level' used by weather stations)."""
@@ -76,7 +91,9 @@ def build_metrics(pkt, rssi, snr):
         m["temp_cold"] = round(pkt["temp_cold_c100"] / 100.0, 2)
     if pkt["flags"] & lora_packet.FLAG_BATT and pkt["battery_mv"] > 0:
         m["battery_v"] = round(pkt["battery_mv"] / 1000.0, 3)
-    # v2 BME280 fields
+    # v2+ ambient fields. air_temp/humidity come from the SHT45 when FLAG_SHT is
+    # set (v3 nodes) and from the BME280 otherwise — same units either way, so
+    # the metric names do not change and dashboard history stays continuous.
     if pkt["flags"] & lora_packet.FLAG_AIR:
         m["air_temp"] = round(pkt["air_temp_c100"] / 100.0, 2)
     if pkt["flags"] & lora_packet.FLAG_HUM:
@@ -89,6 +106,9 @@ def build_metrics(pkt, rssi, snr):
             temp_c = (pkt["air_temp_c100"] / 100.0
                       if pkt["flags"] & lora_packet.FLAG_AIR else 15.0)
             m["pressure_msl"] = round(pressure_to_msl(station_hpa, ALTITUDE_M, temp_c), 1)
+    # v3 SCD41 field. Integer ppm — sub-ppm resolution would be noise.
+    if pkt["flags"] & lora_packet.FLAG_CO2 and pkt["co2_ppm"] > 0:
+        m["co2"] = pkt["co2_ppm"]
     m["rssi"] = rssi
     m["snr"] = round(snr, 1)
     m["seq"] = pkt["seq"]
@@ -136,6 +156,7 @@ def main():
             if pkt is None:
                 log("rx bad frame (magic/crc/len), %dB rssi=%d" % (len(payload), rssi))
             else:
+                log_shape_change(pkt)
                 post_telemetry(device_id(pkt["node_id"]), build_metrics(pkt, rssi, snr))
         time.sleep(0.05)
 

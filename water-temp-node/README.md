@@ -1,11 +1,15 @@
 # water-temp-node
 
-Battery-powered **hot/cold water temperature** LoRa sensor node on a
-**NUCLEO-WL55JC1** (STM32WL55JC). Every 15 minutes it wakes from **Stop2**,
-powers two **DS18B20** probes through an **A0341 P-MOSFET**, reads both
-temperatures, measures the battery via the internal **VREFINT**, transmits one
-compact **AS923** LoRa uplink, and goes back to sleep. It is **uplink-only** — it
-never listens for a downlink.
+Battery-powered **water + air** LoRa sensor node on a **NUCLEO-WL55JC1**
+(STM32WL55JC). Every 15 minutes it wakes from **Stop2**, powers the sensor rail
+through an **A0341 P-MOSFET**, reads **hot/cold water temperature** (2× DS18B20),
+**air temperature + humidity** (SHT45) and **CO2** (SCD41), measures the battery
+via the internal **VREFINT**, transmits one compact **AS923** LoRa uplink, and
+goes back to sleep. It is **uplink-only** — it never listens for a downlink.
+
+All four sensors sit on the **one gated rail**, so the whole front-end is dead
+between wakes. The SCD41 is the expensive one and is paced separately — see
+[CO2 on a battery node](#co2-on-a-battery-node).
 
 It does **not** talk to the web-server directly (that server only speaks HTTP on
 the WiFi LAN). The uplink is received by [`../lora-gateway`](../lora-gateway),
@@ -20,10 +24,16 @@ water-temp-node --LoRa AS923--> lora-gateway --USB CDC JSON--> bridge.js --HTTP-
 ```
 RTC wake (Stop2, 15 min)
   -> gate ON  (P-MOSFET, active-low)  -> settle 10 ms
-  -> DS18B20 x2 convert (12-bit, 750 ms) -> read hot + cold
-  -> gate OFF -> park 1-Wire pins analog
+  -> DS18B20 x2 start convert (12-bit, 750 ms)
+  -> wait out the SCD41's 1 s power-up   <- covers the 750 ms conversion,
+  |                                         so the rail is on for the LONGER
+  |                                         of the two, not the sum
+  -> read hot + cold
+  -> SHT45  read (~10 ms)              -> air temp + humidity
+  -> SCD41  single shot (5 s, x2 with warm-up)  -> CO2   [every Nth wake]
+  -> gate OFF -> park 1-Wire + I2C pins analog
   -> battery_mv via VREFINT
-  -> pack 12-byte frame -> LoRa TX (923.2 MHz SF9BW125, 14 dBm)
+  -> pack 20-byte v3 frame -> LoRa TX (923.2 MHz SF9BW125, 14 dBm)
   -> radio cold-sleep -> Stop2
 ```
 
@@ -44,38 +54,111 @@ Pins (see [`include/node_config.h`](include/node_config.h) — change to match y
 build). They deliberately avoid the RF-switch pins **PC3/PC4/PC5**, SWD
 **PA13/PA14**, the TCXO **PB0**, and the VCP UART **PA2/PA3**:
 
-| Function                         | Pin  |
-|----------------------------------|------|
-| DS18B20 **hot** data (1-Wire)    | PA10 |
-| DS18B20 **cold** data (1-Wire)   | PA9  |
-| Sensor-rail power gate (P-MOSFET)| PA8  |
-| Debug log (LPUART1 → ST-LINK VCP)| PA2 (TX) / PA3 (RX) |
+| Function                            | Pin  |
+|-------------------------------------|------|
+| DS18B20 **hot** data (1-Wire)       | PA10 |
+| DS18B20 **cold** data (1-Wire)      | PA9  |
+| I2C2 **SDA** (SHT45 + SCD41)        | PA11 |
+| I2C2 **SCL** (SHT45 + SCD41)        | PA12 |
+| Sensor-rail power gate (P-MOSFET)   | PA8  |
+| Debug log (LPUART1 → ST-LINK VCP)   | PA2 (TX) / PA3 (RX) |
 
-Power gate + probes (both probes **and** both pull-ups sit on the switched rail,
-so there is zero leakage during sleep):
+I2C2 is used rather than I2C1 (whose pins **PA9/PA10** are the DS18B20 probes) or
+I2C3 (whose **PB11** is the Nucleo's LED3, which would then sit on SDA).
+
+Power gate + sensors. **Everything** — both probes, both 1-Wire pull-ups, the two
+I2C parts and the I2C pull-ups — sits on the switched rail, so there is zero
+leakage during sleep:
 
 ```
-                3V3 ──S│ A0341 │D──┬──────────── DS18B20 rail
+                3V3 ──S│ A0341 │D──┬──────────── VSENS (switched rail)
                        │ (P-ch)│   │
               100k ────┤gate   │   ├──[4.7k]──┬── DQ hot   (probe A, PA10)
              to 3V3    │       │   │          └── VDD hot
    (OFF when Hi-Z) ────┘       │   ├──[4.7k]──┬── DQ cold  (probe B, PA9)
                   PA8 ─────────┘   │          └── VDD cold
-              (LOW = ON)           └── GND rail ── probe GNDs
+              (LOW = ON)           │
+                                   ├──[4.7k]───── SDA (PA11) ─┬─ SHT45  (0x44)
+                                   ├──[4.7k]───── SCL (PA12) ─┤
+                                   ├───────────── VDD ────────┴─ SCD41  (0x62)
+                                   └── GND rail ── probe + sensor GNDs
 ```
 
 `hot` vs `cold` is fixed by **which pin the probe is plugged into** — no ROM
-addressing, so they can never get swapped in software.
+addressing, so they can never get swapped in software. The SHT45 and SCD41 have
+fixed, distinct addresses, so they share one bus with no strapping.
+
+> The SCD41 draws **~205 mA peaks**. Size the rail bulk capacitance and the
+> P-MOSFET for that, not for the DS18B20's few mA — and see the settle-time
+> constraint in [`docs/hardware-interface.md`](docs/hardware-interface.md),
+> because more bulk fights the 10 ms `DS_POWER_SETTLE_MS`.
 
 ## What goes over the air
 
-A fixed **12-byte binary** frame (see
-[`src/lora/lora_packet.h`](src/lora/lora_packet.h)): magic/version, node id, seq,
-valid-flags, `temp_hot` + `temp_cold` (int16 centi-°C), `battery_mv` (uint16), and
-a CRC-8. The gateway expands it to the server's `{device_id, metrics}` JSON and
-adds `rssi`/`snr`. LoRa PHY (`src/lora/lora_params.h`) — **AS923 / 923.2 MHz /
-SF9 / BW125 / CR4-5 / syncword 0x34-equiv / 14 dBm** — must stay identical to the
+A **20-byte binary** frame, **v3** (see
+[`src/lora/lora_packet.h`](src/lora/lora_packet.h)):
+
+| Bytes | Field | Notes |
+|---|---|---|
+| 0 | magic | `0xA3` = v3. Rejects noise and older/newer frames cheaply |
+| 1–3 | node id, seq, flags | `flags` says which fields below are valid |
+| 4–7 | `temp_hot`, `temp_cold` | int16 centi-°C; sentinel `0x8000` if the probe failed |
+| 8–9 | `battery_mv` | uint16 mV |
+| 10–13 | `air_temp`, `humidity` | int16 centi-°C, uint16 %RH ×100 — **from the SHT45** |
+| 14–15 | `pressure` | uint16 deci-hPa; **0 on this node** (no barometer) |
+| 16–17 | `co2` | uint16 ppm |
+| 18–19 | reserved, CRC-8 | CRC over bytes 0..18 |
+
+The gateway expands it to the server's `{device_id, metrics}` JSON and adds
+`rssi`/`snr`. LoRa PHY (`src/lora/lora_params.h`) — **AS923 / 923.2 MHz / SF9 /
+BW125 / CR4-5 / syncword 0x34-equiv / 14 dBm** — must stay identical to the
 gateway's copy.
+
+**Versioning:** v1 (12 B, water temps + battery) and v2 (18 B, + BME280 ambient)
+are still on the wire from other builds and are **unchanged**. Each version only
+appends, so a field never moves, and `lora_packet_unpack()` accepts all three —
+an older node in the field keeps working against a current gateway.
+
+`LORA_FLAG_SHT` (bit 7) says air temp/humidity came from an **SHT45** rather than
+a BME280. Same units either way, so the receiver need not branch on it; it exists
+so a swapped sensor is visible in the logs rather than silently changing what the
+numbers mean.
+
+## CO2 on a battery node
+
+The SCD41 is, by a wide margin, the most expensive thing on this board — worth
+understanding before trusting the battery life estimate.
+
+A single-shot measurement **blocks for 5 s**, and the datasheet is explicit that
+the **first** shot after power-up is unsettled, so an honest reading costs **two**
+— about **10 s** of sensor-on time. Compare that with the rest of a wake, which is
+under a second, and with the LoRa TX, which is milliseconds.
+
+Two knobs in [`include/node_config.h`](include/node_config.h) control the cost:
+
+| Knob | Default | Effect |
+|---|---|---|
+| `CO2_ENABLED` | on | Comment out to drop the SCD41 entirely |
+| `CO2_EVERY_N_WAKES` | `4` | Measure CO2 on every Nth wake only |
+| `CO2_SINGLE_SHOT_WARMUP` | `1` | Discard one shot first. Halving the cost by turning this off also makes the readings worse |
+
+At the default `WAKE_INTERVAL_S = 900`, `CO2_EVERY_N_WAKES = 4` gives **one CO2
+reading per hour** and puts the sensor on for 10 s in every 3600 — a **0.28 % duty
+cycle** rather than the 1.1 % of measuring every wake. A greenhouse CO2 trend does
+not move faster than that. On the wakes in between, the **last reading is
+re-sent** with its valid flag still set: the number is real, just up to an hour
+old.
+
+To turn duty cycle into milliamp-hours you need the measurement current for your
+part — take it from the SCD4x datasheet rather than from this README, since it
+differs between revisions and supply voltages. The shape of the arithmetic is
+`I_avg ≈ I_measure × duty + I_idle`, and the point of the power gate is to make
+that second term the MOSFET's leakage rather than the sensor's idle draw.
+
+**Why single-shot here and periodic on the F103 prototype:** periodic mode is more
+accurate (the cell stays warm) but costs milliamps continuously, which is fine for
+a USB-powered bench board and fatal for a battery. The driver supports both; the
+host picks.
 
 ## Build / flash
 
@@ -86,7 +169,7 @@ pio run -t upload       # flash over the onboard ST-LINK (USB)
 pio device monitor      # 115200 — shows the per-wake debug log
 ```
 
-**Verified: compiles clean** — RAM 2.3%, Flash 10.2% of the STM32WL55JC.
+**Verified: compiles clean** — RAM 3.1%, Flash 15.4% of the STM32WL55JC.
 
 ### Why `framework = arduino`, not `stm32cube`
 
@@ -107,6 +190,10 @@ SWDIO=PA13, SWCLK=PA14, NRST, GND, 3V3 and remove the onboard ST-LINK jumpers.
 - `NODE_ID` — this node's wire id (the gateway maps it to `water-temp-01`).
 - `WAKE_INTERVAL_S` — sleep interval (default `900`).
 - `DS_*` pins, `DS_POWER_SETTLE_MS`, `DS_CONVERT_MS`.
+- `I2C_SDA_PIN` / `I2C_SCL_PIN` / `I2C_CLOCK_HZ`, `SHT45_ADDR`, `SCD41_ADDR`.
+- `I2C_POWER_SETTLE_MS` — the SCD41's mandatory 1 s wait after the rail comes up.
+- `CO2_ENABLED`, `CO2_EVERY_N_WAKES`, `CO2_SINGLE_SHOT_WARMUP` — see
+  [CO2 on a battery node](#co2-on-a-battery-node).
 - `DEBUG_UART_ENABLED` — comment out to drop serial logging entirely.
 
 ## DS18B20 bring-up test on an STM32F103C8T6 (Blue Pill)
@@ -265,6 +352,53 @@ openocd -f interface/stlink.cfg -f target/stm32f1x.cfg \
 > Use **Debug (F5)**, not the Upload/Monitor buttons — the Monitor button grabs a
 > serial COM port (semihosting isn't one), so it shows nothing here.
 
+### The full prototype node (`bluepill_f103c8_node`)
+
+Beyond the DS18B20-only bring-up envs, two envs run the **whole node** on the
+Blue Pill — every sensor, the shared v3 frame, and an external **SX1278 at
+433 MHz** talking to [`../lora-pi-receiver`](../lora-pi-receiver). This is where
+the SHT45 and SCD41 drivers get their real-hardware hours before the WL55 boards
+arrive, since both envs build the **same driver files** the WL55 node ships
+(`build_src_filter`, no copies).
+
+| Env | Output | Use |
+|---|---|---|
+| `bluepill_f103c8_node` | semihosting over SWD | Bench, with a debugger attached |
+| `bluepill_f103c8_node_standalone` | none (silent) | Flash once, run from any USB/battery supply |
+
+```
+pio run -e bluepill_f103c8_node -t upload
+```
+
+Wiring beyond the DS18B20 probes (PB6/PB7):
+
+| Part | Bus | Address | Supplies |
+|---|---|---|---|
+| BME280 | I2C2 PB10=SCL / PB11=SDA | `0x76` | `pressure` **only** |
+| SHT45 | same bus | `0x44` | `air_temp` + `humidity` |
+| SCD41 | same bus | `0x62` | `co2` |
+| SX1278 | SPI1 | — | NSS=PA4 SCK=PA5 MISO=PA6 MOSI=PA7 RESET=PB0 DIO0=PB1 |
+
+One pair of 4.7 k pull-ups serves the whole I2C bus. I2C**2** is used because
+I2C1's PB6/PB7 are the DS18B20 probes.
+
+Two behaviours differ from the WL55 node, deliberately:
+
+- **The SCD41 runs in periodic mode** (free-running, one sample per 5 s) rather
+  than single-shot. This board is mains-powered and awake continuously, so
+  periodic is both simpler and more accurate — the cell stays warm.
+- **The SHT45 supersedes the BME280 for temp/RH** (±0.1 °C / ±1 %RH beats it on
+  both), and `LORA_FLAG_SHT` is set to record that. If the SHT45 does not answer,
+  the BME280 takes those two fields back and the flag clears — a dead SHT45 costs
+  accuracy, not telemetry.
+
+The measured pressure is fed back to the SCD41 (`scd41_set_ambient_pressure`) for
+CO2 density compensation, which is worth roughly 1 % of reading per 10 hPa.
+
+> **Power:** the SCD41 peaks at ~205 mA. A marginal 3V3 LDO browns out
+> mid-measurement, and the symptom looks like a flaky I2C bus rather than a power
+> problem. Use a supply with headroom.
+
 ### Driver note
 `ds18b20_read()` rejects an all-zero scratchpad: a data line stuck low (missing
 pull-up / short) returns all zeros, which passes CRC (`crc8(0..0)=0`) and would
@@ -274,8 +408,19 @@ guard benefits the WL55 node too.
 ## Status / caveats
 
 - **Compiles clean, but not yet hardware-verified.** `pio run` succeeds (RAM
-  2.3%, Flash 10.2%); the radio, sleep current, and DS18B20 timing still need a
+  3.1%, Flash 15.4%); the radio, sleep current, and DS18B20 timing still need a
   real board. Do the first flash + monitor before trusting it.
+- **The SHT45 and SCD41 are compile-verified only on this board.** Both drivers
+  are hand-rolled from the datasheets against the shared
+  [`sensirion_i2c`](src/sensirion_i2c.h) helper — no vendor library — and the
+  wire format is cross-checked end to end (see below), but neither part has been
+  on a WL55 yet. Bring them up on the F103 prototype env first, where the same
+  driver files run against real sensors.
+- **The frame format IS verified**, in both directions: the C header is compiled
+  on the host to generate wire vectors, and
+  [`lora-pi-receiver/test_lora_packet.py`](../lora-pi-receiver/test_lora_packet.py)
+  decodes them, covering v1/v2/v3 plus every single-byte corruption. Run it after
+  any change to the wire format.
 - The LoRa driver ([`src/lora/subghz_lora.c`](src/lora/subghz_lora.c)) is a lean,
   self-contained SX126x command driver over `HAL_SUBGHZ` — it does **not** vendor
   the full STM32CubeWL SubGHz_Phy middleware. RF-switch truth table and TCXO
