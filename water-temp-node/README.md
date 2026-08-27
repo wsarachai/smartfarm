@@ -40,11 +40,12 @@ RTC wake (Stop2, 15 min)
 ## Hardware / wiring
 
 > Building the **real hardware**? It is two PCBs — the NUCLEO-WL55JC1 plus a
-> custom front-end board stacked on its morpho headers (probe connectors,
-> P-MOSFET gate, protection, battery). See
-> [`docs/hardware-interface.md`](docs/hardware-interface.md) for the connector,
-> the six signals crossing it, the front-end schematic + BOM, the Nucleo battery
-> traps, and the bring-up order. The wiring below is the bench setup.
+> custom **ARDUINO Uno V3 shield** carrying the probe connectors, the SHT45 +
+> SCD41, the P-MOSFET gate, protection and the battery input. See
+> [`docs/hardware-interface.md`](docs/hardware-interface.md) for the full
+> CN6/CN8/CN9/CN5 pin map, the eight signals crossing the joint, the schematic +
+> BOM, the Nucleo battery traps, and the bring-up order. The wiring below is the
+> bench setup.
 
 Board: **NUCLEO-WL55JC1**. Powered from a **3.0–3.6 V** battery directly on the
 3V3 domain (2×AA or 1× LiFePO4) — that's what makes the zero-part VREFINT battery
@@ -54,17 +55,24 @@ Pins (see [`include/node_config.h`](include/node_config.h) — change to match y
 build). They deliberately avoid the RF-switch pins **PC3/PC4/PC5**, SWD
 **PA13/PA14**, the TCXO **PB0**, and the VCP UART **PA2/PA3**:
 
-| Function                            | Pin  |
-|-------------------------------------|------|
-| DS18B20 **hot** data (1-Wire)       | PA10 |
-| DS18B20 **cold** data (1-Wire)      | PA9  |
-| I2C2 **SDA** (SHT45 + SCD41)        | PA11 |
-| I2C2 **SCL** (SHT45 + SCD41)        | PA12 |
-| Sensor-rail power gate (P-MOSFET)   | PA8  |
-| Debug log (LPUART1 → ST-LINK VCP)   | PA2 (TX) / PA3 (RX) |
+| Function                            | Pin  | ARDUINO |
+|-------------------------------------|------|---------|
+| DS18B20 **hot** data (1-Wire)       | PA10 | CN8-3 (A2) |
+| DS18B20 **cold** data (1-Wire)      | PA9  | CN5-2 (D9) |
+| **SDA** (SHT45 + SCD41)             | PA11 | CN5-9 (D14) |
+| **SCL** (SHT45 + SCD41)             | PA12 | CN5-10 (D15) |
+| Sensor-rail power gate (P-MOSFET)   | PB2  | CN8-2 (A1) |
+| Battery in (3V3)                    | —    | CN6-4 |
+| Debug log (LPUART1 → ST-LINK VCP)   | PA2 (TX) / PA3 (RX) | CN9-7/8 |
 
-I2C2 is used rather than I2C1 (whose pins **PA9/PA10** are the DS18B20 probes) or
-I2C3 (whose **PB11** is the Nucleo's LED3, which would then sit on SDA).
+Every pin is on the **ARDUINO Uno V3 headers**, because the real front-end is a
+**shield** — see [`docs/hardware-interface.md`](docs/hardware-interface.md). That
+constraint is why the gate is **PB2 and not PA8**: PA8 is one of the few MCU pins
+the Nucleo brings out only to the morpho headers, so a shield cannot reach it.
+
+PA11/PA12 are the board's designated ARDUINO I2C pair. The alternatives were
+worse: **PA9/PA10** are the DS18B20 probes, and **PB10/PB11** would put SDA on the
+Nucleo's LED3.
 
 Power gate + sensors. **Everything** — both probes, both 1-Wire pull-ups, the two
 I2C parts and the I2C pull-ups — sits on the switched rail, so there is zero
@@ -76,7 +84,7 @@ leakage during sleep:
               100k ────┤gate   │   ├──[4.7k]──┬── DQ hot   (probe A, PA10)
              to 3V3    │       │   │          └── VDD hot
    (OFF when Hi-Z) ────┘       │   ├──[4.7k]──┬── DQ cold  (probe B, PA9)
-                  PA8 ─────────┘   │          └── VDD cold
+                  PB2 ─────────┘   │          └── VDD cold
               (LOW = ON)           │
                                    ├──[4.7k]───── SDA (PA11) ─┬─ SHT45  (0x44)
                                    ├──[4.7k]───── SCL (PA12) ─┤

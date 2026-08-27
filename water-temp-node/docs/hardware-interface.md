@@ -5,11 +5,11 @@ The real (non-breadboard) build is **two PCBs joined by a connector**:
 | Board | What it is | Carries |
 |---|---|---|
 | **Brain** | NUCLEO-WL55JC1 (off-the-shelf) | STM32WL55JC, radio, RF switch, TCXO, antenna, ST-LINK |
-| **Front-end** | Custom PCB, this spec | DS18B20 probe connectors, SHT45 + SCD41 (I2C), A0341 P-MOSFET rail gate, pull-ups, line protection, battery input |
+| **Front-end** | Custom shield PCB, this spec | DS18B20 probe connectors, SHT45 + SCD41 (I2C), A0341 P-MOSFET rail gate, pull-ups, line protection, battery input |
 
-The front-end mounts **above** the Nucleo on its ST morpho headers. This document
-specifies that joint: the connector, the signals crossing it, and the front-end
-circuit behind them.
+The front-end is an **ARDUINO Uno V3 shield** that mounts above the Nucleo on its
+ARDUINO headers. This document specifies that joint: the connectors, the signals
+crossing them, and the front-end circuit behind them.
 
 Everything here is a contract the **firmware already assumes**. Where a value is
 forced by code, the code is cited — change one and you change the other.
@@ -22,70 +22,87 @@ forced by code, the code is cited — change one and you change the other.
 
 ## 1. The stack
 
+The front-end is an **ARDUINO Uno V3 shield**. It mates with the Nucleo's four
+ARDUINO headers — **CN6, CN8, CN9, CN5** — and leaves the ST morpho headers
+(CN7/CN10) free for probing.
+
 ```
         ┌─────────────────────────────────────────────┐
-        │  FRONT-END PCB                              │
+        │  FRONT-END SHIELD                           │
         │  probe J1/J2 · gate Q1 · pull-ups · TVS     │   <- this spec
         │  SHT45 U1 · SCD41 U2 (I2C) · battery J3     │
-        │   [2x19 socket]            [2x19 socket]    │
-        │    CN7-16 = BATT            CN10-3/5 = I2C  │
-        │    CN7-32 = DQ_HOT          CN10-16 = GATE  │
-        │                             CN10-19 = DQ_COLD│
-        └──────┬──────────────────────────┬───────────┘
-               │  CN7                CN10 │              2.54 mm, 38 pos each
-        ┌──────┴──────────────────────────┴───────────┐
+        │                                             │
+        │  [CN6 8p][CN8 6p]        [CN9 8p][CN5 10p]  │
+        │   BATT    DQ_HOT           —      DQ_COLD   │
+        │   GND     SENS_GATE               SDA/SCL   │
+        └────┬─────────┬───────────────┬────────┬─────┘
+             │         │               │        │       2.54 mm
+        ┌────┴─────────┴───────────────┴────────┴─────┐
         │  NUCLEO-WL55JC1     [antenna keep-out]      │
         │  (ST-LINK section snapped off — see §5)     │
+        │  morpho CN7/CN10 remain exposed → Appendix A│
         └─────────────────────────────────────────────┘
 ```
 
-- **Mating:** the Nucleo's morpho **CN7/CN10** are 2×19 male pin headers on
-  2.54 mm pitch. The front-end carries two matching **2×19 female socket strips**
-  on its underside.
-- **Mechanical:** sockets at both long edges support the board at both edges — no
+- **Mating:** the Nucleo's ARDUINO connectors are **female**, so the shield
+  carries **male** pin headers on its underside — the opposite gender to a
+  morpho-stacking board. Lengths are fixed by the Uno V3 standard: **CN6 = 8,
+  CN8 = 6, CN9 = 8, CN5 = 10** positions.
+- **Mechanical:** headers on both long edges support the board at both edges — no
   standoff strictly required, but fit **M3 nylon standoffs** at the Nucleo's
   mounting holes anyway. A board held only by header friction will fret its
   contacts loose under vibration and thermal cycling.
-- **Stack height:** the socket strip must clear the Nucleo's tallest parts (USB
-  connector, antenna connector). Use tall/stacking sockets or add spacers, and
+- **Stack height:** the headers must clear the Nucleo's tallest parts (USB
+  connector, antenna connector). Use tall/stacking headers or add spacers, and
   confirm against your actual board before ordering.
-- **Antenna keep-out:** cut the front-end board away over the Nucleo's RF section
-  and antenna. No copper, no battery, no probe cable routed over it.
+- **Antenna keep-out:** cut the shield away over the Nucleo's RF section and the
+  **CN12 SMA** connector. No copper, no battery, no probe cable routed over it.
+  The Uno V3 outline is **fixed**, so unlike a custom morpho board you cannot
+  simply move the board edge to dodge the RF section — **check the keep-out
+  against a physical board before laying out copper.** This is the one place the
+  shield choice costs you freedom.
 
-### Keying — do this, it is the one irreversible mistake
+### Keying — solved for free by the footprint
 
-Two identical 2×19 headers, symmetric about the board centre, will mate **rotated
-180°** just as happily as the right way round. That swaps CN7 with CN10 and
-reverses the pin order, so the battery leaves `CN7-16` and arrives somewhere in
-CN10's I/O — see §2's pin map for what lives there. Battery voltage onto a GPIO
-kills the pin, and possibly the RF switch control next to it.
+This used to be the most dangerous paragraph in the document. It no longer is,
+and that is the main reason to prefer the shield.
 
-Pick at least one:
+Two identical 2×19 morpho headers are symmetric about the board centre, so a
+stacking board will mate **rotated 180°** just as happily as the right way round —
+putting the battery onto a signal pin. Guarding against that needed a deliberate
+key.
 
-1. **Depopulate one position as a key** — clip a single unused pin on the Nucleo
-   header and plug the matching socket hole. Cheap and absolute.
-2. **Asymmetric outline** — extend the front-end board over one end only, so it
-   fouls the USB/antenna if reversed.
-3. **Silkscreen pin-1 triangles** on both boards, plus a printed arrow. Necessary
-   but *not* sufficient on its own — never rely on this alone.
+The ARDUINO Uno V3 footprint **cannot be fitted wrong**. Its four connectors have
+different lengths (8/6/8/10), and the classic **0.16″ (not 0.1″) offset between
+D7 and D8** makes the two long edges non-interchangeable. Rotate it and nothing
+lines up; mirror it and nothing lines up. The geometry is the key.
+
+Still worth doing, at no cost:
+
+- **Silkscreen pin-1 triangles** on the shield plus a printed arrow, so a
+  half-inserted board is obvious.
+- **Mark the header lengths** (`CN6·8  CN8·6  CN9·8  CN5·10`) next to each strip.
+
+---
+
 
 ---
 
 ## 2. Signals crossing the connector
 
-**Eight** signals. Freeze this table; it is the interface. Everything else on the
-morpho headers is **left unconnected** on the front-end — do not casually route
-extra pins "in case", each one is a new way to fight the radio or the debugger.
+**Eight** signals. Freeze this table; it is the interface. Every other position on
+the ARDUINO headers is **left unconnected** on the shield — do not casually route
+extra pins "in case", each one is a new way to fight the debugger.
 
-| Signal | WL55 pin | Morpho | Direction | Electrical | Forced by |
+| Signal | WL55 pin | ARDUINO | Direction | Electrical | Forced by |
 |---|---|---|---|---|---|
-| `VBAT` | — | **CN7-16** (`3V3`) | in to brain | 3.0–3.6 V, ≤250 mA peak | `battery.cpp` — battery **is** VDDA |
-| `GND` | — | **CN7-20**, **CN10-9** | — | use **≥2 GND pins**, one per header | — |
-| `SENS_GATE` | **PA8** | **CN10-16** | out of brain, push-pull | active **LOW** = rail on; Hi-Z = off via 100 k | `node_config.h` `DS_PWR_*` |
-| `DQ_HOT` | **PA10** | **CN7-32** | bidir, open-drain | 1-Wire; parked **analog** in sleep | `node_config.h` `DS_HOT_*` |
-| `DQ_COLD` | **PA9** | **CN10-19** | bidir, open-drain | 1-Wire; parked **analog** in sleep | `node_config.h` `DS_COLD_*` |
-| `I2C_SDA` | **PA11** | **CN10-5** | bidir, open-drain | I2C2 @ 100 kHz; parked **analog** in sleep | `node_config.h` `I2C_SDA_PIN` |
-| `I2C_SCL` | **PA12** | **CN10-3** | out of brain, open-drain | I2C2 @ 100 kHz; parked **analog** in sleep | `node_config.h` `I2C_SCL_PIN` |
+| `VBAT` | — | **CN6-4** (`3V3`) | in to brain | 3.0–3.6 V, ≤250 mA peak | `battery.cpp` — battery **is** VDDA |
+| `GND` | — | **CN6-6/7**, **CN5-7** | — | use **≥2 GND pins**, one per edge | — |
+| `SENS_GATE` | **PB2** | **CN8-2** (A1) | out of brain, push-pull | active **LOW** = rail on; Hi-Z = off via 100 k | `node_config.h` `DS_PWR_*` |
+| `DQ_HOT` | **PA10** | **CN8-3** (A2) | bidir, open-drain | 1-Wire; parked **analog** in sleep | `node_config.h` `DS_HOT_*` |
+| `DQ_COLD` | **PA9** | **CN5-2** (D9) | bidir, open-drain | 1-Wire; parked **analog** in sleep | `node_config.h` `DS_COLD_*` |
+| `I2C_SDA` | **PA11** | **CN5-9** (D14) | bidir, open-drain | I2C @ 100 kHz; parked **analog** in sleep | `node_config.h` `I2C_SDA_PIN` |
+| `I2C_SCL` | **PA12** | **CN5-10** (D15) | out of brain, open-drain | I2C @ 100 kHz; parked **analog** in sleep | `node_config.h` `I2C_SCL_PIN` |
 | `VSENS` | — | — | front-end internal | gated 3V3 to probes, I2C parts **and** all pull-ups | `main.cpp` `gate_on()` |
 
 The peak figure is the **SCD41's ~205 mA measurement**, not the LoRa TX's ~150 mA:
@@ -95,12 +112,14 @@ never overlap. Size `VBAT` for the larger one, not their sum.
 `VSENS` is generated **on the front-end** and never crosses back to the Nucleo.
 The only power crossing the joint is `VBAT` and ground.
 
-Optional, bring-up only, not part of the contract: SWD (PA13/PA14) and the
-LPUART1 VCP (PA2/PA3).
+Not part of the contract: the LPUART1 VCP (PA2/PA3, at CN9-7/8). SWD is **not**
+on these headers at all — see "Do not route these".
 
-> **This table grew from six signals to eight** when the SHT45 and SCD41 were
-> added. If you already have front-end boards fabricated to the six-signal
-> revision, they are not forward-compatible — PA11/PA12 are not routed on them.
+> **Two revisions of this interface exist and they are not compatible.** The
+> original was a morpho-stacking board with six signals; it then grew to eight
+> (SHT45 + SCD41), and it is now an **ARDUINO shield** with `SENS_GATE` moved from
+> **PA8 to PB2**. PA8 is unreachable from a shield, which is what forced the move.
+> Boards fabricated to either earlier revision must be rebuilt, not adapted.
 
 ### Two rules the front-end must honor
 
@@ -111,159 +130,174 @@ stops meaning anything. `sensor_pins_park()` in `main.cpp` parks all four pins a
 analog for the same reason — the board has to cooperate.
 
 **2. `SENS_GATE` is active-low with a 100 k gate→source pull-up.** That resistor is
-not optional: it holds the sensor rail **off** while PA8 is Hi-Z — during reset,
+not optional: it holds the sensor rail **off** while PB2 is Hi-Z — during reset,
 during BOOT0, and before firmware runs.
 
 ### Pin choice
 
-PA8/PA9/PA10/PA11/PA12 deliberately avoid PC3/PC4/PC5 (RF switch), PA13/PA14
-(SWD), PA2/PA3 (VCP) and PB0 (TCXO) — see the header comment at the top of
-`node_config.h`.
+Every signal above is reachable on the ARDUINO headers — the constraint that set
+the whole map, and the reason `SENS_GATE` is PB2 (see below). PB2/PA9/PA10/PA11/
+PA12 also avoid PC3/PC4/PC5 (RF switch), PA13/PA14 (SWD) and PB0 (TCXO), though
+with a shield that is automatic: none of those reach these headers.
 
-The I2C pair is **I2C2 on PA11/PA12**, not the more obvious alternatives:
-**I2C1** would want PA9/PA10, which are the DS18B20 probes; **I2C3** would want
-PB10/PB11, and **PB11 is the Nucleo's LED3** — SDA would drive an LED, loading
-the bus and wasting current on every transfer. Keeping the whole sensor interface
-inside port A also groups it on the morpho headers.
+**PA11/PA12 are the board's designated ARDUINO I2C pair** (D14/SDA, D15/SCL), so
+the shield gets I2C exactly where a shield expects it — which also means an
+off-the-shelf Qwiic/Grove proto-shield works for bench bring-up. The alternatives
+were worse: **PA9/PA10** are the DS18B20 probes, and **PB10/PB11** put SDA on the
+Nucleo's **LED3**, loading the bus and burning current on every transfer.
 
-### The morpho pin map
+> **One label to verify.** UM2592 Table 17 calls PA11/PA12 `I2C1_SDA`/`I2C1_SCL`,
+> but ST's own STM32duino `PeripheralPins.c` and Zephyr's board definition both
+> map them to **I2C2**. The firmware is unaffected either way — STM32duino
+> resolves the instance from the pin map, not from a name — but if you need the
+> instance for a bare-HAL port, check RM0453's alternate-function table rather
+> than trusting either source.
 
-Transcribed from **UM2592 Rev 1, Table 18** ("Pin assignment of the ST morpho
-connectors"), the authority for this board. Both connectors are **2×19, 2.54 mm**;
-odd pins are one row, even pins the other. Signals this node uses are **bold** and
-marked ✅; ⛔ marks positions the front-end must never touch (§"Do not route
-these"). Everything unmarked is simply left open.
+### The ARDUINO pin map
 
-**CN7**
+Transcribed from **UM2592 Rev 1, Table 17** ("ARDUINO connectors pinout"). Only
+**24** of the MCU's I/Os reach these headers — the full 76-position morpho map is
+in [Appendix A](#appendix-a--st-morpho-pin-map-not-used-by-this-design) for bench
+probing. Signals this node uses are **bold** and marked ✅; ⛔ marks positions the
+shield must not touch. Everything unmarked is left open.
 
-| Odd | Name | Use | Even | Name | Use |
-|---:|---|---|---:|---|---|
-| 1 | NC | | 2 | NC | |
-| 3 | NC | | 4 | NC | |
-| 5 | VDD_MCU | | 6 | E5V | |
-| 7 | BOOT0 | | 8 | **GND** | ✅ use |
-| 9 | NC | | 10 | NC | |
-| 11 | NC | | 12 | IOREF | |
-| 13 | PA13 | ⛔ SWD | 14 | NRST | |
-| 15 | PA14 | ⛔ SWD | 16 | **3V3** | ✅ **battery in** |
-| 17 | PA15 | | 18 | 5V | |
-| 19 | **GND** | ✅ use | 20 | **GND** | ✅ use |
-| 21 | NC | | 22 | GND | |
-| 23 | PC13 | | 24 | VIN | |
-| 25 | PC14 | | 26 | NC | |
-| 27 | PC15 | | 28 | PB1 | |
-| 29 | NC | | 30 | PB2 | |
-| 31 | NC | | 32 | **PA10** | ✅ `DQ_HOT` |
-| 33 | VBAT | ⚠️ **not** battery in — see below | 34 | PB4 | |
-| 35 | NC | | 36 | PB14 | |
-| 37 | NC | | 38 | PB13 | |
+**CN6 — power (8 pos)** · same edge as CN8
 
-**CN10**
+| Pin | Name | MCU | Use |
+|---:|---|---|---|
+| 1 | NC | — | reserved for test |
+| 2 | IOREF | — | |
+| 3 | NRST | NRST | |
+| 4 | **3V3** | — | ✅ **battery in** |
+| 5 | 5V | — | |
+| 6 | **GND** | — | ✅ use |
+| 7 | **GND** | — | ✅ use |
+| 8 | VIN | — | 7–12 V input, unused |
 
-| Odd | Name | Use | Even | Name | Use |
-|---:|---|---|---:|---|---|
-| 1 | PA0 | | 2 | PC4 | ⛔ RF switch FE_CTRL1 |
-| 3 | **PA12** | ✅ `I2C_SCL` | 4 | PC5 | ⛔ RF switch FE_CTRL2 |
-| 5 | **PA11** | ✅ `I2C_SDA` | 6 | NC | |
-| 7 | AVDD | | 8 | 5V_USB_CHGR | |
-| 9 | **GND** | ✅ use | 10 | NC | |
-| 11 | PA5 | | 12 | PC6 | |
-| 13 | PA6 | | 14 | PC0 | |
-| 15 | PA7 | | 16 | **PA8** | ✅ `SENS_GATE` |
-| 17 | PA4 | | 18 | NC | |
-| 19 | **PA9** | ✅ `DQ_COLD` | 20 | **GND** | ✅ use |
-| 21 | PC2 | | 22 | PB0 | ⛔ VDD_TCXO |
-| 23 | PC1 | | 24 | NC | |
-| 25 | PB10 | | 26 | PB9 | |
-| 27 | PB8 | | 28 | PB15 | |
-| 29 | PB5 | | 30 | PB11 | |
-| 31 | PB3 | | 32 | AGND | |
-| 33 | PB12 | | 34 | NC | |
-| 35 | PB6 / PA2 | ⛔ VCP TX (D1) | 36 | PA1 | |
-| 37 | PB7 / PA3 | ⛔ VCP RX (D0) | 38 | PC3 | ⛔ RF switch FE_CTRL3 |
+**CN8 — analog (6 pos)** · same edge as CN6
 
-> **Two errata in the source, both worth knowing.** UM2592 Rev 1 prints CN10 pin
-> 37 as "PB6 / PA3"; it is **PB7 / PA3**. PB6 is already at pin 35, PB7 appears
-> nowhere else in a table whose own preamble says *all* MCU I/Os are on the
-> morpho, and the note above that table states D0/D1 are USART1 on **PB6 and
-> PB7**. ST's own STM32duino variant file agrees (`D0 = PB7`, and `PA3` "could be
-> on D0"). Neither pin is ours, but do not lose an afternoon to it.
+| Pin | Name | MCU | Use |
+|---:|---|---|---|
+| 1 | A0 | PB1 | |
+| 2 | **A1** | **PB2** | ✅ `SENS_GATE` |
+| 3 | **A2** | **PA10** | ✅ `DQ_HOT` |
+| 4 | A3 | PB4 | |
+| 5 | A4 | PB14 | |
+| 6 | A5 | PB13 | |
+
+**CN9 — digital low (8 pos)** · opposite edge, unused by this design
+
+| Pin | Name | MCU | Use |
+|---:|---|---|---|
+| 1 | D7 | PC1 | |
+| 2 | D6 | PB10 | |
+| 3 | D5 | PB8 | |
+| 4 | D4 | PB5 | |
+| 5 | D3 | PB3 | ⚠️ also TRACESWO |
+| 6 | D2 | PB12 | |
+| 7 | D1 / TX | PA2 / PB6 | ⛔ ST-LINK VCP |
+| 8 | D0 / RX | PA3 / PB7 | ⛔ ST-LINK VCP |
+
+**CN5 — digital high (10 pos)** · same edge as CN9
+
+| Pin | Name | MCU | Use |
+|---:|---|---|---|
+| 1 | D8 | PC2 | |
+| 2 | **D9** | **PA9** | ✅ `DQ_COLD` |
+| 3 | D10 | PA4 | |
+| 4 | D11 | PA7 | |
+| 5 | D12 | PA6 | |
+| 6 | D13 | PA5 | |
+| 7 | **GND** | — | ✅ use — the return for this edge |
+| 8 | AVDD | AVDD/VREF+ | ⛔ voltage reference, do not load |
+| 9 | **D14 / SDA** | **PA11** | ✅ `I2C_SDA` |
+| 10 | **D15 / SCL** | **PA12** | ✅ `I2C_SCL` |
 
 So the eight contract signals land like this:
 
 | Signal | MCU pin | Connector | Pin |
 |---|---|---|---|
-| `VBAT` (battery in) | — | **CN7** | **16** (`3V3`) |
-| `GND` | — | **CN7** | **20** |
-| `GND` | — | **CN10** | **9** |
-| `SENS_GATE` | PA8 | **CN10** | **16** |
-| `DQ_HOT` | PA10 | **CN7** | **32** |
-| `DQ_COLD` | PA9 | **CN10** | **19** |
-| `I2C_SDA` | PA11 | **CN10** | **5** |
-| `I2C_SCL` | PA12 | **CN10** | **3** |
+| `VBAT` (battery in) | — | **CN6** | **4** (`3V3`) |
+| `GND` | — | **CN6** | **6**, **7** |
+| `GND` | — | **CN5** | **7** |
+| `SENS_GATE` | PB2 | **CN8** | **2** (A1) |
+| `DQ_HOT` | PA10 | **CN8** | **3** (A2) |
+| `DQ_COLD` | PA9 | **CN5** | **2** (D9) |
+| `I2C_SDA` | PA11 | **CN5** | **9** |
+| `I2C_SCL` | PA12 | **CN5** | **10** |
 | `VSENS` | — | — | front-end internal, does not cross |
 
-**Seven of the eight are on CN10; CN7 carries only `DQ_HOT`, power and ground.**
-That asymmetry is worth knowing when you place parts — the probe connectors want
-to be near the CN7 edge, everything else near CN10.
+The split falls out cleanly along the two edges:
 
-### `VBAT` means two different things — do not mix them up
+- **CN6 + CN8 edge — power and the gate.** Battery in, both grounds, the P-MOSFET
+  gate, and `DQ_HOT`. Put Q1, its 100 k, the bulk cap and the battery connector
+  here; the 205 mA switching loop then never leaves this corner.
+- **CN5 edge — the sensing.** `DQ_COLD`, both I2C lines, and a local GND return
+  at CN5-7. Put the SHT45, the SCD41 and the I2C pull-ups here.
 
-This is the single most expensive mistake available on this connector, because
-both candidates are plausibly named.
+Only `DQ_HOT` crosses over, and that is unavoidable — PA10 is on CN8 and PA9 is
+on CN5. Run it as a guarded trace, not under the SCD41.
 
-- **CN7 pin 16, `3V3`** — the board's **3.3 V power input**. This is where the
-  battery goes. UM2592 Table 9: *3 V to 3.6 V, 1.3 A max*, which brackets our
-  3.0–3.6 V chemistry exactly.
-- **CN7 pin 33, `VBAT`** — the STM32WL's **backup-domain** pin, for keeping the
-  RTC alive from a coin cell while the main rail is down. It is not a power input
-  for the board, it cannot run the MCU, and it will not run the radio.
+### Why `SENS_GATE` is PB2 and not PA8
 
-Our §2 signal is called `VBAT` because it is *the battery*; the morpho pin called
-`VBAT` is something else entirely. **Silkscreen the front-end `BATT → CN7-16`**,
-not `VBAT`, so the board itself disambiguates.
+**PA8 is not on the ARDUINO headers.** It is one of the pins the Nucleo brings
+out only to morpho CN10-16 (UM2592 Table 17 lists 24 MCU I/Os; PA8 is not among
+them). A shield physically cannot reach it, so the gate had to move.
 
-Powering through CN7 pin 16 leaves the ST-LINK unpowered, so **debugging stops
-working** — the same trade §5 describes. That is expected, not a fault.
+**PB2 (A1, CN8-2)** was chosen because:
+
+- It is on the **CN6/CN8 edge**, next to where the battery arrives, so the whole
+  high-current gate circuit stays in one corner.
+- Its only alternate function is **ADC1_IN4** — nothing this design uses.
+- The STM32WL has **no boot strap here**: BOOT0 is PH3, and nBOOT1 is an option
+  byte rather than a pin. It resets to a floating input, which is exactly what the
+  100 k gate pull-up needs to hold the rail off before firmware runs.
+
+Runner-up was PB12 (D2, CN9-6), whose function UM2592 lists as plain "IO" — the
+cleanest pin on the board, but on the wrong edge.
 
 ### Do not route these
 
-Four positions on CN10 and two on CN7 are actively dangerous to touch, and a
-front-end board that is 90 % copper pour makes it easy to touch them by accident:
+Choosing a shield **removed most of this section**, which is a real benefit: the
+RF-critical pins are not on the ARDUINO headers at all, so no copper pour on the
+front-end can reach them.
 
 | Position | Signal | Why |
 |---|---|---|
-| CN10 2, 4, 38 | PC4, PC5, PC3 | **RF switch** FE_CTRL1/2/3. Load these and the radio's TX/RX path misbehaves in ways that look like a bad antenna |
-| CN10 22 | PB0 | **VDD_TCXO**. The radio's reference oscillator supply |
-| CN7 13, 15 | PA13, PA14 | **SWD**. UM2592 explicitly advises against using them as I/O |
-| CN10 35, 37 | PB6/PA2, PB7/PA3 | The **ST-LINK VCP**, i.e. the debug log |
+| CN9-7, CN9-8 | PA2/PB6, PA3/PB7 | **ST-LINK VCP** — the debug log |
+| CN5-8 | AVDD / VREF+ | **Voltage reference.** Loading it skews `battery_read_mv()` |
+| CN9-5 | PB3 | Also **TRACESWO**; avoid if you ever want trace |
+| — | PC3, PC4, PC5 | **RF switch** FE_CTRL1/2/3 — *not reachable from a shield* ✅ |
+| — | PB0 | **VDD_TCXO** — *not reachable from a shield* ✅ |
+| — | PA13, PA14 | **SWD** — *not reachable from a shield* ✅ |
 
-Everything else not in the eight-signal table is simply left open.
+The flip side: because SWD is not on these headers, the shield cannot carry debug
+out to a test point. Use the Nucleo's own connector, or morpho CN7-13/15.
 
-### Orientation — the sockets are on the underside
+### Orientation — the headers are on the underside
 
-The front-end's two socket strips face **down**. Everything above is written as
-the Nucleo's own pin numbering, which is what you read off the board with it
-component-side up. On the front-end's layout those same positions **mirror**:
+The shield's pin headers face **down**. Everything above is written as the
+Nucleo's own numbering, which is what you read off the board component-side up.
+On the shield's layout those same positions **mirror**:
 
 ```
-   Nucleo, viewed from above          Front-end, viewed from above
-   (male headers, component side)     (female sockets, on the underside)
+   Nucleo, viewed from above        Shield, viewed from above
+   (female headers, component side) (male headers, on the underside)
 
-   CN7            CN10                CN10                    CN7
-   [1 ][2 ]      [1 ][2 ]             [2 ][1 ]               [2 ][1 ]
-   [3 ][4 ]      [3 ][4 ]             [4 ][3 ]               [4 ][3 ]
-    ...            ...                  ...                    ...
-   [37][38]      [37][38]             [38][37]               [38][37]
+   CN6 CN8            CN9 CN5       CN5 CN9            CN8 CN6
+   [1]                        [1]   [1]                        [1]
+   [2]                        [2]   [2]                        [2]
+    …                          …     …                          …
 ```
 
-Get this wrong and every signal is off by a column — which, because the odd row
-is largely I/O and the even row carries `3V3`/`GND`/`NRST`, means battery voltage
-onto GPIO. Lay the footprint out from the **mating** view and have someone else
-check it against the tables above.
+Get this wrong and every signal is off by one position along the strip. Lay the
+footprint out from the **mating** view and have someone else check it against the
+tables above. Unlike the morpho version, a mirrored shield will at least not put
+battery voltage onto a GPIO — the outline stops it mating at all — but it is
+still a board spin.
 
-This is also why §1 insists on a physical key. The pin map does not save you from
-a board fitted 180° rotated; only a blocked position does.
+---
+
 
 ---
 
@@ -283,7 +317,7 @@ driver's SKIP ROM legal. Both channels identical:
                     │                                  │             │
                   [2.2k]                             [100nF]      to probe
                     │                                  │          VDD pin
-   PA10 ──[100R]────┼──────────────────────────────────┼────────── DQ
+ CN8-3 ──[100R]────┼──────────────────────────────────┼────────── DQ
                     │                                  │
                    TVS                                GND ───────── GND
               (low-C, bidir)                      (twisted with DQ)
@@ -302,10 +336,10 @@ wrong. Fixed, distinct addresses mean no strapping resistors:
         │                          │              │              │
      [4.7k]  [4.7k]            [100nF]        [100nF]        [10uF]
         │       │                  │              │              │
-   PA11 ┼───────┼──── SDA ─────────┤ U1 SHT45     ┤ U2 SCD41     │
-   (SDA)│       │                  │   (0x44)     │   (0x62)     │
-   PA12 ────────┼──── SCL ─────────┤              ┤              │
-   (SCL)        │                  │              │              │
+  CN5-9 ┼───────┼──── SDA ─────────┤ U1 SHT45     ┤ U2 SCD41     │
+  (PA11)│       │                  │   (0x44)     │   (0x62)     │
+ CN5-10 ────────┼──── SCL ─────────┤              ┤              │
+  (PA12)        │                  │              │              │
                GND ────────────────┴──────────────┴──────────────┘
 ```
 
@@ -334,7 +368,7 @@ The rail gate, upstream of **all** the channels:
               │                     │                   │
               └─────────────────────┤                  GND
                                     │
-   PA8 (SENS_GATE) ──[100R..1k]─────┘
+   PB2 (SENS_GATE) ──[100R..1k]─────┘
 ```
 
 `SENS_GATE` LOW pulls the gate below the source → P-FET conducts → `VSENS` live.
@@ -399,7 +433,7 @@ SHT45 and the DS18B20 both share.
 
 | Ref | Part | Value / spec | Notes |
 |---|---|---|---|
-| J4, J5 | Socket strip 2×19, 2.54 mm | female, underside | Mates CN7/CN10. **Key one position** (§1) |
+| J4–J7 | ARDUINO Uno V3 pin headers | **male**, underside: 8 / 6 / 8 / 10 pos, 2.54 mm | Mate CN6 / CN8 / CN9 / CN5. Note the **0.16″** D7↔D8 offset — use a proper Uno V3 footprint, do not lay it out on a 0.1″ grid |
 | Q1 | P-MOSFET SOT-23 | A0341 / AO3401-class, Vgs(th) ≤ −1.5 V, ≥0.5 A | High-side gate; check I_DSS **and** that it carries the SCD41's 205 mA peaks |
 | R1 | Resistor 0805 | 100 kΩ | Gate→source pull-up — **holds the rail off at reset** |
 | R2 | Resistor 0805 | 100 Ω–1 kΩ | Gate series, inrush limit |
@@ -417,6 +451,7 @@ SHT45 and the DS18B20 both share.
 | J3 | Battery connector | keyed, 2-pin | LiFePO4 or 2× lithium AA |
 | — | M3 nylon standoffs + screws | ×4 | Nucleo mounting holes |
 | TP1–7 | Test pads | — | `VSENS`, both DQ, `SENS_GATE`, `VBAT`, SDA, SCL |
+| — | Antenna keep-out | board cut-out | Over the RF section + **CN12 SMA**. Verify against a physical board (§1) |
 
 At the probe end (not on the PCB): **100 nF** across each probe's VDD/GND.
 
@@ -425,11 +460,16 @@ At the probe end (not on the PCB): **100 nF** across each probe's VDD/GND.
 ## 5. Power — three traps
 
 **The ST-LINK will eat the battery.** A Nucleo's debug section draws milliamps,
-fatal for cells. Either feed 3V3 directly to the target at **CN7 pin 16** —
-UM2592 Table 9 rates that input at **3 V to 3.6 V, 1.3 A**, and states plainly
-that "the programming and debugging features are not available, since the ST-LINK
-is not powered" — or **snap off the ST-LINK section**; these boards are scored for
-it. Then measure: if Stop2 current is not
+fatal for cells. Either feed 3V3 directly to the target at **CN6 pin 4** —
+UM2592 Table 9 names `CN6 pin 4` and `CN7 pin 16` as the same 3V3 input and rates
+it at **3 V to 3.6 V, 1.3 A**, and states plainly that "the programming and
+debugging features are not available, since the ST-LINK is not powered" — or
+**snap off the ST-LINK section**; these boards are scored for it.
+
+> The shield reaches `CN6-4`, so the battery enters through the standard ARDUINO
+> power header. There is no `VBAT` pin anywhere on these four connectors to
+> confuse it with — the morpho's misleadingly-named `VBAT` (CN7-33, the RTC
+> backup pin, *not* a power input) is out of reach. One less trap. Then measure: if Stop2 current is not
 single-digit µA, something on the board is still alive.
 
 **Battery chemistry is constrained by the DS18B20, not the MCU.** The STM32WL runs
@@ -489,13 +529,13 @@ and ports to the WL55 in a few lines.
 
 **Front-end alone, no Nucleo fitted** — this is why the test pads exist:
 
-1. **Buzz out all eight signals** at the socket strips against §2's pin map —
-   `CN7-16`, `CN7-20`, `CN7-32`, `CN10-3`, `CN10-5`, `CN10-9`, `CN10-16`,
-   `CN10-19`. Ten minutes with a multimeter here is the whole defence against a
+1. **Buzz out all eight signals** at the header strips against §2's pin map —
+   `CN6-4`, `CN6-6`, `CN6-7`, `CN8-2`, `CN8-3`, `CN5-2`, `CN5-7`, `CN5-9`,
+   `CN5-10`. Ten minutes with a multimeter here is the whole defence against a
    mirrored footprint, and it is the last moment the mistake is cheap. Confirm at
-   the same time that **nothing** rings out to `CN10-2/4/22/38` or `CN7-13/15`
-   (the RF-switch, TCXO and SWD pins from "Do not route these").
-2. Confirm the keyed position is blocked.
+   the same time that **nothing** rings out to `CN9-7/8` (VCP) or `CN5-8` (AVDD).
+2. Check the outline against a real board — the Uno V3 offset means a footprint
+   laid out on a plain 0.1″ grid will not seat.
 3. Bench supply on `VBAT`. Pull `SENS_GATE` high → `VSENS` = 0 V. Pull it low →
    `VSENS` = `VBAT`, and **all four** signal lines (both DQ, SDA, SCL) idle high
    through their pull-ups.
@@ -531,10 +571,11 @@ explicitly for this reason.
 ## References
 
 - **UM2592** — STM32WL Nucleo-64 board (MB1389) user manual: the authority for
-  this board. **Table 18** ("Pin assignment of the ST morpho connectors") is the
-  source for §2's pin map; **Table 9** ("External power sources: 3V3") is the
-  source for the CN7-16 battery input; §6.6.5 and the solder-bridge tables cover
-  the VCP/D0-D1 arrangement.
+  this board. **Table 17** ("ARDUINO connectors pinout") is the source for §2's
+  pin map and **Table 18** ("Pin assignment of the ST morpho connectors") for
+  Appendix A; **Table 9** ("External power sources: 3V3") is the source for the
+  CN6-4 battery input; §6.6.5 and the solder-bridge tables cover the VCP/D0-D1
+  arrangement.
 - Maxim/ADI **AN148** — guidelines for reliable long 1-Wire networks.
 - DS18B20 datasheet — **VDD 3.0–5.5 V** is the constraint driving battery choice.
 - Sensirion **SHT4x** datasheet — command set, timing, and the transfer functions
@@ -542,3 +583,80 @@ explicitly for this reason.
 - Sensirion **SCD4x** datasheet — command set, the 1 s power-up time, the 5 s
   single-shot duration, and the peak-current figure that sizes Q1. Ported in
   [`src/scd41.cpp`](../src/scd41.cpp).
+
+---
+
+## Appendix A — ST morpho pin map (not used by this design)
+
+The front-end is a shield (§1), so **none of this is part of the interface** — the
+morpho headers are left free. It is kept because those headers stay exposed on the
+assembled node and are the natural place to hook a scope or a bench supply, and
+because the table is tedious to re-derive.
+
+Transcribed from **UM2592 Rev 1, Table 18** and script-verified against the PDF.
+Both connectors are 2×19, 2.54 mm; odd pins are one row, even pins the other.
+
+**CN7**
+
+| Odd | Name | | Even | Name | |
+|---:|---|---|---:|---|---|
+| 1 | NC | | 2 | NC | |
+| 3 | NC | | 4 | NC | |
+| 5 | VDD_MCU | | 6 | E5V | |
+| 7 | BOOT0 | | 8 | GND |  |
+| 9 | NC | | 10 | NC | |
+| 11 | NC | | 12 | IOREF | |
+| 13 | PA13 | ⛔ SWD | 14 | NRST | |
+| 15 | PA14 | ⛔ SWD | 16 | 3V3 |  |
+| 17 | PA15 | | 18 | 5V | |
+| 19 | GND |  | 20 | GND |  |
+| 21 | NC | | 22 | GND | |
+| 23 | PC13 | | 24 | VIN | |
+| 25 | PC14 | | 26 | NC | |
+| 27 | PC15 | | 28 | PB1 | |
+| 29 | NC | | 30 | PB2 | |
+| 31 | NC | | 32 | PA10 |  |
+| 33 | VBAT |  | 34 | PB4 | |
+| 35 | NC | | 36 | PB14 | |
+| 37 | NC | | 38 | PB13 | |
+
+**CN10**
+
+| Odd | Name | | Even | Name | |
+|---:|---|---|---:|---|---|
+| 1 | PA0 | | 2 | PC4 | ⛔ RF switch FE_CTRL1 |
+| 3 | PA12 |  | 4 | PC5 | ⛔ RF switch FE_CTRL2 |
+| 5 | PA11 |  | 6 | NC | |
+| 7 | AVDD | | 8 | 5V_USB_CHGR | |
+| 9 | GND |  | 10 | NC | |
+| 11 | PA5 | | 12 | PC6 | |
+| 13 | PA6 | | 14 | PC0 | |
+| 15 | PA7 | | 16 | PA8 |  |
+| 17 | PA4 | | 18 | NC | |
+| 19 | PA9 |  | 20 | GND |  |
+| 21 | PC2 | | 22 | PB0 | ⛔ VDD_TCXO |
+| 23 | PC1 | | 24 | NC | |
+| 25 | PB10 | | 26 | PB9 | |
+| 27 | PB8 | | 28 | PB15 | |
+| 29 | PB5 | | 30 | PB11 | |
+| 31 | PB3 | | 32 | AGND | |
+| 33 | PB12 | | 34 | NC | |
+| 35 | PB6 / PA2 | ⛔ VCP TX (D1) | 36 | PA1 | |
+| 37 | PB7 / PA3 | ⛔ VCP RX (D0) | 38 | PC3 | ⛔ RF switch FE_CTRL3 |
+
+> **An erratum in the source.** UM2592 Rev 1 prints CN10 pin 37 as "PB6 / PA3"; it
+> is **PB7 / PA3**. PB6 is already at pin 35, PB7 appears nowhere else in a table
+> whose own preamble says *all* MCU I/Os are on the morpho, and the note above
+> that table states D0/D1 are USART1 on **PB6 and PB7**. ST's own STM32duino
+> variant file agrees (`D0 = PB7`, and `PA3` "could be on D0"). The table above
+> carries the corrected value.
+
+Two morpho positions are worth knowing even on a shield build:
+
+- **CN7-16 `3V3`** — the same battery input as `CN6-4`, if you would rather feed
+  power from this side.
+- **CN7-33 `VBAT`** — the STM32's **RTC backup** pin, *not* a power input. It
+  cannot run the MCU or the radio. The name is the trap; do not wire a battery to
+  it.
+- **CN7-13/15 `PA13`/`PA14`** — SWD, the only place to get debug out, since the
+  ARDUINO headers do not carry it.

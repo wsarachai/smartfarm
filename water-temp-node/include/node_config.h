@@ -3,11 +3,16 @@
  * Nothing secret lives here (raw point-to-point LoRa needs no keys), so unlike
  * the ESP nodes there is no secrets.h. Edit the pins/interval to match wiring.
  *
- * Board: NUCLEO-WL55JC1 (STM32WL55JC). Pins below deliberately avoid:
- *   PC3/PC4/PC5  RF switch control (radio)
- *   PA13/PA14    SWD (ST-LINK debug)
+ * Board: NUCLEO-WL55JC1 (STM32WL55JC). Every pin below is reachable on the
+ * ARDUINO Uno V3 headers, because the front-end PCB is a SHIELD (CN6/CN8/CN9/CN5)
+ * rather than a morpho-stacking board -- see docs/hardware-interface.md.
+ *
+ * Pins below deliberately avoid:
+ *   PC3/PC4/PC5  RF switch control (radio)   -- not on the ARDUINO headers anyway
+ *   PB0          RF_TCXO_VCC (radio TCXO)    -- not on the ARDUINO headers anyway
+ *   PA13/PA14    SWD (ST-LINK debug)         -- not on the ARDUINO headers anyway
  *   PA2/PA3      LPUART1 = ST-LINK virtual COM (debug log, see DEBUG_UART)
- *   PB0          RF_TCXO_VCC (radio TCXO)
+ *                -- these ARE on the shield, at CN9-7/8. Leave them alone.
  */
 #ifndef NODE_CONFIG_H
 #define NODE_CONFIG_H
@@ -30,12 +35,23 @@
 #define DS_COLD_GPIO_CLK()      __HAL_RCC_GPIOA_CLK_ENABLE()
 
 /* ---- Sensor rail power gate (A0341 P-MOSFET high-side, active-LOW) -------- */
-/* LOW  = gate pulled low  = P-FET ON  = DS18B20 rail powered.
+/* LOW  = gate pulled low  = P-FET ON  = sensor rail powered.
  * HIGH = gate = source     = P-FET OFF = rail off (also the Hi-Z sleep state,
- *        held OFF by the external 100k gate->3V3 pull-up). */
-#define DS_PWR_PORT             GPIOA
-#define DS_PWR_PIN              GPIO_PIN_8
-#define DS_PWR_GPIO_CLK()       __HAL_RCC_GPIOA_CLK_ENABLE()
+ *        held OFF by the external 100k gate->3V3 pull-up).
+ *
+ * PB2 (= ARDUINO A1, CN8-2), NOT PA8: the front-end is an Arduino Uno V3 SHIELD,
+ * and PA8 is one of the few MCU pins the Nucleo does NOT bring out to the
+ * ARDUINO headers (UM2592 Table 17) -- it exists only on morpho CN10-16. PB2 is
+ * on CN8, the same edge as the CN6 power header, so the FET, its 100k and the
+ * battery input all sit in one corner of the board. Its only alternate function
+ * is ADC1_IN4, and the STM32WL has no boot strap here (BOOT0 is PH3, nBOOT1 is
+ * an option byte). See docs/hardware-interface.md.
+ *
+ * NOTE the name: DS_PWR_* predates the SHT45/SCD41 and now gates the WHOLE
+ * sensor rail, not just the DS18B20 probes. The docs call this signal SENS_GATE. */
+#define DS_PWR_PORT             GPIOB
+#define DS_PWR_PIN              GPIO_PIN_2
+#define DS_PWR_GPIO_CLK()       __HAL_RCC_GPIOB_CLK_ENABLE()
 #define DS_PWR_ON_LEVEL         GPIO_PIN_RESET   /* active-low */
 #define DS_PWR_OFF_LEVEL        GPIO_PIN_SET
 
