@@ -29,6 +29,13 @@ RTC wake (Stop2, 15 min)
 
 ## Hardware / wiring
 
+> Building the **real hardware**? It is two PCBs — the NUCLEO-WL55JC1 plus a
+> custom front-end board stacked on its morpho headers (probe connectors,
+> P-MOSFET gate, protection, battery). See
+> [`docs/hardware-interface.md`](docs/hardware-interface.md) for the connector,
+> the six signals crossing it, the front-end schematic + BOM, the Nucleo battery
+> traps, and the bring-up order. The wiring below is the bench setup.
+
 Board: **NUCLEO-WL55JC1**. Powered from a **3.0–3.6 V** battery directly on the
 3V3 domain (2×AA or 1× LiFePO4) — that's what makes the zero-part VREFINT battery
 read valid. Radio uses the board's TCXO (DIO3-powered) and the on-board RF switch.
