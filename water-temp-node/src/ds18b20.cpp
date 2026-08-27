@@ -19,12 +19,15 @@ void ds18b20_init(const ds_bus_t *bus)
     g.Pin   = bus->pin;
     g.Mode  = GPIO_MODE_OUTPUT_OD;   /* open-drain: '1' releases, '0' pulls low */
 #ifdef DS18B20_INTERNAL_PULLUP
-    /* Bench fallback when no external 4.7k is on hand: use the MCU's internal
-     * pull-up (~40k). Weaker than 4.7k -> only reliable on a SHORT, single-device
-     * bus. The shipped node leaves this off and uses the external 4.7k. */
+    /* Bench fallback with no external resistor fitted: the MCU's internal
+     * pull-up (~40k). Far weaker than 4.7k -> reliable only on a SHORT,
+     * single-device bus. Selected by `ds18b20_pullup` in platformio.ini's
+     * [bluepill_base]; the WL55 node never sets it. */
     g.Pull  = GPIO_PULLUP;
 #else
-    g.Pull  = GPIO_NOPULL;           /* external 4.7k on the sensor rail        */
+    /* Normal wiring: external 4.7k from DQ to the (power-gated) sensor rail.
+     * Use ~2.2k instead for a 10-20 m cable run — no firmware change needed. */
+    g.Pull  = GPIO_NOPULL;
 #endif
     g.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(bus->port, &g);
@@ -106,15 +109,22 @@ int ds18b20_start_convert(const ds_bus_t *bus)
     return 1;
 }
 
-int ds18b20_read(const ds_bus_t *bus, int16_t *out_c100)
+int ds18b20_read_scratchpad(const ds_bus_t *bus, uint8_t sp[9])
 {
     if (!ow_reset(bus)) return 0;
     ow_write_byte(bus, CMD_SKIP_ROM);
     ow_write_byte(bus, CMD_READ_SCRATCH);
+    for (int i = 0; i < 9; i++) sp[i] = ow_read_byte(bus);
+    return 1;
+}
 
+int ds18b20_read(const ds_bus_t *bus, int16_t *out_c100)
+{
     uint8_t sp[9];
+    if (!ds18b20_read_scratchpad(bus, sp)) return 0;
+
     uint8_t any = 0;
-    for (int i = 0; i < 9; i++) { sp[i] = ow_read_byte(bus); any |= sp[i]; }
+    for (int i = 0; i < 9; i++) any |= sp[i];
 
     /* An all-zero scratchpad passes the CRC (crc8(0..0)=0) and would decode to a
      * FAKE 0.00 C — the signature of a data line stuck low (missing pull-up or a

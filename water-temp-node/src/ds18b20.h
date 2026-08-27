@@ -31,4 +31,14 @@ int ds18b20_start_convert(const ds_bus_t *bus);
  */
 int ds18b20_read(const ds_bus_t *bus, int16_t *out_c100);
 
+/*
+ * Bring-up diagnostic: read the raw 9-byte scratchpad with NO validation.
+ * Returns 1 if a presence pulse was seen (sp[] then holds whatever the bus
+ * returned), 0 if nothing answered the reset. Use it to tell a wiring fault
+ * apart from a bad probe: 0xFF.. = line never pulled low (no device driving),
+ * 0x00.. = line stuck low, mixed garbage = two devices answering SKIP ROM on
+ * one wire or bad slot timing.
+ */
+int ds18b20_read_scratchpad(const ds_bus_t *bus, uint8_t sp[9]);
+
 #endif /* DS18B20_H */

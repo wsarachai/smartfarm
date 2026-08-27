@@ -10,7 +10,8 @@
  * 433 MHz prototype (SX1278) — talks to the Pi's SX1278, NOT the 923 MHz WL55
  * gateway. PHY here MUST match lora-pi-receiver/.env.
  *
- * Wiring: DS18B20 hot=PB6 cold=PB7 (direct 3V3, internal pull-up); SX1278
+ * Wiring: DS18B20 hot=PB6 cold=PB7 (direct 3V3, external 4.7k pull-up DQ->3V3;
+ *         selected by `ds18b20_pullup` in platformio.ini); SX1278
  * NSS=PA4 SCK=PA5 MISO=PA6 MOSI=PA7 RESET=PB0 DIO0=PB1, 3V3, antenna.
  */
 #include <Arduino.h>
@@ -81,6 +82,11 @@ void setup(void)
 #endif
 
     out("\r\nF103 NODE sender | DS18B20 PB6/PB7 + BME280 I2C2 -> 18B frame v2 -> SX1278 433MHz\r\n");
+#ifdef DS18B20_INTERNAL_PULLUP
+    out("DS18B20 bus: internal ~40k pull-up (bench fallback)\r\n");
+#else
+    out("DS18B20 bus: external 4.7k pull-up\r\n");
+#endif
 
     ds18b20_init(&bus_hot);
     ds18b20_init(&bus_cold);

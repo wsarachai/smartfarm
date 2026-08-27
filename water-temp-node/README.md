@@ -121,11 +121,35 @@ Two envs, differing only in how the readings get off the board — both reuse
 Output (~1 Hz), either path:
 
 ```
-DS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, internal ~40k pull-up
-hot=23.75 C  cold=23.87 C
-hot=23.75 C  cold=FAULT(no presence)
+DS18B20 F103 test | hot=PB6 cold=PB7 | direct 3V3, external 4.7k pull-up
+hot=23.62 C  cold=23.18 C
+hot=23.62 C  cold=FAULT(no presence)
 ```
-(the banner reads `external 4.7k pull-up` when `DS18B20_INTERNAL_PULLUP` is off)
+(the banner always states which pull-up the running build configured, so it can
+never silently disagree with the wiring — see the switch below)
+
+### Diagnosing a bad bus (`bluepill_f103c8_dump`)
+
+When the test prints `FAULT(crc)` or a suspicious `0.00 C`, flash the dump env
+instead: it probes each DQ pin electrically at boot, then prints the **raw 9-byte
+scratchpad** + CRC verdict per probe (same pins, semihosting over SWD).
+
+```
+pio run -e bluepill_f103c8_dump -t upload
+openocd -f interface/stlink.cfg -f target/stm32f1x.cfg \
+        -c init -c "arm semihosting enable" -c "reset run"
+```
+
+Reading the output:
+
+| Line | Meaning |
+|------|---------|
+| `pull-up=1 pull-down=1` | a strong external pull-up (4.7 kΩ) is winning — wiring OK |
+| `pull-up=1 pull-down=0` | **no** external pull-up; only the MCU's internal ~40 kΩ |
+| `pull-up=0 pull-down=0` | DQ **held low** by something stronger than 40 kΩ — a short to GND, or the pull-up resistor tied to the GND rail instead of 3V3 |
+| `FF FF FF …` | nothing drives the line — probe absent / DQ not connected |
+| `00 00 00 …` | line stuck low (the fake-`0.00 C` case `ds18b20_read()` rejects) |
+| `LO HI 4B 46 7F FF 0C 10 CRC` | a healthy 12-bit probe |
 
 ### Wiring (direct 3V3, **no** MOSFET gate — that's only for battery saving)
 
@@ -135,11 +159,27 @@ hot=23.75 C  cold=FAULT(no presence)
 | DS18B20 **cold** data           | PB7           |
 | Heartbeat LED (onboard)         | PC13          |
 
-Each probe: VDD→3V3, GND→GND, DQ→PB6/PB7, plus a **4.7 kΩ pull-up** DQ→3V3.
-**No 4.7 kΩ on hand?** The `_semihosting` env sets `-D DS18B20_INTERNAL_PULLUP`,
-which uses the MCU's internal ~40 kΩ pull-up instead — enough for a **short,
-single-probe** bench bus (that's how the reads above were captured). Fit the real
-4.7 kΩ and drop the flag for the WL55 node / any real cable length.
+Each probe: VDD→3V3, GND→GND, DQ→PB6/PB7, plus a pull-up on each DQ line.
+
+**As wired today: an external 4.7 kΩ per line, DQ→3V3** — hardware-verified reading
+both probes, with the dump env reporting `pull-up=1 pull-down=1` on both (the 4.7 kΩ
+beating the MCU's internal 40 kΩ pull-down is the proof the resistor really is on
+3V3). Mind that polarity: tying it to GND instead holds the bus low and every read
+comes back all-zero (see *Diagnosing a bad bus* above).
+
+### The pull-up switch
+
+The pull-up is a fact about the **wiring**, so it lives in **one** place —
+`ds18b20_pullup` in `[bluepill_base]` — and every F103 env interpolates it. Change
+it there and reflash; no env needs touching:
+
+| `ds18b20_pullup =` | Wiring it matches |
+|---|---|
+| *(empty)* | external 4.7 kΩ DQ→3V3 per probe; `ds18b20_init()` uses `GPIO_NOPULL` **← current** |
+| `-D DS18B20_INTERNAL_PULLUP` | no resistor; the MCU's internal ~40 kΩ. Weaker, so a **short** bench bus only — never the WL55 node or a real cable run |
+
+The WL55 env is separate and never sets the flag: the real node always has its
+external resistors.
 
 ### Long DS18B20 runs (up to ~20 m)
 
@@ -157,7 +197,7 @@ For a reliable 10–20 m run:
 1. **External pull-up ~2.2 kΩ** (1.5–3.3 kΩ) DQ→VDD **at the MCU end** — lower than
    4.7 kΩ so the line rises fast enough over the cable capacitance; keep ≥1.5 kΩ so
    the DS18B20 can still pull a valid low. **Do not** use the internal ~40 kΩ
-   (`DS18B20_INTERNAL_PULLUP`) on a long run.
+   (`DS18B20_INTERNAL_PULLUP`) on a long run — it is a bench-only shortcut.
 2. **Twisted pair: DQ twisted with GND** (its return); VDD on a separate conductor.
    Cat5/telephone cable, one pair = DQ+GND. Biggest single reliability factor.
 3. **3-wire power (VDD)** — already how the node is wired; never parasitic on long lines.
