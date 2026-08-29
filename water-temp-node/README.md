@@ -2,14 +2,17 @@
 
 Battery-powered **water + air** LoRa sensor node on a **NUCLEO-WL55JC1**
 (STM32WL55JC). Every 15 minutes it wakes from **Stop2**, powers the sensor rail
-through an **A0341 P-MOSFET**, reads **hot/cold water temperature** (2× DS18B20),
-**air temperature + humidity** (SHT45) and **CO2** (SCD41), measures the battery
-via the internal **VREFINT**, transmits one compact **AS923** LoRa uplink, and
-goes back to sleep. It is **uplink-only** — it never listens for a downlink.
+through an **A0341 P-MOSFET**, reads **water temperature from up to six
+DS18B20 probes**, **air temperature + humidity from three SHT45s** and **CO2**
+(SCD41), measures the battery via the internal **VREFINT**, transmits one compact
+**AS923** LoRa uplink, and goes back to sleep. It is **uplink-only** — it never
+listens for a downlink.
 
-All four sensors sit on the **one gated rail**, so the whole front-end is dead
+Every sensor sits on the **one gated rail**, so the whole front-end is dead
 between wakes. The SCD41 is the expensive one and is paced separately — see
-[CO2 on a battery node](#co2-on-a-battery-node).
+[CO2 on a battery node](#co2-on-a-battery-node). The probes are nearly free by
+comparison: each owns its own pin, so all six convert **in parallel** and the
+rail-on time is one 750 ms conversion no matter how many are fitted.
 
 It does **not** talk to the web-server directly (that server only speaks HTTP on
 the WiFi LAN). The uplink is received by [`../lora-gateway`](../lora-gateway),
@@ -24,28 +27,35 @@ water-temp-node --LoRa AS923--> lora-gateway --USB CDC JSON--> bridge.js --HTTP-
 ```
 RTC wake (Stop2, 15 min)
   -> gate ON  (P-MOSFET, active-low)  -> settle 10 ms
-  -> DS18B20 x2 start convert (12-bit, 750 ms)
+  -> DS18B20 x6 start convert (12-bit, 750 ms)  <- one pin each, so they run
+  |                                                CONCURRENTLY: 750 ms total,
+  |                                                not 6 x 750 ms
   -> wait out the SCD41's 1 s power-up   <- covers the 750 ms conversion,
   |                                         so the rail is on for the LONGER
   |                                         of the two, not the sum
-  -> read hot + cold
-  -> SHT45  read (~10 ms)              -> air temp + humidity
+  -> read probes P0..P5  (~7 ms each, inside the same wait)
+  -> SHT45 x3 read (~10 ms each)       -> air temp + humidity, one mux
+  |                                       channel at a time (all three are 0x44)
   -> SCD41  single shot (5 s, x2 with warm-up)  -> CO2   [every Nth wake]
   -> gate OFF -> park 1-Wire + I2C pins analog
   -> battery_mv via VREFINT
-  -> pack 20-byte v3 frame -> LoRa TX (923.2 MHz SF9BW125, 14 dBm)
+  -> pack 36-byte v5 frame -> LoRa TX (923.2 MHz SF9BW125, 14 dBm)
   -> radio cold-sleep -> Stop2
 ```
 
 ## Hardware / wiring
 
-> Building the **real hardware**? It is two PCBs — the NUCLEO-WL55JC1 plus a
-> custom **ARDUINO Uno V3 shield** carrying the probe connectors, the SHT45 +
-> SCD41, the P-MOSFET gate, protection and the battery input. See
-> [`docs/hardware-interface.md`](docs/hardware-interface.md) for the full
-> CN6/CN8/CN9/CN5 pin map, the eight signals crossing the joint, the schematic +
-> BOM, the Nucleo battery traps, and the bring-up order. The wiring below is the
-> bench setup.
+> Building the **real hardware**? It is two PCBs joined by a **cable** — the
+> NUCLEO-WL55JC1 plus a large custom front-end carrying the six probe connectors,
+> the three SHT45s + SCD41 + their bus switch, the P-MOSFET gate, protection and
+> the battery input. Logic
+> travels one **2×19 IDC ribbon on morpho CN10**; battery power takes its own
+> keyed 2-pin lead to **CN6**, deliberately kept off the ribbon so a reversed
+> insertion cannot put battery voltage on a GPIO. See
+> [`docs/hardware-interface.md`](docs/hardware-interface.md) for the full CN10
+> pin map, the twelve signals crossing the joint, the ribbon keying trick, the
+> schematic + BOM, the Nucleo battery traps, and the bring-up order. The wiring
+> below is the bench setup.
 
 Board: **NUCLEO-WL55JC1**. Powered from a **3.0–3.6 V** battery directly on the
 3V3 domain (2×AA or 1× LiFePO4) — that's what makes the zero-part VREFINT battery
@@ -55,46 +65,86 @@ Pins (see [`include/node_config.h`](include/node_config.h) — change to match y
 build). They deliberately avoid the RF-switch pins **PC3/PC4/PC5**, SWD
 **PA13/PA14**, the TCXO **PB0**, and the VCP UART **PA2/PA3**:
 
-| Function                            | Pin  | ARDUINO |
-|-------------------------------------|------|---------|
-| DS18B20 **hot** data (1-Wire)       | PA10 | CN8-3 (A2) |
-| DS18B20 **cold** data (1-Wire)      | PA9  | CN5-2 (D9) |
-| **SDA** (SHT45 + SCD41)             | PA11 | CN5-9 (D14) |
-| **SCL** (SHT45 + SCD41)             | PA12 | CN5-10 (D15) |
-| Sensor-rail power gate (P-MOSFET)   | PB2  | CN8-2 (A1) |
-| Battery in (3V3)                    | —    | CN6-4 |
-| Debug log (LPUART1 → ST-LINK VCP)   | PA2 (TX) / PA3 (RX) | CN9-7/8 |
+| Function                            | Pin  | Morpho |
+|-------------------------------------|------|--------|
+| DS18B20 `DQ_P0` (1-Wire)            | PA5  | CN10-11 |
+| DS18B20 `DQ_P1` (1-Wire)            | PA4  | CN10-17 |
+| DS18B20 `DQ_P2` (1-Wire)            | PA9  | CN10-19 |
+| DS18B20 `DQ_P3` (1-Wire)            | PC2  | CN10-21 |
+| DS18B20 `DQ_P4` (1-Wire)            | PC1  | CN10-23 |
+| DS18B20 `DQ_P5` (1-Wire)            | PB10 | CN10-25 |
+| **SDA** (3x SHT45 + SCD41 + mux)    | PA11 | CN10-5 |
+| **SCL** (3x SHT45 + SCD41 + mux)    | PA12 | CN10-3 |
+| Sensor-rail power gate (P-MOSFET)   | PA8  | CN10-16 |
+| Signal grounds                      | —    | CN10-9, CN10-20 |
+| Battery in (3V3)                    | —    | CN6-4 (own cable) |
+| Debug log (LPUART1 → ST-LINK VCP)   | PA2 (TX) / PA3 (RX) | CN10-35/37 |
 
-Every pin is on the **ARDUINO Uno V3 headers**, because the real front-end is a
-**shield** — see [`docs/hardware-interface.md`](docs/hardware-interface.md). That
-constraint is why the gate is **PB2 and not PA8**: PA8 is one of the few MCU pins
-the Nucleo brings out only to the morpho headers, so a shield cannot reach it.
+Every logic pin is on **morpho CN10**, so one 2×19 IDC ribbon carries the whole
+interface — see [`docs/hardware-interface.md`](docs/hardware-interface.md). The
+probe pins are not arbitrary: they were placed so each DQ line sits next to a
+**GND or NC** position in the ribbon, since six bit-banged open-drain lines
+sharing one flat cable is the new signal-integrity problem in this build.
 
-PA11/PA12 are the board's designated ARDUINO I2C pair. The alternatives were
-worse: **PA9/PA10** are the DS18B20 probes, and **PB10/PB11** would put SDA on the
-Nucleo's LED3.
+The gate is **PA8** (CN10-16), inside the DQ block, so it rides the same ribbon
+as the lines it powers. It has no boot strap on the WL (BOOT0 is PH3), so it
+resets floating — which is what lets the external 100 k pull-up hold the sensor
+rail off before firmware runs.
 
-Power gate + sensors. **Everything** — both probes, both 1-Wire pull-ups, the two
-I2C parts and the I2C pull-ups — sits on the switched rail, so there is zero
-leakage during sleep:
+I2C is **PA11/PA12**. The alternatives are worse: I2C1 is **PA9/PA10** (PA9 is a
+probe) and I2C3 is **PB10/PB11** (PB10 is a probe, and PB11 is the Nucleo's
+LED3).
+
+**The three SHT45s add no pins and no connector signals.** They sit behind a
+TCA9548A bus switch, which is itself an I2C device. That is not a convenience:
+the SHT4x address is fixed at the factory (`SHT45-AD1B` = 0x44, no address pin),
+so three of them cannot share a bus — and power-gating them individually does
+not work either. An unpowered SHT45 still clamps SDA/SCL to its own VDD through
+its ESD diodes, so the bus pull-ups phantom-power it to ~2.7 V, where it answers
+at 0x44 regardless. **What has to be switched is the bus, not the power.** The
+SCD41 (0x62) collides with nothing and sits *upstream* of the switch. See
+[`docs/hardware-interface.md`](docs/hardware-interface.md) §3.
+
+Power gate + sensors. **Everything** — all six probes, their six pull-ups, all
+four I2C parts, the bus switch and every I2C pull-up — sits on the switched rail,
+so there is zero leakage during sleep:
 
 ```
                 3V3 ──S│ A0341 │D──┬──────────── VSENS (switched rail)
                        │ (P-ch)│   │
-              100k ────┤gate   │   ├──[4.7k]──┬── DQ hot   (probe A, PA10)
-             to 3V3    │       │   │          └── VDD hot
-   (OFF when Hi-Z) ────┘       │   ├──[4.7k]──┬── DQ cold  (probe B, PA9)
-                  PB2 ─────────┘   │          └── VDD cold
-              (LOW = ON)           │
-                                   ├──[4.7k]───── SDA (PA11) ─┬─ SHT45  (0x44)
-                                   ├──[4.7k]───── SCL (PA12) ─┤
-                                   ├───────────── VDD ────────┴─ SCD41  (0x62)
+              100k ────┤gate   │   ├──[2.2k]──┬── DQ_P0  (PA5)
+             to 3V3    │       │   │          └── VDD P0
+   (OFF when Hi-Z) ────┘       │   ├──[2.2k]──┬── DQ_P1  (PA4)
+                  PA8 ─────────┘   │          └── VDD P1
+              (LOW = ON)           │              ... x6, one per probe ...
+                                   ├──[2.2k]──┬── DQ_P5  (PB10)
+                                   │          └── VDD P5
+                                   │
+                                   ├──[4.7k]───── SDA (PA11) ─┬─ SCD41    (0x62)
+                                   ├──[4.7k]───── SCL (PA12) ─┴─ TCA9548A (0x70)
+                                   │                                    │
+                                   │          ch0 ─[4.7k x2]─ SHT45 #0 (0x44)
+                                   │          ch1 ─[4.7k x2]─ SHT45 #1 (0x44)
+                                   │          ch2 ─[4.7k x2]─ SHT45 #2 (0x44)
                                    └── GND rail ── probe + sensor GNDs
 ```
 
-`hot` vs `cold` is fixed by **which pin the probe is plugged into** — no ROM
-addressing, so they can never get swapped in software. The SHT45 and SCD41 have
-fixed, distinct addresses, so they share one bus with no strapping.
+Which probe is which is fixed by **which connector it is plugged into** — SKIP
+ROM, no ROM addressing, so two probes can never get swapped in software and there
+is no "which address is the inlet?" problem. That is also why each probe gets its
+own pin rather than sharing one bus: a shorted or flooded probe takes down only
+itself.
+
+The **air** sensors are the opposite problem. All three SHT45s answer to the same
+factory-fixed 0x44, so which one is which is decided by **which mux channel it is
+wired to** (`I2C_MUX_CHANNELS` in `node_config.h`) — channel = frame slot =
+dashboard metric name. Three identical parts are otherwise indistinguishable, so
+silkscreen the channel number next to each. The SCD41's 0x62 collides with
+nothing and needs no channel.
+
+Fewer than six probes fitted? Leave the pin table alone and just don't plug them
+in. An unconnected line sees no presence pulse, goes out as the invalid sentinel,
+and is dropped by the gateway rather than showing up as a convincing `0.00 °C`.
 
 > The SCD41 draws **~205 mA peaks**. Size the rail bulk capacitance and the
 > P-MOSFET for that, not for the DS18B20's few mA — and see the settle-time
@@ -103,29 +153,55 @@ fixed, distinct addresses, so they share one bus with no strapping.
 
 ## What goes over the air
 
-A **20-byte binary** frame, **v3** (see
+A **36-byte binary** frame, **v5** (see
 [`src/lora/lora_packet.h`](src/lora/lora_packet.h)):
 
 | Bytes | Field | Notes |
 |---|---|---|
-| 0 | magic | `0xA3` = v3. Rejects noise and older/newer frames cheaply |
+| 0 | magic | `0xA5` = v5. Rejects noise and older/newer frames cheaply |
 | 1–3 | node id, seq, flags | `flags` says which fields below are valid |
-| 4–7 | `temp_hot`, `temp_cold` | int16 centi-°C; sentinel `0x8000` if the probe failed |
+| 4–7 | probe 0, probe 1 | int16 centi-°C; sentinel `0x8000` if the probe failed |
 | 8–9 | `battery_mv` | uint16 mV |
-| 10–13 | `air_temp`, `humidity` | int16 centi-°C, uint16 %RH ×100 — **from the SHT45** |
+| 10–13 | `air_temp`, `humidity` | int16 centi-°C, uint16 %RH ×100 — **SHT45 #0** |
 | 14–15 | `pressure` | uint16 deci-hPa; **0 on this node** (no barometer) |
 | 16–17 | `co2` | uint16 ppm |
-| 18–19 | reserved, CRC-8 | CRC over bytes 0..18 |
+| 18–25 | probes 2, 3, 4, 5 | int16 centi-°C each; sentinel if absent or failed |
+| 26–33 | air sensors 1, 2 | int16 centi-°C + uint16 %RH×100 each; sentinels if absent |
+| 34–35 | reserved, CRC-8 | CRC over bytes 0..34 |
 
 The gateway expands it to the server's `{device_id, metrics}` JSON and adds
 `rssi`/`snr`. LoRa PHY (`src/lora/lora_params.h`) — **AS923 / 923.2 MHz / SF9 /
 BW125 / CR4-5 / syncword 0x34-equiv / 14 dBm** — must stay identical to the
-gateway's copy.
+gateway's copy. Airtime grows ~41 ms per 8 bytes at SF9BW125: 20 B ≈ 185 ms,
+28 B ≈ 226 ms, 36 B ≈ 267 ms. The whole v3→v5 growth costs ~4 mAs every 15
+minutes — irrelevant beside the SCD41's 5 s measurement.
 
-**Versioning:** v1 (12 B, water temps + battery) and v2 (18 B, + BME280 ambient)
-are still on the wire from other builds and are **unchanged**. Each version only
-appends, so a field never moves, and `lora_packet_unpack()` accepts all three —
-an older node in the field keeps working against a current gateway.
+**Versioning:** v1 (12 B, water temps + battery), v2 (18 B, + BME280 ambient),
+v3 (20 B, + CO2) and v4 (28 B, + probes 2–5) are still on the wire from other
+builds and are **byte-for-byte unchanged**. Each version only appends, so a
+field never moves, and `lora_packet_unpack()` accepts all five — an older node
+in the field keeps working against a current gateway, and keeps its metric
+names. (Verified, not asserted: regenerating the test vectors from the C header
+after adding v5 reproduced every earlier vector byte for byte.)
+
+**Probes 0 and 1 stay in the original two temperature slots.** That is deliberate:
+the gateway labels them `temp_hot` and `temp_cold` by default (see
+`lora-gateway/include/gateway_config.h`), so the dashboard's existing history is
+one continuous series across the upgrade instead of dead-ending beside four new
+ones. Probes 2–5 arrive as `temp_p2`…`temp_p5`. Rename any of them in the
+gateway config to suit the install — but a renamed probe starts a **new** series.
+
+**Air sensor 0 likewise keeps the v2 slots** (bytes 10–13) and its AIR/HUM flags,
+so `air_temp`/`humidity` history is continuous; sensors 1 and 2 arrive as
+`air_temp_2`/`humidity_2` and `air_temp_3`/`humidity_3`.
+
+**v4 and v5 add no valid-flags, and cannot:** all eight `flags` bits are already
+spoken for. Probes 2–5 and air sensors 1–2 therefore signal "no reading" with
+sentinels — `LORA_TEMP_INVALID` for temperatures, `LORA_HUM_INVALID` (0xFFFF, a
+value outside humidity's 0..10000 range) for humidity. Ask `lora_probe_valid()`,
+`lora_air_valid()` and `lora_hum_valid()` rather than testing either mechanism by
+hand — they know which slot uses which. A version that needs a genuine new flag
+has to add a second flags byte.
 
 `LORA_FLAG_SHT` (bit 7) says air temp/humidity came from an **SHT45** rather than
 a BME280. Same units either way, so the receiver need not branch on it; it exists
@@ -177,7 +253,7 @@ pio run -t upload       # flash over the onboard ST-LINK (USB)
 pio device monitor      # 115200 — shows the per-wake debug log
 ```
 
-**Verified: compiles clean** — RAM 3.1%, Flash 15.4% of the STM32WL55JC.
+**Verified: compiles clean** — RAM 3.1%, Flash 15.5% of the STM32WL55JC.
 
 ### Why `framework = arduino`, not `stm32cube`
 
@@ -416,7 +492,7 @@ guard benefits the WL55 node too.
 ## Status / caveats
 
 - **Compiles clean, but not yet hardware-verified.** `pio run` succeeds (RAM
-  3.1%, Flash 15.4%); the radio, sleep current, and DS18B20 timing still need a
+  3.1%, Flash 15.5%); the radio, sleep current, and DS18B20 timing still need a
   real board. Do the first flash + monitor before trusting it.
 - **The SHT45 and SCD41 are compile-verified only on this board.** Both drivers
   are hand-rolled from the datasheets against the shared
@@ -427,8 +503,10 @@ guard benefits the WL55 node too.
 - **The frame format IS verified**, in both directions: the C header is compiled
   on the host to generate wire vectors, and
   [`lora-pi-receiver/test_lora_packet.py`](../lora-pi-receiver/test_lora_packet.py)
-  decodes them, covering v1/v2/v3 plus every single-byte corruption. Run it after
-  any change to the wire format.
+  decodes them, covering v1 through v5, a partly-populated six-probe node, a
+  three-SHT45 node with only one sensor answering, a slot-0 failure, the
+  `probe_valid()` / `air_valid()` / `hum_valid()` rules, and every single-byte
+  corruption. Run it after any change to the wire format.
 - The LoRa driver ([`src/lora/subghz_lora.c`](src/lora/subghz_lora.c)) is a lean,
   self-contained SX126x command driver over `HAL_SUBGHZ` — it does **not** vendor
   the full STM32CubeWL SubGHz_Phy middleware. RF-switch truth table and TCXO

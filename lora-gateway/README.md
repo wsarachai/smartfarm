@@ -25,7 +25,7 @@ change the PHY or packet format, change **both** copies.
 Output line format (rssi/snr added here from the LoRa RX; invalid temps omitted):
 
 ```
-{"device_id":"water-temp-01","metrics":{"temp_hot":41.30,"temp_cold":22.60,"battery_v":3.140,"air_temp":24.13,"humidity":58.20,"co2":812,"rssi":-92,"snr":8.5,"seq":42}}
+{"device_id":"water-temp-01","metrics":{"temp_hot":41.30,"temp_cold":22.60,"temp_p2":23.10,"temp_p3":23.44,"battery_v":3.140,"air_temp":24.13,"humidity":58.20,"air_temp_2":25.01,"humidity_2":64.10,"co2":812,"rssi":-92,"snr":8.5,"seq":42}}
 ```
 
 Which metrics appear depends on the frame version and its valid-flags — the node
@@ -36,10 +36,25 @@ decides, the gateway only forwards:
 | v1 | `0xA1` | 12 | `temp_hot`, `temp_cold`, `battery_v` |
 | v2 | `0xA2` | 18 | + `air_temp`, `humidity`, `pressure` |
 | v3 | `0xA3` | 20 | + `co2` |
+| v4 | `0xA4` | 28 | + `temp_p2`…`temp_p5` (2 probes → **6**) |
+| v5 | `0xA5` | 36 | + `air_temp_2/3`, `humidity_2/3` (1 SHT45 → **3**) |
 
 Each version only **appends**, so a field never moves and `lora_packet_unpack()`
-accepts all three. An older node in the field keeps working against a current
-gateway with no change at either end.
+accepts all five. An older node in the field keeps working against a current
+gateway with no change at either end, and keeps its metric names.
+
+**Metric naming lives in [`include/gateway_config.h`](include/gateway_config.h)**
+(`gw_probe_metric()`, `gw_air_metric()`, `gw_hum_metric()`), not in the JSON
+builder. Probe 0/1 and air sensor 0 default to their historic names — `temp_hot`,
+`temp_cold`, `air_temp`, `humidity` — because they occupy the same wire slots they
+always did, so the dashboard's existing history stays one continuous series.
+Rename them for your install — but a renamed channel starts a **new** series.
+
+A probe or air sensor that is absent, unfitted or failed is simply **not
+emitted**: v4 and v5 have no spare flag bits, so the added channels carry
+validity as sentinels (`0x8000` for temperatures, `0xFFFF` for humidity), and
+`lora_probe_valid()` / `lora_air_valid()` / `lora_hum_valid()` are the only
+places that know which slot uses which mechanism.
 
 Lines starting with `#` are diagnostics (the bridge logs and ignores them).
 The on-board **`LED_BUILTIN`** blinks on each valid RX.
@@ -56,7 +71,7 @@ pio run -t upload       # onboard ST-LINK (USB)
 pio device monitor      # 115200 — you'll see the JSON lines directly
 ```
 
-**Verified: compiles clean** — RAM 1.9%, Flash 9.4% of the STM32WL55JC.
+**Verified: compiles clean** — RAM 1.9%, Flash 9.8% of the STM32WL55JC.
 
 ## Bridge (the host forwarder) — `bridge/`
 

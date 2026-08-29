@@ -2,8 +2,8 @@
 """
 receiver.py — Raspberry Pi LoRa gateway for the Smart Farm.
 
-Drives an SX1278 on the Pi's SPI0, receives the sensor node's LoRa frame (v1, v2
-or v3 — see lora_packet.py), decodes it, maps node_id -> device_id, and POSTs
+Drives an SX1278 on the Pi's SPI0, receives the sensor node's LoRa frame (v1
+through v5 — see lora_packet.py), decodes it, maps node_id -> device_id, and POSTs
 {device_id, metrics} to the web-server's telemetry endpoint. Standalone (like
 lora-gateway/bridge and the AI poller) so the web-server stays hardware-agnostic
 — it needs ZERO changes.
@@ -53,6 +53,36 @@ ALTITUDE_M = float(_clean(os.environ.get("ALTITUDE_M", "0")))
 # node_id -> friendly device_id (JSON in env, e.g. {"1":"water-temp-01"})
 NODE_MAP = json.loads(_clean(os.environ.get("NODE_MAP", '{"1":"water-temp-01"}')))
 
+# Probe index -> dashboard metric name (JSON list in env). Mirrors
+# gw_probe_metric() in lora-gateway/include/gateway_config.h — keep the two in
+# step if both gateways feed the same dashboard.
+#
+# Probes 0 and 1 keep the names they have always had. That is deliberate: they
+# occupy the same wire slots they did when a node carried exactly two probes, so
+# keeping the labels means the dashboard's existing temp_hot / temp_cold history
+# stays one continuous series instead of dead-ending beside two new ones.
+# Rename freely for a given install ("temp_inlet", "temp_tank_top", ...) — but a
+# renamed probe starts a NEW series; the old one stops rather than continues.
+PROBE_METRICS = json.loads(_clean(os.environ.get(
+    "PROBE_METRICS",
+    '["temp_hot","temp_cold","temp_p2","temp_p3","temp_p4","temp_p5"]')))
+if len(PROBE_METRICS) != lora_packet.PROBE_MAX:
+    raise SystemExit("PROBE_METRICS must list exactly %d names, got %d"
+                     % (lora_packet.PROBE_MAX, len(PROBE_METRICS)))
+
+# Air sensor index -> metric names. A v5 node carries three SHT45s. Sensor 0
+# keeps air_temp / humidity for the same history-continuity reason as the
+# probes; sensors 1 and 2 are new. Mirrors gw_air_metric()/gw_hum_metric() in
+# lora-gateway/include/gateway_config.h.
+AIR_METRICS = json.loads(_clean(os.environ.get(
+    "AIR_METRICS", '["air_temp","air_temp_2","air_temp_3"]')))
+HUM_METRICS = json.loads(_clean(os.environ.get(
+    "HUM_METRICS", '["humidity","humidity_2","humidity_3"]')))
+for _name, _lst in (("AIR_METRICS", AIR_METRICS), ("HUM_METRICS", HUM_METRICS)):
+    if len(_lst) != lora_packet.AIR_MAX:
+        raise SystemExit("%s must list exactly %d names, got %d"
+                         % (_name, lora_packet.AIR_MAX, len(_lst)))
+
 
 def log(*args):
     print(datetime.now(timezone.utc).isoformat(), *args, flush=True)
@@ -66,14 +96,21 @@ _last_shape = {}
 
 
 def log_shape_change(pkt):
-    """Log the frame version + temp/RH source once, and again only if it changes
-    (a node swap, a firmware update, or an SHT45 that stopped answering)."""
-    shape = (pkt["version"], bool(pkt["flags"] & lora_packet.FLAG_SHT))
+    """Log the frame version, probe count and temp/RH source once, and again only
+    if it changes (a node swap, a firmware update, a probe unplugged, or an SHT45
+    that stopped answering)."""
+    live = sum(1 for i in range(lora_packet.PROBE_MAX)
+               if lora_packet.probe_valid(pkt, i))
+    air = sum(1 for i in range(lora_packet.AIR_MAX)
+              if lora_packet.air_valid(pkt, i))
+    shape = (pkt["version"], bool(pkt["flags"] & lora_packet.FLAG_SHT), live, air)
     if _last_shape.get(pkt["node_id"]) == shape:
         return
     _last_shape[pkt["node_id"]] = shape
-    log("# node %d: frame v%d, air temp/humidity from %s"
-        % (pkt["node_id"], shape[0], "SHT45" if shape[1] else "BME280"))
+    log("# node %d: frame v%d, %d/%d probes and %d/%d air sensors reading,"
+        " air temp/humidity from %s"
+        % (pkt["node_id"], shape[0], live, pkt["probe_count"],
+           air, pkt["air_count"], "SHT45" if shape[1] else "BME280"))
 
 
 def pressure_to_msl(p_station_hpa, altitude_m, temp_c):
@@ -85,26 +122,30 @@ def pressure_to_msl(p_station_hpa, altitude_m, temp_c):
 
 def build_metrics(pkt, rssi, snr):
     m = {}
-    if pkt["flags"] & lora_packet.FLAG_HOT and pkt["temp_hot_c100"] != lora_packet.TEMP_INVALID:
-        m["temp_hot"] = round(pkt["temp_hot_c100"] / 100.0, 2)
-    if pkt["flags"] & lora_packet.FLAG_COLD and pkt["temp_cold_c100"] != lora_packet.TEMP_INVALID:
-        m["temp_cold"] = round(pkt["temp_cold_c100"] / 100.0, 2)
+    # Temperature probes. v1/v2/v3 frames carry 2, a v4 frame 6. Probes that are
+    # absent, unfitted or failed are excluded by probe_valid() and simply do not
+    # appear — the web-server's telemetry schema is a sparse metrics dict, so a
+    # missing key is the right way to say "no reading".
+    for i in range(lora_packet.PROBE_MAX):
+        if lora_packet.probe_valid(pkt, i):
+            m[PROBE_METRICS[i]] = round(pkt["probes"][i] / 100.0, 2)
     if pkt["flags"] & lora_packet.FLAG_BATT and pkt["battery_mv"] > 0:
         m["battery_v"] = round(pkt["battery_mv"] / 1000.0, 3)
     # v2+ ambient fields. air_temp/humidity come from the SHT45 when FLAG_SHT is
     # set (v3 nodes) and from the BME280 otherwise — same units either way, so
     # the metric names do not change and dashboard history stays continuous.
-    if pkt["flags"] & lora_packet.FLAG_AIR:
-        m["air_temp"] = round(pkt["air_temp_c100"] / 100.0, 2)
-    if pkt["flags"] & lora_packet.FLAG_HUM:
-        m["humidity"] = round(pkt["humidity_x100"] / 100.0, 2)
+    for i in range(lora_packet.AIR_MAX):
+        if lora_packet.air_valid(pkt, i):
+            m[AIR_METRICS[i]] = round(pkt["air_temp_c100"][i] / 100.0, 2)
+        if lora_packet.hum_valid(pkt, i):
+            m[HUM_METRICS[i]] = round(pkt["humidity_x100"][i] / 100.0, 2)
     if pkt["flags"] & lora_packet.FLAG_PRESS:
         station_hpa = pkt["pressure_dhpa"] / 10.0
         m["pressure"] = round(station_hpa, 1)  # raw station pressure, hPa
         if ALTITUDE_M > 0:
             # use measured air temp if present, else the 15 C standard atmosphere
-            temp_c = (pkt["air_temp_c100"] / 100.0
-                      if pkt["flags"] & lora_packet.FLAG_AIR else 15.0)
+            temp_c = (pkt["air_temp_c100"][0] / 100.0
+                      if lora_packet.air_valid(pkt, 0) else 15.0)
             m["pressure_msl"] = round(pressure_to_msl(station_hpa, ALTITUDE_M, temp_c), 1)
     # v3 SCD41 field. Integer ppm — sub-ppm resolution would be noise.
     if pkt["flags"] & lora_packet.FLAG_CO2 and pkt["co2_ppm"] > 0:

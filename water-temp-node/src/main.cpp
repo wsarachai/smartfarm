@@ -2,14 +2,19 @@
  * water-temp-node — main.cpp  (STM32duino / Arduino framework)
  *
  * NUCLEO-WL55JC1 battery sensor node. Every WAKE_INTERVAL_S it wakes from Stop2,
- * powers the sensor rail through the A0341 P-MOSFET, reads hot+cold water
- * temperature (2x DS18B20), air temperature + humidity (SHT45) and CO2 (SCD41),
- * measures the battery via the internal reference, transmits ONE compact LoRa
- * uplink (AS923), then sleeps. Uplink-only — it never listens.
+ * powers the sensor rail through the A0341 P-MOSFET, reads water temperature
+ * (DS_PROBE_COUNT x DS18B20, one per pin), air temperature + humidity
+ * (SHT45_COUNT x SHT45, behind a TCA9548A bus switch because they share one
+ * factory-fixed I2C address)
+ * and CO2 (SCD41), measures the battery via the internal reference, transmits
+ * ONE compact LoRa uplink (AS923), then sleeps. Uplink-only — it never listens.
  *
- * All four sensors sit on the ONE gated rail, so the whole front-end is off
+ * Every sensor sits on the ONE gated rail, so the whole front-end is off
  * between wakes. The SCD41 is the expensive one — see CO2_EVERY_N_WAKES in
- * node_config.h and README, "CO2 on a battery node".
+ * node_config.h and README, "CO2 on a battery node". The probes are nearly
+ * free by comparison: each owns its own pin, so all six convert in PARALLEL
+ * and the rail-on time is one 750 ms conversion regardless of how many are
+ * fitted.
  *
  * Deep sleep (Stop2) + the RTC wake timer are done with RAW HAL here (not the
  * STM32duino Low Power/RTC libraries — those 2.0.0 releases #error against the
@@ -26,6 +31,7 @@ extern "C" {
 #include "lora/lora_packet.h"
 #include "ds18b20.h"
 #include "sht45.h"
+#include "tca9548a.h"
 #include "scd41.h"
 #include "battery.h"
 #include "node_config.h"
@@ -36,12 +42,36 @@ extern "C" void SystemClock_Config(void);
 
 static RTC_HandleTypeDef hrtc;
 
-static const ds_bus_t bus_hot  = { DS_HOT_PORT,  DS_HOT_PIN  };
-static const ds_bus_t bus_cold = { DS_COLD_PORT, DS_COLD_PIN };
+/* One 1-Wire bus per probe; index == probe index on the wire and in the docs. */
+static const ds_bus_t probe_bus[DS_PROBE_COUNT] = DS_PROBE_BUSES;
+static_assert(DS_PROBE_COUNT <= LORA_PROBE_MAX,
+              "DS_PROBE_COUNT exceeds the probe slots the LoRa frame carries");
+static_assert(DS_PROBE_COUNT >= 2,
+              "probes 0 and 1 fill the frame's original two slots; keep both");
+
 static uint8_t seq = 0;
 
-/* SHT45 + SCD41 share this bus, and share the probes' gated rail. */
+/* Every I2C part shares this bus and the probes' gated rail. The SCD41 sits
+ * directly on it; the three SHT45s sit behind the TCA9548A. */
 static TwoWire i2c_sens(I2C_SDA_PIN, I2C_SCL_PIN);
+
+static const uint8_t sht_mux_ch[SHT45_COUNT] = I2C_MUX_CHANNELS;
+static_assert(SHT45_COUNT <= LORA_AIR_MAX,
+              "SHT45_COUNT exceeds the air-sensor slots the LoRa frame carries");
+
+/*
+ * Connect air sensor i to the bus, and nothing else.
+ *
+ * This is the ONE place that knows how the three same-address SHT45s are kept
+ * apart. Swap the body if the hardware changes (discrete bus switches, three
+ * separate buses); nothing else in this file cares.
+ */
+static int sht45_select(int i)
+{
+    if (i < 0) return tca9548a_none(&i2c_sens, I2C_MUX_ADDR);
+    if (i >= SHT45_COUNT) return 0;
+    return tca9548a_select(&i2c_sens, I2C_MUX_ADDR, sht_mux_ch[i]);
+}
 
 /*
  * CO2 is measured only every CO2_EVERY_N_WAKES-th wake (the SCD41 dominates the
@@ -97,8 +127,10 @@ static void sensor_pins_park(void)
     GPIO_InitTypeDef g = {0};
     g.Mode = GPIO_MODE_ANALOG;
     g.Pull = GPIO_NOPULL;
-    g.Pin  = DS_HOT_PIN;  HAL_GPIO_Init(DS_HOT_PORT,  &g);
-    g.Pin  = DS_COLD_PIN; HAL_GPIO_Init(DS_COLD_PORT, &g);
+    for (int i = 0; i < DS_PROBE_COUNT; i++) {
+        g.Pin = probe_bus[i].pin;
+        HAL_GPIO_Init(probe_bus[i].port, &g);
+    }
 
     g.Pin = STM_LL_GPIO_PIN(digitalPinToPinName(I2C_SDA_PIN));
     HAL_GPIO_Init(get_GPIO_Port(STM_PORT(digitalPinToPinName(I2C_SDA_PIN))), &g);
@@ -166,8 +198,7 @@ extern "C" void RTC_WKUP_IRQHandler(void)
 /* -------------------------------------------------------------------------- */
 void setup(void)
 {
-    DS_HOT_GPIO_CLK();
-    DS_COLD_GPIO_CLK();
+    DS_PROBE_GPIO_CLK();
 
     rtc_clock_init();
     rtc_init();
@@ -194,26 +225,50 @@ void loop(void)
     gate_on();
     delay(DS_POWER_SETTLE_MS);
 
-    /* Kick off both 1-Wire conversions FIRST, then spend the SCD41's mandatory
+    /* Kick off EVERY 1-Wire conversion FIRST, then spend the SCD41's mandatory
      * 1 s power-up wait covering the DS18B20's 750 ms conversion instead of
-     * adding to it. The rail is on for the longer of the two, not the sum. */
-    ds18b20_init(&bus_hot);
-    ds18b20_init(&bus_cold);
-    int ph = ds18b20_start_convert(&bus_hot);
-    int pc = ds18b20_start_convert(&bus_cold);
+     * adding to it. The rail is on for the longer of the two, not the sum.
+     *
+     * Each probe has its own pin, so the conversions overlap: six probes cost
+     * one 750 ms wait, not six. Only the bit-banged traffic scales (~7 ms per
+     * probe), and that hides inside this same wait. */
+    int16_t temp[DS_PROBE_COUNT];
+    int     present[DS_PROBE_COUNT];
+    int     ok[DS_PROBE_COUNT];
+
+    for (int i = 0; i < DS_PROBE_COUNT; i++) {
+        ds18b20_init(&probe_bus[i]);
+        present[i] = ds18b20_start_convert(&probe_bus[i]);
+        temp[i]    = 0;
+        ok[i]      = 0;
+    }
     delay(I2C_POWER_SETTLE_MS - DS_POWER_SETTLE_MS);
 
-    int16_t th = 0, tc = 0;
-    int okh = ph && ds18b20_read(&bus_hot,  &th);
-    int okc = pc && ds18b20_read(&bus_cold, &tc);
+    for (int i = 0; i < DS_PROBE_COUNT; i++) {
+        ok[i] = present[i] && ds18b20_read(&probe_bus[i], &temp[i]);
+    }
 
-    /* --- SHT45 (air temperature + humidity) --- */
+    /* --- SHT45 x3 (air temperature + humidity) ---
+     * All three answer to 0x44, so exactly one is connected to the bus at any
+     * moment. sht45_init() is re-run per sensor on purpose: it soft-resets and
+     * does a throwaway read, which is how we find out a given channel is
+     * actually populated rather than trusting the config. */
     i2c_sens.begin();
     i2c_sens.setClock(I2C_CLOCK_HZ);
 
-    int16_t  air  = 0;
-    uint16_t hum  = 0;
-    int      oksh = sht45_init(&i2c_sens, SHT45_ADDR) && sht45_read(&air, &hum);
+    int16_t  air[SHT45_COUNT];
+    uint16_t hum[SHT45_COUNT];
+    int      oksh[SHT45_COUNT];
+
+    for (int i = 0; i < SHT45_COUNT; i++) {
+        air[i]  = 0;
+        hum[i]  = 0;
+        oksh[i] = sht45_select(i)
+                  && sht45_init(&i2c_sens, SHT45_ADDR)
+                  && sht45_read(&air[i], &hum[i]);
+    }
+    /* Leave nothing downstream bridged on before touching the SCD41. */
+    sht45_select(-1);
 
     /* --- SCD41 (CO2), only on a CO2 wake --- */
     uint16_t co2   = 0;
@@ -242,34 +297,54 @@ void loop(void)
     /* --- battery --- */
     uint16_t vmv = battery_read_mv();
 
-    /* --- build the frame (v3: water temps + battery + SHT45 + CO2) --- */
+    /* --- build the frame (v4: 6 water temps + battery + SHT45 + CO2) ---
+     * Probes 0/1 keep the original two temperature slots (and their HOT/COLD
+     * flags) so an existing dashboard's history is unbroken; probes 2..5 carry
+     * their own validity as the LORA_TEMP_INVALID sentinel, because `flags` has
+     * no spare bits. A probe that is not fitted, or failed to answer, is
+     * transmitted as that sentinel and dropped by the gateway. */
     lora_payload_t p;
     p.node_id        = NODE_ID;
     p.seq            = seq++;
     p.flags          = 0;
-    p.temp_hot_c100  = okh ? th : LORA_TEMP_INVALID;
-    p.temp_cold_c100 = okc ? tc : LORA_TEMP_INVALID;
     p.battery_mv     = vmv;
-    p.air_temp_c100  = air;
-    p.humidity_x100  = hum;
     p.pressure_dhpa  = 0;      /* no barometer on this node */
     p.co2_ppm        = co2;
-    if (okh)   p.flags |= LORA_FLAG_HOT;
-    if (okc)   p.flags |= LORA_FLAG_COLD;
+
+    for (int i = 0; i < LORA_PROBE_MAX; i++) {
+        p.probe_c100[i] = (i < DS_PROBE_COUNT && ok[i]) ? temp[i]
+                                                        : LORA_TEMP_INVALID;
+    }
+    for (int i = 0; i < LORA_AIR_MAX; i++) {
+        int good = (i < SHT45_COUNT) && oksh[i];
+        p.air_temp_c100[i] = good ? air[i] : LORA_TEMP_INVALID;
+        p.humidity_x100[i] = good ? hum[i] : LORA_HUM_INVALID;
+    }
+    if (ok[0]) p.flags |= LORA_FLAG_HOT;
+    if (ok[1]) p.flags |= LORA_FLAG_COLD;
     if (vmv)   p.flags |= LORA_FLAG_BATT;
-    if (oksh)  p.flags |= (LORA_FLAG_AIR | LORA_FLAG_HUM | LORA_FLAG_SHT);
+    /* Sensor 0 keeps the v2 flag bits; sensors 1/2 carry validity as their
+     * sentinel, because `flags` is full. LORA_FLAG_SHT is set whenever any of
+     * them answered -- it describes the part type, not a particular sensor. */
+    if (oksh[0]) p.flags |= (LORA_FLAG_AIR | LORA_FLAG_HUM);
+    if (oksh[0] || oksh[1] || oksh[2]) p.flags |= LORA_FLAG_SHT;
     if (okco2) p.flags |= LORA_FLAG_CO2;
 
-    uint8_t buf[LORA_PKT_LEN_V3];
-    lora_packet_pack_v3(&p, buf);
+    uint8_t buf[LORA_PKT_LEN_V5];
+    lora_packet_pack_v5(&p, buf);
 
     /* --- transmit --- */
     if (subghz_lora_init() == 0) {
-        int rc = subghz_lora_send(buf, LORA_PKT_LEN_V3, LORA_TX_TIMEOUT_MS);
-        dbgf("tx rc=%d  hot=%d/%d cold=%d/%d batt=%umV seq=%u\r\n",
-             rc, (int)th, okh, (int)tc, okc, (unsigned)vmv, (unsigned)p.seq);
-        dbgf("         air=%d/%d rh=%u co2=%u/%d%s\r\n",
-             (int)air, oksh, (unsigned)hum, (unsigned)co2, okco2,
+        int rc = subghz_lora_send(buf, LORA_PKT_LEN_V5, LORA_TX_TIMEOUT_MS);
+        dbgf("tx rc=%d  batt=%umV seq=%u\r\n", rc, (unsigned)vmv, (unsigned)p.seq);
+        for (int i = 0; i < DS_PROBE_COUNT; i++) {
+            dbgf("         p%d=%d/%d\r\n", i, (int)temp[i], ok[i]);
+        }
+        for (int i = 0; i < SHT45_COUNT; i++) {
+            dbgf("         air%d=%d/%d rh%d=%u\r\n",
+                 i, (int)air[i], oksh[i], i, (unsigned)hum[i]);
+        }
+        dbgf("         co2=%u/%d%s\r\n", (unsigned)co2, okco2,
              co2_due ? "" : " (cached)");
         subghz_lora_sleep();
     } else {

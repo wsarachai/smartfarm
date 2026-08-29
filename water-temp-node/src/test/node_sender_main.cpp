@@ -208,16 +208,19 @@ void loop(void)
         if (bme_ok && prs > 0) scd41_set_ambient_pressure((uint16_t)(prs / 10));
     }
 
-    /* --- pack the 20-byte v3 frame --- */
+    /* --- pack the 20-byte v3 frame ---
+     * This bench prototype carries two probes, so it stays on v3; only the
+     * six-probe WL55 node sends v4. Probes 0/1 occupy the same wire slots in
+     * both versions, so the gateway needs no special case. */
     lora_payload_t p;
-    p.node_id        = NODE_ID;
-    p.seq            = seq++;
-    p.flags          = 0;
-    p.temp_hot_c100  = okh ? th : LORA_TEMP_INVALID;
-    p.temp_cold_c100 = okc ? tc : LORA_TEMP_INVALID;
-    p.battery_mv     = vmv;
-    p.air_temp_c100  = air;
-    p.humidity_x100  = hum;
+    p.node_id         = NODE_ID;
+    p.seq             = seq++;
+    p.flags           = 0;
+    p.probe_c100[0]   = okh ? th : LORA_TEMP_INVALID;
+    p.probe_c100[1]   = okc ? tc : LORA_TEMP_INVALID;
+    p.battery_mv      = vmv;
+    p.air_temp_c100[0] = air;
+    p.humidity_x100[0] = hum;
     p.pressure_dhpa  = prs;
     p.co2_ppm        = co2_valid ? co2_last : 0;
     if (okh)       p.flags |= LORA_FLAG_HOT;

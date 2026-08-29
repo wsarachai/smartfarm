@@ -3,16 +3,21 @@
  * Nothing secret lives here (raw point-to-point LoRa needs no keys), so unlike
  * the ESP nodes there is no secrets.h. Edit the pins/interval to match wiring.
  *
- * Board: NUCLEO-WL55JC1 (STM32WL55JC). Every pin below is reachable on the
- * ARDUINO Uno V3 headers, because the front-end PCB is a SHIELD (CN6/CN8/CN9/CN5)
- * rather than a morpho-stacking board -- see docs/hardware-interface.md.
+ * Board: NUCLEO-WL55JC1 (STM32WL55JC). The front-end is a LARGE CUSTOM PCB
+ * joined to the Nucleo by a CABLE, so every logic signal below lives on the ST
+ * morpho header **CN10** and is reachable in one 2x19 IDC ribbon; battery power
+ * arrives separately at CN6. See docs/hardware-interface.md for the connector
+ * contract, the CN10 pin layout, and the reasoning.
  *
  * Pins below deliberately avoid:
- *   PC3/PC4/PC5  RF switch control (radio)   -- not on the ARDUINO headers anyway
- *   PB0          RF_TCXO_VCC (radio TCXO)    -- not on the ARDUINO headers anyway
- *   PA13/PA14    SWD (ST-LINK debug)         -- not on the ARDUINO headers anyway
+ *   PC3/PC4/PC5  RF switch control (radio)  -- CN10-38 / CN10-2 / CN10-4
+ *   PB0          RF_TCXO_VCC (radio TCXO)   -- CN10-22
+ *   PA13/PA14    SWD (ST-LINK debug)        -- CN7-13/15
  *   PA2/PA3      LPUART1 = ST-LINK virtual COM (debug log, see DEBUG_UART)
- *                -- these ARE on the shield, at CN9-7/8. Leave them alone.
+ *   PA0/PA1/PC6  user buttons B1/B2/B3      -- switch + pull-up already fitted
+ *   PB9/PB11/PB15 user LEDs LED2/LED3/LED1  -- an LED across a 1-Wire line ruins it
+ * ALL of these are reachable on CN10, so the front-end must avoid them by
+ * intent rather than by geometry -- see docs/hardware-interface.md.
  */
 #ifndef NODE_CONFIG_H
 #define NODE_CONFIG_H
@@ -24,54 +29,98 @@
 /* Deep-sleep wake interval in seconds (Stop2 + RTC). 900 = 15 min. */
 #define WAKE_INTERVAL_S         900
 
-/* ---- DS18B20 1-Wire data pins (one probe each, SKIP ROM) ----------------- */
-/* "hot" and "cold" are fixed by which pin the probe is plugged into. */
-#define DS_HOT_PORT             GPIOA
-#define DS_HOT_PIN              GPIO_PIN_10
-#define DS_HOT_GPIO_CLK()       __HAL_RCC_GPIOA_CLK_ENABLE()
+/* ---- DS18B20 1-Wire data pins ------------------------------------------- *
+ * ONE PROBE PER PIN, SKIP ROM — no shared bus and no ROM search. That is what
+ * makes the driver's SKIP ROM legal, lets all six convert in PARALLEL (one
+ * 750 ms wait, not six), and keeps a single shorted probe from taking the other
+ * five down with it.
+ *
+ * Probes are identified by which connector they are plugged into: probe 0 is
+ * whatever hangs off DQ_P0. Probes 0 and 1 land in the wire frame's original
+ * two temperature slots and are published as `temp_hot` / `temp_cold` so an
+ * existing dashboard's history stays continuous (lora_packet.h, v4).
+ *
+ * Pin order below is ASCENDING CN10 position, so the buzz-out in
+ * docs/hardware-interface.md §7 walks the connector in one direction:
+ *
+ *   DQ_P0  PA5   CN10-11      DQ_P3  PC2   CN10-21
+ *   DQ_P1  PA4   CN10-17      DQ_P4  PC1   CN10-23
+ *   DQ_P2  PA9   CN10-19      DQ_P5  PB10  CN10-25
+ *
+ * Fewer than six probes fitted? Leave the table alone and simply do not plug
+ * them in — an unconnected line reads no presence pulse and is transmitted as
+ * the invalid sentinel, which the gateway drops. Set DS_PROBE_COUNT lower only
+ * if you also want the ~7 ms/probe of bus traffic back.
+ */
+#define DS_PROBE_COUNT          6
 
-#define DS_COLD_PORT            GPIOA
-#define DS_COLD_PIN             GPIO_PIN_9
-#define DS_COLD_GPIO_CLK()      __HAL_RCC_GPIOA_CLK_ENABLE()
+/* Initializer for an array of ds_bus_t. Order defines the probe index. */
+#define DS_PROBE_BUSES          { { GPIOA, GPIO_PIN_5  },   /* DQ_P0 */ \
+                                  { GPIOA, GPIO_PIN_4  },   /* DQ_P1 */ \
+                                  { GPIOA, GPIO_PIN_9  },   /* DQ_P2 */ \
+                                  { GPIOC, GPIO_PIN_2  },   /* DQ_P3 */ \
+                                  { GPIOC, GPIO_PIN_1  },   /* DQ_P4 */ \
+                                  { GPIOB, GPIO_PIN_10 } }  /* DQ_P5 */
+
+/* Every GPIO bank the table above (and the gate below) touches. */
+#define DS_PROBE_GPIO_CLK()     do { __HAL_RCC_GPIOA_CLK_ENABLE(); \
+                                     __HAL_RCC_GPIOB_CLK_ENABLE(); \
+                                     __HAL_RCC_GPIOC_CLK_ENABLE(); } while (0)
 
 /* ---- Sensor rail power gate (A0341 P-MOSFET high-side, active-LOW) -------- */
 /* LOW  = gate pulled low  = P-FET ON  = sensor rail powered.
  * HIGH = gate = source     = P-FET OFF = rail off (also the Hi-Z sleep state,
  *        held OFF by the external 100k gate->3V3 pull-up).
  *
- * PB2 (= ARDUINO A1, CN8-2), NOT PA8: the front-end is an Arduino Uno V3 SHIELD,
- * and PA8 is one of the few MCU pins the Nucleo does NOT bring out to the
- * ARDUINO headers (UM2592 Table 17) -- it exists only on morpho CN10-16. PB2 is
- * on CN8, the same edge as the CN6 power header, so the FET, its 100k and the
- * battery input all sit in one corner of the board. Its only alternate function
- * is ADC1_IN4, and the STM32WL has no boot strap here (BOOT0 is PH3, nBOOT1 is
- * an option byte). See docs/hardware-interface.md.
+ * PA8 (CN10-16) sits inside the DQ block, so the gate and the lines it powers
+ * travel the same ribbon. Its alternate functions are unused here, and the WL
+ * has no boot strap on it (BOOT0 is PH3, nBOOT1 is an option byte), so it
+ * resets to a floating input -- which is exactly what the external 100k gate
+ * pull-up needs in order to hold the rail off before firmware runs.
  *
  * NOTE the name: DS_PWR_* predates the SHT45/SCD41 and now gates the WHOLE
  * sensor rail, not just the DS18B20 probes. The docs call this signal SENS_GATE. */
-#define DS_PWR_PORT             GPIOB
-#define DS_PWR_PIN              GPIO_PIN_2
-#define DS_PWR_GPIO_CLK()       __HAL_RCC_GPIOB_CLK_ENABLE()
+#define DS_PWR_PORT             GPIOA
+#define DS_PWR_PIN              GPIO_PIN_8
+#define DS_PWR_GPIO_CLK()       __HAL_RCC_GPIOA_CLK_ENABLE()
 #define DS_PWR_ON_LEVEL         GPIO_PIN_RESET   /* active-low */
 #define DS_PWR_OFF_LEVEL        GPIO_PIN_SET
 
 /* Settling time after powering the rail before starting a conversion (ms). */
 #define DS_POWER_SETTLE_MS      10
 
-/* DS18B20 12-bit conversion time (ms). Drop to ~94 ms if you set 9-bit res. */
+/* DS18B20 12-bit conversion time (ms). Drop to ~94 ms if you set 9-bit res.
+ * Unchanged by the probe count: the probes convert in parallel. */
 #define DS_CONVERT_MS           750
 
 /* ---- I2C sensor bus (SHT45 + SCD41 share it) ------------------------------ */
-/* I2C2 on PA11/PA12. Chosen over I2C1 (PA9/PA10 are the DS18B20 probes) and
- * I2C3 (PB10/PB11 -- PB11 is the Nucleo's LED3, which would sit on SDA). Both
- * parts hang off the SAME gated VSENS rail as the probes, so the whole sensor
- * front-end is still switched by one MOSFET. */
+/* I2C2 on PA11/PA12 (CN10-5 / CN10-3). Chosen over I2C1 (PA9/PA10 — PA9 is a
+ * probe) and I2C3 (PB10/PB11 — PB10 is a probe and PB11 is the Nucleo's LED3,
+ * which would sit on SDA). Both parts hang off the SAME gated VSENS rail as the
+ * probes, so the whole sensor front-end is still switched by one MOSFET. */
 #define I2C_SDA_PIN             PA11
 #define I2C_SCL_PIN             PA12
 #define I2C_CLOCK_HZ            100000   /* 100 kHz: kind to a long, gated bus */
 
-/* SHT45 (air temp + humidity). 0x45 on the -B variant. */
-#define SHT45_ADDR              0x44
+/* ---- SHT45 air temp + humidity: THREE of them ---------------------------
+ * The SHT4x I2C address is fixed at the factory by the order code
+ * (SHT45-AD1B = 0x44). There is no address pin, so three of them CANNOT share
+ * a bus, and power-gating them individually does not help either -- an
+ * unpowered part still clamps SDA/SCL to its own VDD through its ESD diodes
+ * and phantom-powers itself to ~2.7 V, where it happily answers at 0x44.
+ *
+ * So the three sit behind a TCA9548A bus switch, one channel connected at a
+ * time. The SCD41 (0x62, no collision) stays UPSTREAM of the switch. See
+ * src/tca9548a.h and docs/hardware-interface.md.
+ */
+#define SHT45_COUNT             3
+#define SHT45_ADDR              0x44   /* all three -- factory-fixed */
+
+/* TCA9548A bus switch: address (A2/A1/A0 strapping) and the channel each
+ * SHT45 hangs off. Index == sensor index in the LoRa frame and on the
+ * dashboard, so sensor 0 is whatever is on I2C_MUX_CHANNELS[0]. */
+#define I2C_MUX_ADDR            0x70
+#define I2C_MUX_CHANNELS        { 0, 1, 2 }
 
 /* SCD41 (CO2). */
 #define SCD41_ADDR              0x62
