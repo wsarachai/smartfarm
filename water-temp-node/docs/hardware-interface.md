@@ -233,9 +233,40 @@ neighbours. Useful, free, and no substitute for a real return.
 > before grounding them. They are NC in UM2592 Table 18, but grounding a position
 > that turned out to be a GPIO is a short.
 
-**Every other conductor must float at the front-end.** Do not ground unused MCU
-positions "to be tidy" — a firmware bug that drives one then shorts a push-pull
-output. Do not connect the ⛔ positions below at all.
+#### What to draw on J7 in the schematic
+
+Every one of the 38 positions needs a deliberate decision, and "ground the spare
+ones to be tidy" is wrong for 22 of them. Four categories:
+
+| Positions | Count | Draw | Why |
+|---|---:|---|---|
+| 3, 5, 9, 11, 16, 17, 19, 20, 21, 23, 25 | 11 | **the net** | The contract signals (§2), including both GND returns |
+| 6, 10, 18, 24, 34 | 5 | **GND** | NC on the Nucleo, so grounding them at this end is safe and buys a capacitive guard |
+| 1, 12, 13, 14, 15, 26, 27, 28, 29, 30, 31, 33, 36 | 13 | **no-connect flag** | Real MCU pins we do not use. Float them |
+| 2, 4, 7, 8, 22, 32, 35, 37, 38 | 9 | **no-connect flag** | RF switch, TCXO, AVDD, AGND, VCP, 5V_USB_CHGR — grounding any of these breaks the board |
+
+**Never ground an unused MCU pin.** It is a GPIO: firmware that drives it push-pull
+high then shorts it, and positions 26/28/30 are the user LEDs, which would sink
+current continuously. Floating is correct, because those pins are configured and
+owned by the Nucleo, not by this board.
+
+**Never touch the ⛔ group, ground included.** Grounding CN10-7 (`AVDD`) shorts the
+ADC reference and `battery_read_mv()` stops meaning anything; CN10-22 (`PB0`) is
+the radio's TCXO supply; CN10-2/4/38 are the RF switch controls; CN10-32 is
+`AGND`, a different ground that must not carry this ribbon's return current.
+
+**Use explicit no-connect flags, not bare unconnected pins.** In KiCad or Altium
+an unconnected pin and a deliberately-unconnected pin look identical on the sheet;
+only the flag records intent. It also keeps ERC silent, so a *real* missed
+connection still shows up as an error instead of drowning in 22 warnings you have
+trained yourself to ignore.
+
+> The one to double-check before fabricating is position **6**. It is the key
+> (§1): its pin gets clipped on the Nucleo and its hole plugged in the socket, so
+> the conductor is dead at the brain end either way — which is exactly what makes
+> it safe to ground here. Confirm with a meter that 6, 10, 18, 24 and 34 really are
+> open on *your* board before grounding them; grounding a position that turned out
+> to be a GPIO is a short.
 
 **`SENS_GATE` is PA8** (CN10-16). It sits inside the DQ block, so the gate and the
 lines it powers travel the same ribbon; its alternate functions are unused here;
