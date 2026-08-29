@@ -694,13 +694,47 @@ What is wanted is the **signal-line / ESD-array** class:
 | Capacitance | **≤ 50 pF**, and ≤ 15 pF is easy to buy |
 | Package | SOD-323 / SOT-23 |
 
-Families to start from (check the datasheet, not the part number): Bourns
-**CDSOD323-T05LC**, onsemi **ESD9B5.0ST5G**, NXP **PESD5V0…** low-capacitance
-line, Littelfuse **SP05xxBAHT**.
+Note how loose the capacitance budget actually is. 1-Wire bit slots are ~60 µs;
+this is not USB. Anything in the ESD-protection class clears 50 pF with room to
+spare, so **do not pay for 0.3 pF** — spend the selection effort on `V_RWM` and on
+leakage instead.
+
+Three parts checked against this spec (prices/stock LCSC, Aug 2026):
+
+| Part | `V_RWM` | C typ | Package | Clamp | Leakage | Price | Verdict |
+|---|---|---|---|---|---|---|---|
+| Bourns **CDSOD323-T05LC** | 5.0 V | 1.0 pF | SOD-323 | 9.8 V @ 1 A, 18.3 V @ 15 A | 5 µA max | ~$0.47–0.71 | **Recommended.** Hand-solderable, 350 W, huge margin on every axis |
+| onsemi **ESD9B5.0ST5G** | 5.0 V | 15 pF | **SOD-923** | 12.5 V | low | ~$0.018 | **Budget pick.** 30× cheaper and 15 pF is still fine — but SOD-923 is 0.8 × 0.6 mm. Fine for an assembly service, unpleasant by hand |
+| BORN **BSD3C031L2** | **3.3 V** | 1.4 pF | SOD-323 | 17 V | 200 nA | ~$0.06 | **Rejected — and it is the instructive one.** Everything else about it is good, but `VSENS` reaches **3.6 V** on a fresh cell, above its rated standoff. Its 200 nA leakage is only guaranteed at 3.3 V |
+
+That last row is exactly the trap the `V_RWM ≥ 3.6 V` line exists to catch: a 3.3 V
+part looks like a bargain right up until a fresh cell biases it past its rating
+and it starts loading the bus.
 
 > **A quick way to sort them:** a signal-line TVS datasheet puts capacitance in
 > the headline specifications. A power TVS datasheet buries or omits it. If you
 > have to hunt for the pF figure, it is the wrong class of part.
+
+**What the board-side TVS actually protects.** It protects the **MCU**, not the
+probe. The DS18B20 sits 20 m away behind roughly 10 µH of cable inductance, which
+at surge di/dt is an effective open circuit — nothing on this PCB defends it, and
+there is nowhere sensible to put protection at a potted 3-wire probe. That is an
+accepted trade: the probe is cheap and replaceable, the Nucleo is not.
+
+**On the clamping voltage.** 18.3 V at 15 A is far above both the DS18B20's +6.0 V
+absolute maximum and the MCU's tolerance, and that is fine — it is what R9–R14 are
+for. The 100 Ω in series limits injected current into the MCU's internal clamps to
+roughly (18.3 − 3.8) / 100 ≈ 145 mA at that worst-case pulse, and ~60 mA at the
+1 A clamp point. If you want more margin, **220 Ω works too**: the DQ low level
+becomes 3.3 − (3.3/2420) × 2200 ≈ **0.3 V**, still comfortably under the DS18B20's
+0.3 × VDD threshold, and the injected current halves. Do not go much beyond that
+or the low level stops being convincing.
+
+**Six discretes, not an array.** A 4- or 6-line array would save board area, but
+rail-clamp arrays reference a supply pin, which on this board is the *switched*
+`VSENS` — one more thing to reason about at gate-off, for no gain on a board that
+has plenty of room. Six identical two-pin parts also keep the channels genuinely
+independent, which is the same reasoning that gave each probe its own GPIO.
 
 ### The settle-time constraint
 
@@ -768,7 +802,7 @@ wander to reach six connectors — don't; run it as a spine with short stubs.
 | R2 | Resistor 0805 | 100 Ω–1 kΩ | Gate series, inrush limit |
 | R3–R8 | Resistor 0805 | 2.2 kΩ | **Six** DQ pull-ups, **on `VSENS`** |
 | R9–R14 | Resistor 0805 | 100 Ω | **Six** DQ series |
-| D1–D6 | TVS bidirectional, **low-capacitance signal-line type** | <50 pF, V_RWM ≥ 3.6 V (the 5 V class), SOD-323/SOT-23 | **One per DQ line.** Not a Schottky rectifier and not a power TVS — see *Choosing the TVS* in §3 |
+| D1–D6 | TVS bidirectional, **low-capacitance signal-line type** | Bourns **CDSOD323-T05LC** (SOD-323, 5 V, 1 pF) or onsemi **ESD9B5.0ST5G** (SOD-923, 5 V, 15 pF) | **One per DQ line.** `V_RWM` must be ≥ 3.6 V — see *Choosing the TVS* in §3 for why a 3.3 V part fails here |
 | C1 | Ceramic | 1–10 µF | `VSENS` bulk (see settle time) |
 | C2 | Ceramic | 100 nF | `VSENS` decoupling |
 | U1a, U1b, U1c | **SHT45** ×3 | I2C `0x44`, DFN | Air temp + humidity. All three are the SAME address — they are separated by U3, not by addressing. **Vented, spread across the board, away from U2 and the FET** |
