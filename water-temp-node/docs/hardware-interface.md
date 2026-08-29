@@ -141,7 +141,7 @@ gates instead would have cost three more — and would not have worked; see belo
 | `DQ_P5` | **PB10** | **CN10-25** | bidir, open-drain | 1-Wire | `DS_PROBE_BUSES` |
 | `I2C_SDA` | **PA11** | **CN10-5** | bidir, open-drain | I2C @ 100 kHz; parked **analog** in sleep | `node_config.h` `I2C_SDA_PIN` |
 | `I2C_SCL` | **PA12** | **CN10-3** | out of brain, open-drain | I2C @ 100 kHz | `node_config.h` `I2C_SCL_PIN` |
-| `GND` (signal) | — | **CN10-9**, **CN10-20** | — | **both**, one per end of the DQ block | — |
+| `GND` (signal) | — | **CN10-9**, **CN10-20** | — | one net (GND); wire **both** — see *Returns vs guards* | — |
 | `VSENS` | — | — | front-end internal | gated 3V3 to probes, I2C parts **and** all pull-ups | `main.cpp` `gate_on()` |
 
 The 250 mA peak figure is the **SCD41's ~205 mA measurement**, not the LoRa TX's
@@ -199,10 +199,35 @@ In full:
 `SENS_GATE` at CN10-16 is a deliberately benign neighbour for `DQ_P1`: it changes
 state twice per 15-minute wake and is otherwise a static DC level.
 
-**Guard conductors.** CN10 positions **6, 10, 18, 24 and 34 are NC** on the Nucleo,
-so their ribbon conductors may be tied to **GND at the front-end end only**. That is
-a one-ended guard — it reduces capacitive crosstalk but is *not* a return path.
-The two real returns are **CN10-9** and **CN10-20**, and both must be used.
+#### Returns vs guards
+
+These are two different jobs and the ribbon carries both, so it is worth being
+precise about which conductor is doing which.
+
+A **return** is plain GND, wired at **both** ends. Signal current does not vanish
+into the pin at the far end — it flows back, and it comes back along whatever
+ground conductor is nearest. Give it a close one and the out-and-back loop stays
+small, which is what keeps six bit-banged lines from coupling into each other.
+Give it a distant one and the loop is large, which is an antenna in both
+directions.
+
+CN10 has exactly two usable GND positions, **CN10-9** and **CN10-20**, and they
+are **the same net** — there is no "A" and "B" ground here, just one ground
+reached at two points. Wire both. They sit where they do the most good: CN10-9
+covers the I2C pair and `DQ_P0` at the low end, CN10-20 sits inside the probe
+block. (CN10-32 is **AGND** and is not a substitute — pushing digital return
+current through the analog ground is how you corrupt `battery_read_mv()`.)
+
+A **guard** is different: CN10 positions **6, 10, 18, 24 and 34 are NC** on the
+Nucleo, so those conductors connect to nothing at the brain end and may be tied
+to GND **at the front-end end only**. Grounded at one end, a conductor cannot
+carry return current at all — it works capacitively, as a screen between its two
+neighbours. Useful, free, and no substitute for a real return.
+
+| | Grounded at | Carries return current | Purpose |
+|---|---|---|---|
+| **Return** (CN10-9, CN10-20) | both ends | yes | keeps the current loop small |
+| **Guard** (CN10-6/10/18/24/34) | front-end only | no | capacitive screen between neighbours |
 
 > Verify with a meter that those NC positions really are open on *your* board
 > before grounding them. They are NC in UM2592 Table 18, but grounding a position
@@ -262,12 +287,12 @@ physically sits.
    [+] I2C_SCL              PA12      3 o  o 4   PC5     [X] RF FE_CTRL2
    [+] I2C_SDA              PA11      5 o  o 6   NC      [K] KEY - clip this pin
    [X] VREF+ - do not load  AVDD      7 o  o 8   5V_USB_CHGR
-   [+] signal return A      GND       9 o  o 10  NC      [g] guard
+   [+] GND return 1 of 2    GND       9 o  o 10  NC      [g] guard
    [+] DQ_P0                PA5      11 o  o 12  PC6         B3 button
        spare                PA6      13 o  o 14  PC0         spare
        spare                PA7      15 o  o 16  PA8     [+] SENS_GATE
    [+] DQ_P1                PA4      17 o  o 18  NC      [g] guard
-   [+] DQ_P2                PA9      19 o  o 20  GND     [+] signal return B
+   [+] DQ_P2                PA9      19 o  o 20  GND     [+] GND return 2 of 2
    [+] DQ_P3                PC2      21 o  o 22  PB0     [X] VDD_TCXO
    [+] DQ_P4                PC1      23 o  o 24  NC      [g] guard
    [+] DQ_P5                PB10     25 o  o 26  PB9         LED2
@@ -287,27 +312,27 @@ other. Signals this node uses are **bold** ✅; ⛔ marks positions the front-en
 must not connect. The CN7 map is in
 [Appendix A](#appendix-a--st-morpho-cn7-not-used-by-the-signal-cable).
 
-| Odd | Name | Use | Even | Name | Use |
-|---:|---|---|---:|---|---|
-| 1 | PA0 | button B1 — leave open | 2 | PC4 | ⛔ RF switch FE_CTRL1 |
-| 3 | **PA12** | ✅ `I2C_SCL` | 4 | PC5 | ⛔ RF switch FE_CTRL2 |
-| 5 | **PA11** | ✅ `I2C_SDA` | 6 | NC | 🔑 **key: clip this pin** |
-| 7 | AVDD | ⛔ VREF+ — do not load | 8 | 5V_USB_CHGR | leave open |
-| 9 | **GND** | ✅ signal return A | 10 | NC | guard (GND at front-end only) |
-| 11 | **PA5** | ✅ `DQ_P0` | 12 | PC6 | button B3 — leave open |
-| 13 | PA6 | spare | 14 | PC0 | spare |
-| 15 | PA7 | spare | 16 | **PA8** | ✅ `SENS_GATE` |
-| 17 | **PA4** | ✅ `DQ_P1` | 18 | NC | guard (GND at front-end only) |
-| 19 | **PA9** | ✅ `DQ_P2` | 20 | **GND** | ✅ signal return B |
-| 21 | **PC2** | ✅ `DQ_P3` | 22 | PB0 | ⛔ VDD_TCXO |
-| 23 | **PC1** | ✅ `DQ_P4` | 24 | NC | guard (GND at front-end only) |
-| 25 | **PB10** | ✅ `DQ_P5` | 26 | PB9 | LED2 — leave open |
-| 27 | PB8 | spare | 28 | PB15 | LED1 — leave open |
-| 29 | PB5 | spare | 30 | PB11 | LED3 — leave open |
-| 31 | PB3 | ⚠️ also TRACESWO | 32 | AGND | ⛔ analog ground, not a return |
-| 33 | PB12 | spare (stops a rotated socket) | 34 | NC | guard (GND at front-end only) |
-| 35 | PB6 / PA2 | ⛔ VCP TX (D1) | 36 | PA1 | button B2 — leave open |
-| 37 | PB7 / PA3 | ⛔ VCP RX (D0) | 38 | PC3 | ⛔ RF switch FE_CTRL3 |
+| Odd | Name      | Use                    | Even | Name | Use |
+|----:|-----------|------------------------|---:|--------|---|
+| 1   | PA0       | button B1 — leave open | 2  | PC4    | ⛔ RF switch FE_CTRL1 |
+| 3   | **PA12**  | ✅ `I2C_SCL`           | 4 | PC5    | ⛔ RF switch FE_CTRL2 |
+| 5   | **PA11**  | ✅ `I2C_SDA`           | 6 | NC     | 🔑 **key: clip this pin** |
+| 7   | AVDD      | ⛔ VREF+ — do not load | 8 | 5V_USB_CHGR | leave open |
+| 9   | **GND**   | ✅ GND return 1 of 2   | 10 | NC    | guard (GND at front-end only) |
+| 11  | **PA5**   | ✅ `DQ_P0`             | 12 | PC6   | button B3 — leave open |
+| 13  | PA6       | spare                  | 14 | PC0    | spare |
+| 15  | PA7       | spare                  | 16 | **PA8** | ✅ `SENS_GATE` |
+| 17  | **PA4**   | ✅ `DQ_P1`            | 18 | NC     | guard (GND at front-end only) |
+| 19  | **PA9**   | ✅ `DQ_P2`            | 20 | **GND** | ✅ GND return 2 of 2 |
+| 21  | **PC2**   | ✅ `DQ_P3`            | 22 | PB0     | ⛔ VDD_TCXO |
+| 23  | **PC1**   | ✅ `DQ_P4`            | 24 | NC      | guard (GND at front-end only) |
+| 25  | **PB10**  | ✅ `DQ_P5`            | 26 | PB9     | LED2 — leave open |
+| 27  | PB8       | spare                 | 28 | PB15    | LED1 — leave open |
+| 29  | PB5       | spare                 | 30 | PB11    | LED3 — leave open |
+| 31  | PB3       | ⚠️ also TRACESWO      | 32 | AGND    | ⛔ analog ground, not a return |
+| 33  | PB12      | spare (stops a rotated socket) | 34   | NC | guard (GND at front-end only) |
+| 35  | PB6 / PA2 | ⛔ VCP TX (D1)        | 36 | PA1     | button B2 — leave open |
+| 37  | PB7 / PA3 | ⛔ VCP RX (D0)        | 38 | PC3     | ⛔ RF switch FE_CTRL3 |
 
 > **An erratum in the source.** UM2592 Rev 1 prints CN10 pin 37 as "PB6 / PA3"; it
 > is **PB7 / PA3**. PB6 is already at pin 35, PB7 appears nowhere else in a table
@@ -323,33 +348,33 @@ Five spare I/Os remain (PA6, PA7, PC0, PB8, PB5) if a later build needs them.
 Every one of these is physically reachable on CN10, so the front-end has to avoid
 them by intent rather than by geometry:
 
-| Position | Signal | Why |
-|---|---|---|
-| CN10-2, -4, -38 | PC4, PC5, PC3 | **RF switch** FE_CTRL1/2/3 — the radio owns them |
-| CN10-22 | PB0 | **VDD_TCXO** — the radio's reference supply |
-| CN10-35, -37 | PB6/PA2, PB7/PA3 | **ST-LINK VCP** — the debug log |
-| CN10-7 | AVDD / VREF+ | **Voltage reference.** Loading it skews `battery_read_mv()` |
-| CN10-32 | AGND | Analog ground — do not use as a signal return |
-| CN10-31 | PB3 | Also **TRACESWO**; avoid if you ever want trace |
-| CN10-1, -36, -12 | PA0, PA1, PC6 | User buttons B1/B2/B3 — switch + pull-up already fitted |
-| CN10-26, -28, -30 | PB9, PB15, PB11 | User LEDs — an LED across a 1-Wire line ruins it |
-| CN7-13/15 | PA13, PA14 | **SWD** — leave for the debugger |
+| Position          | Signal           | Why                                              |
+|-------------------|------------------|---                                               |
+| CN10-2, -4, -38   | PC4, PC5, PC3    | **RF switch** FE_CTRL1/2/3 — the radio owns them |
+| CN10-22           | PB0              | **VDD_TCXO** — the radio's reference supply      |
+| CN10-35, -37      | PB6/PA2, PB7/PA3 | **ST-LINK VCP** — the debug log                  |
+| CN10-7            | AVDD / VREF+     | **Voltage reference.** Loading it skews `battery_read_mv()` |
+| CN10-32           | AGND             | Analog ground — do not use as a signal return    |
+| CN10-31           | PB3              | Also **TRACESWO**; avoid if you ever want trace  |
+| CN10-1, -36, -12  | PA0, PA1, PC6    | User buttons B1/B2/B3 — switch + pull-up already fitted |
+| CN10-26, -28, -30 | PB9, PB15, PB11  | User LEDs — an LED across a 1-Wire line ruins it |
+| CN7-13/15         | PA13, PA14       | **SWD** — leave for the debugger                 |
 
 SWD at CN7-13/15 is reachable, so the front-end may carry debug out to a test
 header if you want one — just do not route it through the CN10 ribbon.
 
 ### The CN6 power tap
 
-| Pin | Name | Use |
-|---:|---|---|
-| 1 | NC | — |
-| 2 | IOREF | — |
-| 3 | NRST | — |
-| 4 | **3V3** | ✅ **battery in** |
-| 5 | 5V | — |
-| 6 | **GND** | ✅ battery return |
-| 7 | **GND** | ✅ battery return |
-| 8 | VIN | 7–12 V input, unused |
+| Pin | Name    | Use |
+|----:|---------|-----|
+| 1   | NC      | —   |
+| 2   | IOREF   | —   |
+| 3   | NRST    | —   |
+| 4   | **3V3** | ✅ **battery in** |
+| 5   | 5V      | —   |
+| 6   | **GND** | ✅ battery return |
+| 7   | **GND** | ✅ battery return |
+| 8   | VIN     | 7–12 V input, unused |
 
 Use a **1×8 socket spanning the whole header** with only positions 4, 6 and 7
 wired. A shorter socket can slide along the strip and put `VBAT` on `NRST` or
