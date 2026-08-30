@@ -18,6 +18,7 @@ forced by code, the code is cited — change one and you change the other.
 - Gate + sleep handling: [`src/main.cpp`](../src/main.cpp)
 - Wire frame (probe → metric): [`src/lora/lora_packet.h`](../src/lora/lora_packet.h)
 - Cable-length guidance: [README → *Long DS18B20 runs*](../README.md)
+- Thai translation: [`hardware-interface.th.md`](hardware-interface.th.md) — **this English file is the source of truth**; update it first
 
 ---
 
@@ -478,15 +479,15 @@ the far end of the cable, across that probe's VDD and GND pins**.
 The 100 nF above is the one that trips people up, because it is the only channel
 part that lives **off** the PCB. Counting the whole front-end:
 
-| Ref | Value | Qty | Where it goes |
-|---|---|---:|---|
+| Ref                         | Value      | Qty   | Where it goes |
+|-----------------------------|------------|------:|---------------|
 | *(no ref — not on the PCB)* | **100 nF** | **6** | **At the probe**, one per probe, across that probe's VDD/GND at the far end of the cable |
-| C2 | 100 nF | 1 | On the PCB — `VSENS` decoupling |
-| C4–C6 | 100 nF | 3 | On the PCB — one at each SHT45 |
-| C7 | 100 nF | 1 | On the PCB — at the SCD41 |
-| C8 | 100 nF | 1 | On the PCB — at the TCA9548A bus switch |
-| C1 | 1–10 µF | 1 | On the PCB — `VSENS` bulk (bounded by `DS_POWER_SETTLE_MS`, § below) |
-| C3 | 10 µF | 1 | On the PCB — SCD41 local bulk, close to the part |
+| C2                          | 100 nF     | 1     | On the PCB — `VSENS` decoupling |
+| C4–C6                       | 100 nF     | 3     | On the PCB — one at each SHT45 |
+| C7                          | 100 nF     | 1     | On the PCB — at the SCD41 |
+| C8                          | 100 nF     | 1     | On the PCB — at the TCA9548A bus switch |
+| C1                          | 1–10 µF    | 1     | On the PCB — `VSENS` bulk (bounded by `DS_POWER_SETTLE_MS`, § below) |
+| C3                          | 10 µF      | 1     | On the PCB — SCD41 local bulk, close to the part |
 
 So **twelve 100 nF parts in the design: six out at the probes, six on the board**
 — and the six probe ones are bought with the probe harnesses, not with the PCB
@@ -712,7 +713,6 @@ Hi-Z or HIGH → the 100 k holds gate at source → off.
 > milliamps for a few milliseconds per wake. They *are* six more parts on the
 > switched rail, which is the second reason (after leakage) they must sit on
 > `VSENS` and not on permanent 3V3.
-
 
 #### Choosing the TVS
 
