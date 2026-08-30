@@ -2,7 +2,7 @@
 
 Battery-powered **water + air** LoRa sensor node on a **NUCLEO-WL55JC1**
 (STM32WL55JC). Every 15 minutes it wakes from **Stop2**, powers the sensor rail
-through an **A0341 P-MOSFET**, reads **water temperature from up to six
+through an **AO3401A P-MOSFET**, reads **water temperature from up to six
 DS18B20 probes**, **air temperature + humidity from three SHT45s** and **CO2**
 (SCD41), measures the battery via the internal **VREFINT**, transmits one compact
 **AS923** LoRa uplink, and goes back to sleep. It is **uplink-only** — it never
@@ -105,12 +105,14 @@ at 0x44 regardless. **What has to be switched is the bus, not the power.** The
 SCD41 (0x62) collides with nothing and sits *upstream* of the switch. See
 [`docs/hardware-interface.md`](docs/hardware-interface.md) §3.
 
-Power gate + sensors. **Everything** — all six probes, their six pull-ups, all
+Power gate + sensors (Q1 = **AO3401A** or equivalent — pick on the
+R_DS(on) @ V_GS = −2.5 V row, not the −4.5 V one; your gate drive is the
+battery). **Everything** — all six probes, their six pull-ups, all
 four I2C parts, the bus switch and every I2C pull-up — sits on the switched rail,
 so there is zero leakage during sleep:
 
 ```
-                3V3 ──S│ A0341 │D──┬──────────── VSENS (switched rail)
+                3V3 ──S│ Q1    │D──┬──────────── VSENS (switched rail)
                        │ (P-ch)│   │
               100k ────┤gate   │   ├──[2.2k]──┬── DQ_P0  (PA5)
              to 3V3    │       │   │          └── VDD P0

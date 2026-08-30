@@ -2,7 +2,7 @@
  * water-temp-node — main.cpp  (STM32duino / Arduino framework)
  *
  * NUCLEO-WL55JC1 battery sensor node. Every WAKE_INTERVAL_S it wakes from Stop2,
- * powers the sensor rail through the A0341 P-MOSFET, reads water temperature
+ * powers the sensor rail through the AO3401A P-MOSFET, reads water temperature
  * (DS_PROBE_COUNT x DS18B20, one per pin), air temperature + humidity
  * (SHT45_COUNT x SHT45, behind a TCA9548A bus switch because they share one
  * factory-fixed I2C address)
@@ -98,7 +98,7 @@ static void dbgf(const char *fmt, ...)
 }
 
 /* -------------------------------------------------------------------------- */
-/* Sensor-rail power gate (A0341 P-MOSFET, active-low). */
+/* Sensor-rail power gate (AO3401A P-MOSFET, active-low). */
 static void gate_pin_init(void)
 {
     DS_PWR_GPIO_CLK();

@@ -5,7 +5,7 @@ The real (non-breadboard) build is **two PCBs joined by a cable**:
 | Board | What it is | Carries |
 |---|---|---|
 | **Brain** | NUCLEO-WL55JC1 (off-the-shelf) | STM32WL55JC, radio, RF switch, TCXO, antenna, ST-LINK |
-| **Front-end** | Large custom PCB, this spec | **6× DS18B20 probe connectors**, **3× SHT45** + SCD41 (I2C, the SHT45s behind a bus switch), A0341 P-MOSFET rail gate, pull-ups, line protection, battery input |
+| **Front-end** | Large custom PCB, this spec | **6× DS18B20 probe connectors**, **3× SHT45** + SCD41 (I2C, the SHT45s behind a bus switch), AO3401A P-MOSFET rail gate, pull-ups, line protection, battery input |
 
 The front-end is a **large board sitting beside the Nucleo**, not stacked on it,
 and the two are joined by a short cable. This document specifies that joint: the
@@ -827,17 +827,46 @@ rather than the FET, but 10 ms has ample margin for 0.6 µF through a few ohms.
 
 The CO2 sensor set what this part has to do, and six probes did not change it:
 
-1. **Continuous drain current and R_DS(on)** at 3.3 V of gate drive. The load is
-   the SCD41's ~205 mA plus ~9 mA of probes — an AO3401-class part at ~50 mΩ costs
-   about 11 mV of drop, comfortable, but not so overkill that it goes without
-   checking.
+1. **R_DS(on) at the gate drive you actually have** — and this is the one people
+   read off the wrong row. Your gate drive is the battery: **3.6 V fresh, 3.0 V
+   flat**, never the 4.5 V or 10 V the headline specs use. For the AO3401A the
+   guaranteed point below that is **V_GS = −2.5 V → 85 mΩ max**, so at −3.0 V you
+   are guaranteed at least that good. At 250 mA that is **21 mV** of drop — 0.7 %
+   of a 3.0 V rail feeding a DS18B20 that needs ≥3.0 V. The 85 mΩ figure is
+   measured at 2.5 A, ten times our current, so it is conservative.
+   **Select on the −2.5 V row, not the −4.5 V one.**
 2. **Drain-source leakage (I_DSS)**, still the parameter that matters most: at a
-   15-minute duty cycle the part is off 99.9 % of the time. At ~1 µA it is the same
-   order as the STM32's Stop2 current, i.e. the power gate becomes a real fraction
-   of the battery budget. A low-leakage P-FET, or a load-switch IC with a spec'd
-   sub-100 nA off current, is the upgrade.
+   15-minute duty cycle the part is off 99.9 % of the time, so leakage is billed
+   continuously while everything else is billed for milliseconds.
+   **Budget it at temperature, not at 25 °C.** The AO3401A is 1 µA max at 25 °C
+   but **5 µA max at T_J = 55 °C**, and a vented box in the sun reaches 55 °C on an
+   ordinary afternoon. That is **44 mAh/year** drawn whether the node ever wakes or
+   not — roughly 7 % of a 600 mAh LiFePO4 AA per year, or 1.5 % of 2× lithium AA.
+   Cutting the other way: I_DSS is specified at **V_DS = −30 V** while ours is
+   ~3.3 V when off, so the real part will leak far less — but nothing is guaranteed
+   at 3.3 V, so 5 µA is the number you can defend. A low-leakage P-FET, or a
+   load-switch IC with a spec'd sub-100 nA off current, is the upgrade.
 3. **Inrush into the larger bulk.** More capacitance on `VSENS` means a bigger
    turn-on surge through the same FET; the gate series resistor is what limits it.
+
+
+**AO3401A checked against this design** (AOS datasheet Rev 3.1, Dec 2023):
+
+| Parameter | Datasheet | This design | Margin |
+|---|---|---|---|
+| I_D continuous, 25 °C | −4 A | 250 mA peak | **16×** |
+| I_D continuous, 70 °C | −3.2 A | 250 mA peak | 12.8× |
+| R_DS(on) @ V_GS = −2.5 V | ≤85 mΩ | 21 mV drop at 250 mA | — |
+| P_D, 25 °C | 1.4 W | 5.3 mW | **170×** |
+| Temperature rise | θ_JA ≤125 °C/W | +0.7 °C | — |
+| V_GS(th) | −0.5 / −0.9 / **−1.3 V** | needs ≤−1.5 V | ✅ |
+| V_GS absolute max | ±12 V | 3.6 V | ✅ |
+| **I_DSS, 25 °C** | **≤1 µA** | off 99.9 % of the time | see above |
+| **I_DSS, T_J 55 °C** | **≤5 µA** | ≈44 mAh/year | the real constraint |
+
+Current capability is a non-issue — it is over-specified by more than an order of
+magnitude on every axis except leakage. Leakage is the only line worth arguing
+about, and even that is ~1.5 %/year on lithium AA.
 
 Route `VBAT` → Q1 → `VSENS` as a **wide** trace, and give the SCD41 a short, fat
 GND return. 205 mA down a thin trace is a visible droop on the rail that the
@@ -853,7 +882,7 @@ wander to reach six connectors — don't; run it as a spine with short stubs.
 | J7 | Box header 2×19, shrouded | 2.54 mm, keyed, latching | Signal cable to Nucleo CN10 |
 | J8 | Battery / power connector 2-pin | keyed, latching (JST-XH, Micro-Fit 3.0) | `VBAT` + `GND` to Nucleo CN6-4/6 |
 | J1–J6 | Pluggable screw terminal, 3-pin | Phoenix MC 1,5/3-ST-3,5 or clone | **One per probe** — six of them |
-| Q1 | P-MOSFET SOT-23 | A0341 / AO3401-class, Vgs(th) ≤ −1.5 V, ≥0.5 A | High-side gate; check I_DSS **and** that it carries the SCD41's 205 mA peaks |
+| Q1 | P-MOSFET SOT-23 | **AO3401A** (AOS) or equivalent: R_DS(on) specified at **V_GS = −2.5 V** (≤85 mΩ), V_GS(th) ≤ −1.5 V, ≥0.5 A | High-side gate. The spec point that matters is −2.5 V, **not** the headline −4.5 V — your gate drive is the battery. See *On the P-FET* in §3 |
 | R1 | Resistor 0805 | 100 kΩ | Gate→source pull-up — **holds the rail off at reset** |
 | R2 | Resistor 0805 | 100 Ω–1 kΩ | Gate series, inrush limit |
 | R3–R8 | Resistor 0805 | 2.2 kΩ | **Six** DQ pull-ups, **on `VSENS`** |

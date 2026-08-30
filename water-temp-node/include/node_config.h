@@ -67,7 +67,7 @@
                                      __HAL_RCC_GPIOB_CLK_ENABLE(); \
                                      __HAL_RCC_GPIOC_CLK_ENABLE(); } while (0)
 
-/* ---- Sensor rail power gate (A0341 P-MOSFET high-side, active-LOW) -------- */
+/* ---- Sensor rail power gate (AO3401A P-MOSFET high-side, active-LOW) -------- */
 /* LOW  = gate pulled low  = P-FET ON  = sensor rail powered.
  * HIGH = gate = source     = P-FET OFF = rail off (also the Hi-Z sleep state,
  *        held OFF by the external 100k gate->3V3 pull-up).
