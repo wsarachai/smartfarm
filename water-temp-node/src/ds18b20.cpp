@@ -26,7 +26,9 @@ void ds18b20_init(const ds_bus_t *bus)
     g.Pull  = GPIO_PULLUP;
 #else
     /* Normal wiring: external 4.7k from DQ to the (power-gated) sensor rail.
-     * Use ~2.2k instead for a 10-20 m cable run — no firmware change needed. */
+     * 4.7k covers the node's 5-10 m probe cables: ~3 us to reach VIH at 10 m of
+     * Cat5, against the 9 us ow_read_bit() allows between release and sample.
+     * Drop to ~2.2k only past ~15 m — no firmware change needed either way. */
     g.Pull  = GPIO_NOPULL;
 #endif
     g.Speed = GPIO_SPEED_FREQ_HIGH;
