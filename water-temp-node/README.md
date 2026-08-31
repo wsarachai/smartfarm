@@ -154,6 +154,13 @@ not** — it has its own always-on 5.1 V rail:
                         └─[U7 buck]─ 3.3 V ──> CN6-4 and Q1 above
 ```
 
+Both bucks are the **same chip twice** — a TI **LM5164DDAR**, 100 V input, 1 A,
+10.5 µA quiescent — differing only in three resistor values. The pin-by-pin
+schematic, every computed component value and the Type-3 ripple-injection network
+a constant-on-time converter needs are in
+[`docs/hardware-interface.md`](docs/hardware-interface.md) §5 *The bucks
+themselves* ([ฉบับภาษาไทย](docs/hardware-interface.th.md)).
+
 Which probe is which is fixed by **which connector it is plugged into** — SKIP
 ROM, no ROM addressing, so two probes can never get swapped in software and there
 is no "which address is the inlet?" problem. That is also why each probe gets its

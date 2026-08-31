@@ -682,8 +682,8 @@ the probe capacitors and for the same reason.
 
 The SCD41 that used to sit upstream at `0x62` is **gone** — replaced by the S88 LP
 on RS-485. Nothing is upstream of the switch now except the switch itself, which
-simplifies bring-up step 8: with all channels closed you should see **`0x70` and
-nothing else**.
+simplifies the **all-channels-closed I2C scan** in §7: with every channel closed you
+should see **`0x70` and nothing else**.
 
 **Each downstream channel needs its own pull-ups.** The mux passes signals, not
 the pull-ups: a channel with none floats and the SHT45 on it never answers. That
@@ -1201,13 +1201,28 @@ Split in two, because the board is no longer the whole design: parts on the
 | U4 | RS-485 transceiver, **3.3 V, true-failsafe** | TI **THVD1450DR** (SOIC-8), or **MAX3485ESA+** / **SP3485EN-L** | `DE` and `!RE` tied together to `S88_DE`. See *The link* for why not an auto-direction part |
 | C9 | Ceramic | 100 nF | U4 decoupling |
 | D7, D8 | TVS bidirectional | ≥ ±12 V standoff, low-C | On `A` and `B` at the board end |
-| **Power (§5)** ||||
-| U6 | Buck regulator | 24 V → **5.1 V**, ≥0.5 A, V_in ≥60 V | S88 rail. **Ungated, always on** |
-| U7 | Buck regulator | 24 V → **3.3 V**, ≥0.5 A, V_in ≥60 V | MCU + sensor rail |
-| Q2 | P-MOSFET, ≥60 V | e.g. **DMP3056L** | Reverse-polarity protection on the 24 V input |
+| **Power — input protection (§5)** ||||
+| Q2 | P-MOSFET, ≥60 V | e.g. **DMP6023LE** | Reverse-polarity protection on the 24 V input. **Not** a 30 V part |
 | D9 | TVS unidirectional | **SMBJ33A** (33 V standoff, 600 W) | Across the 24 V input, after the fuse |
 | F1 | Fuse, slow-blow | 2 A | 24 V input |
-| C11 | Electrolytic / polymer | 100 µF, ≥50 V | 24 V bulk, before the bucks |
+| C11 | Electrolytic / polymer | 100 µF, **≥63 V** | 24 V bulk, before the bucks. **63 V, not 50 V** — D9 clamps as high as 53.3 V |
+| **Power — the two bucks (§5)** ||||
+| U6, U7 | Synchronous buck converter | **TI LM5164DDAR**, 8-pin SO PowerPAD | **Same part twice.** 100 V V_in, 1 A, 10.5 µA I_q. U6 → 5.1 V ungated (S88); U7 → 3.3 V (MCU + `VSENS`). Solder the EP |
+| L1, L2 | Inductor, shielded | **47 µH**, I_sat **≥1.5 A**, DCR ≤300 mΩ | One value for both rails. Sat rating is set by the chip's 1.5 A limit, not by the load |
+| C12, C13 / C19, C20 | Ceramic X7R | 2.2 µF, **100 V** | `C_IN`, two per buck, **directly across pins 2 and 1** |
+| C14 / C21 | Ceramic X7R | 22 µF, 16 V | `C_OUT` |
+| C15 | Polymer / electrolytic | 100 µF, 16 V | **U6 only** — bulk for the S88's 300 mA steps down 5 m of cable |
+| C16 / C22 | Ceramic **X7R, 50 V** | **2.2 nF** | `C_BST`, BST→SW. **Exactly 2.2 nF** — more stresses the internal VCC regulator, less fails to drive the gate |
+| R26 / R33 | Resistor 0805, 1 % | **31.6 kΩ** / **20.5 kΩ** | `R_RON`. Sets ≈400 kHz on each rail |
+| R27 / R34 | Resistor 0805, 1 % | 499 kΩ | `R_FB1` |
+| R28 / R35 | Resistor 0805, 1 % | **154 kΩ** / **287 kΩ** | `R_FB2` — **the only part that sets the output voltage** |
+| R29 / R36 | Resistor 0805, 1 % | **470 kΩ** / **330 kΩ** | `R_A`, Type-3 ripple injection |
+| C17 / C23 | Ceramic | 1 nF | `C_A`, ripple injection |
+| C18 / C24 | Ceramic **C0G/NP0** | 56 pF | `C_B`, FB coupling. C0G — X7R's DC-bias fall-off matters at this value |
+| R30, R31 | Resistor 0805, 1 % | 976 kΩ / 100 kΩ | **Shared** EN/UVLO divider, both bucks. Turn-on 16.1 V, turn-off 15.1 V |
+| C25 | Ceramic | 100 pF | Optional, across R31. Keeps the EN node quiet |
+| R32 / R37 | Resistor 0805 | 100 kΩ | `PGOOD` pull-up to that rail's own output → test pad. **Not** to the MCU |
+| — | LED + series resistor | ×2 | **DNP.** Rail indicators for bring-up only — ~0.5 Wh/day if left fitted |
 | **Supply telemetry** ||||
 | R24 | Resistor 0805, 1 % | 300 kΩ | `VBAT_SENSE` divider high side |
 | R25 | Resistor 0805, 1 % | 30 kΩ | Divider low side — 11:1, so 32 V → 2.9 V |
@@ -1223,6 +1238,7 @@ Split in two, because the board is no longer the whole design: parts on the
 | — | Cable ties / strain relief | ×11 | Within 30 mm of every entry |
 | TP1–14 | Test pads | — | `VSENS`, all six DQ, `SENS_GATE`, `V5_S88`, `24V`, `VBAT_SENSE`, `GND`, upstream SDA/SCL |
 | TP15–20 | Test pads | — | The three downstream SDA/SCL pairs. Without these, a dead SHT45 and a dead mux channel look identical |
+| TP21–24 | Test pads | — | `PGOOD` and `SW` of each buck. `SW` is where you confirm the switching frequency and catch COT bursting |
 
 **Deleted from the previous revision:** U2 (SCD41), C3 (its 10 µF local bulk), C7
 (its 100 nF), and U1a/U1b/U1c with C4–C6 — the SHT45s are no longer on this board.
@@ -1284,6 +1300,207 @@ the MCU. Each is sized for its own load: **U6 for 300 mA peak / 18 mA average**,
 > **U7's output must never exceed 3.6 V.** CN6-4 is rated **3.0–3.6 V** (UM2592
 > Table 9) and the STM32WL's absolute maximum VDD is 3.6 V. Use a fixed 3.3 V part,
 > not an adjustable one with a trim pot somebody can turn.
+
+### The bucks themselves — U6 and U7
+
+Until this revision "U6 buck / U7 buck" was a box in a diagram and one BOM row, which
+is not enough to build from. This section is the schematic.
+
+**They are the same chip, twice.** `sourcing-th.md` names it: **TI LM5164DDAR**, a
+monolithic synchronous step-down (buck) converter in an 8-pin SO PowerPAD package.
+Not a module, not a breakout board, and not an LDO — a 24→3.3 V linear regulator
+would burn 86 % of the input power as heat. Both power MOSFETs are **inside the
+chip**; what you add outside is **one inductor, five capacitors and five resistors
+per rail**. The only differences between U6 and U7 are the feedback divider and two
+timing parts.
+
+**Why this part and not a cheaper one.** Two reasons, and neither is negotiable:
+
+1. **100 V input rating.** §5's rule is ≥60 V because a controller fault or a
+   cold-morning panel `Voc` can put far more than 29 V on the wire. The popular
+   28 V modules (TPS54202, MP1584, and every LM2596 breakout on Lazada) have no
+   margin at all against a 24 V bank that reaches 28.8 V on absorb.
+2. **10.5 µA sleep quiescent current**, and this one is easy to underrate. U7's
+   *average* load is about 1 mA at 3.3 V — **3.3 mW**. A perfectly ordinary buck
+   with 200 µA of quiescent current burns 200 µA × 24 V = **4.8 mW** doing nothing,
+   so the regulator would consume more than the entire node it powers. The LM5164
+   costs 250 µW. Both parts together are **12 mWh/day** against the 2500 mWh/day
+   budget.
+
+> **Do not substitute an adjustable module with a trim pot.** §5 already says this
+> about U7's 3.6 V ceiling; the LM5164 sets its output with two fixed 1 % resistors,
+> which is the form that warning assumes. A pot that can be knocked to 4 V kills
+> CN6-4 and the STM32WL.
+
+#### Pin by pin, and what each one connects to
+
+DDA package, top view, pin 1 at the dot. Both rails wire identically except where
+the table says otherwise.
+
+| Pin | Name | Connect to |
+|---|---|---|
+| 1 | `GND` | Ground plane. Adjacent to VIN, which is what makes the input loop small — see *Layout* |
+| 2 | `VIN` | `24V_PROT` (the node after F1/Q2/D9). **`C_IN` goes directly across pins 2 and 1** |
+| 3 | `EN/UVLO` | The **shared** `R30/R31` divider — both bucks tie here. Sets a 16.1 V turn-on |
+| 4 | `RON` | `R_RON` to GND. Sets the on-time, and therefore the switching frequency |
+| 5 | `FB` | Divider tap `R_FB1`/`R_FB2`, **plus** the `C_B` ripple-injection cap |
+| 6 | `PGOOD` | Open drain. 100 kΩ pull-up to that rail's own output, then a **test pad**. **Not to the MCU** — see below |
+| 7 | `BST` | `C_BST` 2.2 nF 50 V X7R to `SW`, and nothing else. The bootstrap diode is internal |
+| 8 | `SW` | The inductor, and `C_BST`'s other end. This is the only high-dV/dt net on the board |
+| EP | pad | **No internal connection, but solder it** to the GND pin and a copper pour with vias. θ_JA is 43.4 °C/W only if you do |
+
+**There is no `VCC` pin and no `VCC` capacitor.** The internal bias regulator needs
+no external cap for stability — if you are used to other TI wide-V_IN parts and go
+looking for that pin, it is not missing, it does not exist here.
+
+**`PGOOD` deliberately does not reach the MCU.** §2's connector contract is
+**eighteen** signals and adding a nineteenth breaks forward compatibility with every
+front-end board again. A power-good line the firmware cannot act on anyway — if 3.3 V
+is gone the MCU is not running to read it — is not worth that. Pull it up, bring it
+to a test pad, and leave the LED footprint **DNP**: an always-lit indicator on each
+rail is ~0.5 Wh/day, a fifth of the node's entire budget, spent telling nobody in a
+sealed box on a pole that the power is on.
+
+#### The power stage
+
+```
+                        ┌─────────────┐
+   24V_PROT ─────┬──────┤2 VIN   SW 8 ├──────┬───[ L 47 µH ]───┬──── V_OUT
+                 │      │             │      │                 │
+             [ C_IN ]   │  LM5164DDAR │      └──[C_BST 2.2nF]──│──┐
+             2× 2.2 µF  │   U6 / U7   │                        │  │
+               100 V    │             │                     [ C_OUT ]
+                 │      │      BST 7 ├────────────────────────│──┘
+                GND     │             │                        │
+                        │1 GND    EP  │                       GND
+                        └──┬───────┬──┘
+                          GND    GND plane
+```
+
+`EN/UVLO`, `RON`, `FB` and `PGOOD` are left off this drawing on purpose — the first
+three are drawn below, and the fourth goes nowhere.
+
+#### The feedback and ripple network — the part that is easy to get wrong
+
+A constant-on-time converter has **no error amplifier and no compensation network**;
+the FB pin drives a *comparator*. That is why the LM5164 needs no loop compensation,
+and it is also why it needs something the datasheets of ordinary current-mode parts
+never mention: **at least 20 mV of ripple at FB, in phase with the inductor current.**
+Give it less and it does not merely regulate poorly — it bursts, firing several
+on-times in quick succession and then idling, which looks exactly like a defective
+chip on a scope.
+
+With ceramic output capacitors there is almost no ESR, so almost no in-phase ripple
+appears at `V_OUT` to divide down to FB. The datasheet's Type-1 fix is to add a
+series resistor to `C_OUT`, deliberately making the output ripple *worse* — on a rail
+feeding an ADC reference and a 923 MHz radio, that is the wrong trade. **This design
+uses Type-3 ripple injection** (datasheet Table 6-1): an `R_A`/`C_A` network across
+the switch node manufactures a triangular ramp, and `C_B` couples it into FB. The
+output stays quiet and the comparator still gets its ramp.
+
+```
+   V_OUT ──┬──[ R_FB1 499k ]──┬── FB (pin 5)
+           │                  │
+           │            [ R_FB2 ]           R_FB2 = 1.2 / (V_OUT − 1.2) × R_FB1
+           │                  │
+           │                 GND
+           │
+           └──[ C_A 1 nF ]──┬──[ R_A ]──── SW (pin 8)
+                            │
+                            └──[ C_B 56 pF ]──── FB (pin 5)
+
+   RON (pin 4) ──[ R_RON ]── GND        R_RON(kΩ) = V_OUT × 2500 / F_SW(kHz)
+
+   24V_PROT ──[ R30 976k ]──┬──[ R31 100k ]── GND
+                            │
+                            └──── EN/UVLO of BOTH U6 and U7
+```
+
+**One UVLO divider serves both bucks.** `EN/UVLO` is a high-impedance input, so the
+same tap drives both pins — two fewer resistors and 22 µA instead of 44 µA. It also
+means the two rails come up and go down together, which is what we want: there is no
+sequencing requirement between them, and no reason to let one live while the other
+does not.
+
+#### Component values
+
+Both rails run at **≈400 kHz**. Lower would need a bigger inductor; higher buys
+nothing here, and the minimum 50 ns on-time is nowhere near binding at these
+voltages (at 32 V in and 3.3 V out the on-time is still 256 ns).
+
+| | **U6 → 5.1 V** (S88) | **U7 → 3.3 V** (MCU + `VSENS`) |
+|---|---|---|
+| `R_RON` | **31.6 kΩ** 1 % | **20.5 kΩ** 1 % |
+| → F_SW | 403 kHz | 401 kHz |
+| `R_FB1` | **499 kΩ** 1 % | **499 kΩ** 1 % |
+| `R_FB2` | **154 kΩ** 1 % | **287 kΩ** 1 % |
+| → V_OUT typ | **5.088 V** | **3.286 V** |
+| → V_OUT worst case | 4.96 – 5.21 V | **3.20 – 3.37 V** |
+| `L` | **47 µH**, I_sat ≥ 1.5 A, shielded | same part |
+| → ΔI_L at 24 V | 212 mA | 151 mA |
+| → I_L peak at max load | 406 mA | 225 mA |
+| `C_IN` | **2× 2.2 µF / 100 V X7R** | same |
+| `C_OUT` | **22 µF / 16 V X7R** + **100 µF** polymer | **22 µF / 16 V X7R** |
+| `C_BST` | **2.2 nF / 50 V X7R** | same |
+| `R_A` | **470 kΩ** | **330 kΩ** |
+| `C_A` | **1 nF** | **1 nF** |
+| `C_B` | **56 pF C0G/NP0** | **56 pF C0G/NP0** |
+| → FB ripple, 18 / 24 / 32 V in | 19 / 21 / 23 mV | 20 / 21 / 22 mV |
+
+Where the numbers come from, in datasheet equation order: `R_RON` from Eq. 12,
+`R_FB2` from Eq. 10 (V_REF = 1.2 V, `R_FB1` kept inside TI's recommended
+100 kΩ–1 MΩ), `L` from Eq. 20, `C_OUT` from Eq. 21, `C_A` from Eq. 24, `R_A` from
+Eq. 25 and `C_B` from Eq. 26 for a 75 µs settling target. The FB-ripple row is the
+one to check if you change anything: it must stay **above 20 mV at 24 V and above
+12 mV at 18 V**, and it is what breaks first when somebody "improves" the output
+capacitor.
+
+**Why one 47 µH part for both rails.** U7 alone would want 47 µH and U6 alone 33 µH,
+but 47 µH on U6 only makes its ripple current smaller, and one part number is worth
+more than 30 mA of ripple. The saturation requirement is set by the chip, not the
+load: peak current limit is **1.5 A typical**, so the inductor must not saturate
+below that or a fault turns into a runaway instead of a foldback.
+
+**The extra 100 µF on U6.** `C_OUT` for ripple is 22 µF; the polymer bulk is for the
+S88's 300 mA current steps arriving down 5 m of cable, whose inductance the ceramic
+alone cannot cover. The head also carries its own 100 µF (§4b) — both are needed, at
+opposite ends.
+
+#### Layout — four rules, in the order they will bite you
+
+1. **`C_IN` across pins 2 and 1, within 5 mm.** The input loop carries a square wave
+   of the full output current with nanosecond edges; its area is the dominant EMI
+   source on this board. TI's pinout puts VIN and GND adjacent precisely so one
+   0805 can close that loop.
+2. **Keep the `SW` copper small.** It is the only net that slews 24 V in a few
+   nanoseconds. Make it just big enough for the inductor pad and `C_BST`, and never
+   run `FB`, `RON`, the DQ lines or `VBAT_SENSE` under it.
+3. **`RON` needs less than 20 pF to ground.** Resistor right at pin 4, short trace,
+   no plane poured under it. This one is not intuitive — a noisy RON pin shifts the
+   on-time and the converter jitters.
+4. **Both bucks in one corner, far from J1–J12.** Six bit-banged open-drain 1-Wire
+   lines with microsecond bit slots, three unshielded 5 m I2C branches, a 27 kΩ ADC
+   divider and a 923 MHz radio all live on this board. Give the switchers their own
+   corner with the 24 V input, and let the sensor front-end have the other.
+
+#### Three traps specific to these two parts
+
+**1. `C11` needs to be 63 V, not 50 V.** D9 is an SMBJ33A, whose *clamping* voltage
+during a surge is up to **53.3 V** — above a 50 V electrolytic's rating. The bulk cap
+sits on the clamped side of the TVS, so it sees that. The BOM row now says ≥63 V.
+
+**2. The 5.1 V rail is short-circuit-safe, and that is the whole argument for two
+bucks.** A crushed or waterlogged 5 m cable to the S88 head trips U6's peak limit at
+1.5 A, folds the valley limit back to 1.2 A, and — if it gets hot enough — thermal
+shutdown with automatic recovery. §5 claims "an S88 fault cannot brown out the LoRa
+transmitter"; this is the mechanism behind that claim, and it only holds because U7
+is fed from 24 V independently rather than from U6's output.
+
+**3. Efficiency at 18 mA is not the 90 % in §5's energy table.** At that load the part
+is in diode-emulation pulse-skipping, where efficiency is 80–85 %. The table's
+0.24 Wh/day of buck loss should read closer to 0.4 Wh/day — still noise against
+80 Wh/day of panel yield, and still the right architecture, but do not quote 90 % at
+a design review.
 
 ### 5 V goes down the cable, not 24 V
 
@@ -1424,78 +1641,92 @@ everything else:
    confirm **U6 = 5.1 V** and **U7 = 3.3 V ±2 %** on a bench supply swept
    **18 → 32 V**. U7 must never read above **3.6 V** at any input voltage; if it
    does, stop — CN6-4 and the STM32WL are both absolute-max 3.6 V.
-2. **Reverse the bench supply deliberately.** Q2 should block and nothing should
+   **Then scope the bucks before trusting the DMM**, at TP21–24:
+   - **`SW` must switch at ≈400 kHz** with clean, evenly spaced pulses under load.
+     Bursts — several on-times crowded together, then a long gap — mean the FB
+     ripple is under 20 mV. That is an `R_A`/`C_A`/`C_B` problem, not a bad chip;
+     see *The bucks themselves*.
+   - **At no load, pulse-skipping is correct, not a fault.** Diode emulation is what
+     buys the 10.5 µA quiescent current.
+   - **Sweep 18 → 32 V while watching `SW`.** COT feeds V_IN forward, so the
+     frequency should barely move. If it walks, suspect a noisy `RON` node.
+   - **`PGOOD` high on both rails** before anything else is connected.
+2. **Deliberately short the 5.1 V output at J12.** U6 should fold back and survive;
+   **U7 and the 3.3 V rail must not move at all.** This is the one test that proves
+   §5's "an S88 fault cannot brown out the LoRa transmitter" — do it once, on the
+   bench, with the boards not yet on a pole.
+3. **Reverse the bench supply deliberately.** Q2 should block and nothing should
    get warm. Do it now, on a bench, rather than discovering it at a charge
    controller with the polarity guessed from faded insulation.
-3. **Only then connect J8 to the Nucleo.**
+4. **Only then connect J8 to the Nucleo.**
 
 **Cable alone, nothing connected** — five minutes that pays for itself:
 
-4. **Buzz the signal ribbon end to end** against §2's map. Confirm continuity on
+5. **Buzz the signal ribbon end to end** against §2's map. Confirm continuity on
    the **eighteen** contract positions and, critically, that **nothing** rings out
    to CN10-2, -4, -7, -22, -32 or -38. Note that **-35 and -37 are now used**
    (`DBG_TX`/`DBG_RX`) — they left the forbidden list this revision. A ribbon
    assembled one position out is the single most likely fault in this design, and
    this is the last moment it is cheap.
-5. **Check the key.** With CN10-6 clipped and the socket hole plugged, the socket
+6. **Check the key.** With CN10-6 clipped and the socket hole plugged, the socket
    must seat one way and refuse the other. If it seats both ways, the key is not
    done — go back and do it.
 
 **Front-end alone, ribbon unplugged from the Nucleo** — this is why the test pads
 exist:
 
-6. Pull `SENS_GATE` high → `VSENS` = 0 V. Pull it low → `VSENS` = 3.3 V, and all
+7. Pull `SENS_GATE` high → `VSENS` = 0 V. Pull it low → `VSENS` = 3.3 V, and all
    eight switched signal lines (six DQ, upstream SDA, SCL) idle high through their
    pull-ups. **`V5_S88` must be 5.1 V in both states** — it is not gated.
-7. **Pin-probe every DQ line** → `pull-up=1 pull-down=1` on all six (proves each
+8. **Pin-probe every DQ line** → `pull-up=1 pull-down=1` on all six (proves each
    pull-up is really on `VSENS`, not GND). Steps 6 and 7 catch the
    resistor-to-GND class of fault — all-zero scratchpads that pass CRC and decode
    as a convincing `0.00 °C`, which `ds18b20_read()` rejects explicitly.
-8. **Check `VBAT_SENSE` before trusting any reported voltage.** With 24.0 V at J14,
+9. **Check `VBAT_SENSE` before trusting any reported voltage.** With 24.0 V at J14,
    PB3 should sit at **24.0 / 11 = 2.18 V**. Sweep the supply and confirm it tracks
    linearly. A divider off by one resistor decade reports a plausible-looking
    constant and you will believe it for months.
 
 **Connected:**
 
-9. Gate off → with the rail off, SDA and SCL must read **0 V**, not a diode drop
+10. Gate off → with the rail off, SDA and SCL must read **0 V**, not a diode drop
    below 3.3 V — anything else means an I2C pull-up landed on permanent 3V3
    instead of `VSENS`.
-10. **Plug in ONE probe at a time**, starting at `P0`, and confirm the reading
+11. **Plug in ONE probe at a time**, starting at `P0`, and confirm the reading
     appears under the expected metric name before adding the next. Warm each probe
     by hand and watch the right series move. Six probes plugged in at once, with one
     channel miswired, is a much worse debugging session than six one-probe checks.
-11. All six fitted → six plausible, **independent** temperatures, CRC OK. Two
+12. All six fitted → six plausible, **independent** temperatures, CRC OK. Two
     channels that track each other exactly are two connectors wired to one MCU pin.
-12. **I2C scan with every mux channel closed** → exactly **`0x70` and nothing
+13. **I2C scan with every mux channel closed** → exactly **`0x70` and nothing
     else**. No `0x44` (an SHT45 wired upstream, which will collide the moment a
     channel opens) and no `0x62` — the SCD41 is gone; if something answers there,
     you are looking at the wrong board.
-13. **Scan again with each channel open in turn** → exactly one `0x44` each time.
+14. **Scan again with each channel open in turn** → exactly one `0x44` each time.
     Two at once means more than one channel is open; none means that channel's
     pull-ups or its sensor are missing. Do this before trying to read anything: an
     address that does not appear is a wiring or pull-up fault, while an address that
     appears but returns CRC failures is a signal-integrity one, and the two want
     different fixes.
-14. **Read all three SHT45s with the real 5 m cables fitted, not bench leads.**
+15. **Read all three SHT45s with the real 5 m cables fitted, not bench leads.**
     This is the step that catches a 4.7 kΩ downstream pull-up: it works on a 300 mm
     lead and starts NACKing at 5 m. Then **breathe on one sensor** — exactly one
     series should move. If two move, two channels are bridged; if the wrong one
     moves, the channel-to-location mapping is off and every reading is mislabelled
     from then on. Verify against the silkscreen: `CH0 หัว`, `CH1 ท้าย`, `CH2 นอก`.
-15. **Modbus link, before the S88 is fitted.** Loop `A`/`B` at the far end of the
+16. **Modbus link, before the S88 is fitted.** Loop `A`/`B` at the far end of the
     5 m cable and confirm the MCU receives its own transmission. That separates
     "the RS-485 path works" from "the sensor answers", which are different faults
     with different fixes.
-16. **Read the S88** (once fitted — see the staged plan in §3). Outdoor air is
+17. **Read the S88** (once fitted — see the staged plan in §3). Outdoor air is
     **~420 ppm**; a greenhouse in daylight runs lower as the crop draws it down, and
     higher at night. A CRC failure on the Modbus frame is a wiring or termination
     problem; a valid frame with an implausible number is a sensor or calibration
     problem.
-17. **Wiggle test.** With everything reading, flex the ribbon and tug each of the
+18. **Wiggle test.** With everything reading, flex the ribbon and tug each of the
     eleven cable entries. Nothing should glitch. This is the test that finds a
     marginal IDC crimp before the pole does.
-18. Full cycle → wake, read, TX, sleep. Confirm the gateway logs `6/6 probes and
+19. Full cycle → wake, read, TX, sleep. Confirm the gateway logs `6/6 probes and
     3/3 air sensors reading`, and confirm the sensor rail actually goes off
     **during** the sleep rather than at the next wake — while `V5_S88` stays up.
 
@@ -1509,6 +1740,13 @@ exist:
   connectors pinout") for the CN6 power tap; **Table 9** ("External power sources:
   3V3") for the CN6-4 battery input; §6.6.5 and the solder-bridge tables cover the
   VCP/D0-D1 arrangement.
+- TI **LM5164** datasheet (SNVSAU4) — U6/U7. Pin functions (Table 4-1), the 1.2 V
+  FB reference and Eq. 10, the `R_RON` frequency Eq. 12, inductor Eq. 20, output cap
+  Eq. 21, and **Table 6-1 "Ripple Generation Methods"** — the Type-3 network this
+  design uses and the 20 mV minimum FB ripple that makes it necessary.
+- TI **AN-1481** — *Controlling Output Ripple and Achieving ESR Independence in
+  Constant On-Time (COT) Regulator Designs*. The long form of why §5's bucks need a
+  ripple-injection network at all.
 - Maxim/ADI **AN148** — guidelines for reliable long 1-Wire networks.
 - DS18B20 datasheet — **VDD 3.0–5.5 V** is the constraint driving battery choice.
 - Sensirion **SHT4x** datasheet — command set, timing, and the transfer functions
