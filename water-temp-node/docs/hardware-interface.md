@@ -1202,9 +1202,11 @@ Split in two, because the board is no longer the whole design: parts on the
 | C9 | Ceramic | 100 nF | U4 decoupling |
 | D7, D8 | TVS bidirectional | ≥ ±12 V standoff, low-C | On `A` and `B` at the board end |
 | **Power — input protection (§5)** ||||
-| Q2 | P-MOSFET, ≥60 V | e.g. **DMP6023LE** | Reverse-polarity protection on the 24 V input. **Not** a 30 V part |
-| D9 | TVS unidirectional | **SMBJ33A** (33 V standoff, 600 W) | Across the 24 V input, after the fuse |
-| F1 | Fuse, slow-blow | 2 A | 24 V input |
+| Q2 | P-MOSFET, ≥60 V | **DMP6023LE-13**, SOT-223 | Reverse polarity on the 24 V input. **Drain (and tab) to J14, source to the load** — see *Q2 — the reverse-polarity FET is wired backwards on purpose*. **Not** a 30 V part |
+| R38 | Resistor 0805 | 470 kΩ | Q2 gate → GND. Turns the FET on **and** limits D10's current — the two are a pair |
+| D10 | Zener, 250 mW | **12 V** (BZX84C12 SOT-23 / MMSZ5242B SOD-123) | Q2 gate → source, cathode at source. **Not optional** — without it V_GS reaches −32 V against a ±20 V limit |
+| D9 | TVS unidirectional | **SMBJ33A** (33 V standoff, 600 W) | Across the 24 V input, **after Q2** — that is what lets it be unidirectional |
+| F1 | Fuse, **time-lag (T)**, 5×20 mm cartridge preferred | 2 A, **I²t ≥ 0.5 A²s** | 24 V input. Sized by I²t, not amps: hot-plug inrush through Q2's body diode is ~0.1 A²s and will nuisance-blow a low-I²t 1206 |
 | C11 | Electrolytic / polymer | 100 µF, **≥63 V** | 24 V bulk, before the bucks. **63 V, not 50 V** — D9 clamps as high as 53.3 V |
 | **Power — the two bucks (§5)** ||||
 | U6, U7 | Synchronous buck converter | **TI LM5164DDAR**, 8-pin SO PowerPAD | **Same part twice.** 100 V V_in, 1 A, 10.5 µA I_q. U6 → 5.1 V ungated (S88); U7 → 3.3 V (MCU + `VSENS`). Solder the EP |
@@ -1236,9 +1238,10 @@ Split in two, because the board is no longer the whole design: parts on the
 | — | 1×8 socket + 2-core lead | 2.54 mm | CN6 tap, positions 4/6/7 wired |
 | — | M3 nylon standoffs + screws | ×8 | Both boards |
 | — | Cable ties / strain relief | ×11 | Within 30 mm of every entry |
-| TP1–14 | Test pads | — | `VSENS`, all six DQ, `SENS_GATE`, `V5_S88`, `24V`, `VBAT_SENSE`, `GND`, upstream SDA/SCL |
+| TP1–14 | Test pads | — | `VSENS`, all six DQ, `SENS_GATE`, `V5_S88`, **`24V_PROT`**, `VBAT_SENSE`, `GND`, upstream SDA/SCL |
 | TP15–20 | Test pads | — | The three downstream SDA/SCL pairs. Without these, a dead SHT45 and a dead mux channel look identical |
 | TP21–24 | Test pads | — | `PGOOD` and `SW` of each buck. `SW` is where you confirm the switching frequency and catch COT bursting |
+| TP25, TP26 | Test pads | — | **`24V_RAW`** (J14 side of Q2) and **Q2's gate**. With `24V_PROT` at TP1 these three tell a blown F1, a dead Q2 and a missing gate clamp apart in one measurement |
 
 **Deleted from the previous revision:** U2 (SCD41), C3 (its 10 µF local bulk), C7
 (its 100 nF), and U1a/U1b/U1c with C4–C6 — the SHT45s are no longer on this board.
@@ -1277,6 +1280,173 @@ affordable to run continuously, and it is what broke `battery_read_mv()`.
 Fit **F1 (2 A slow-blow) → Q2 (reverse-polarity P-FET) → D9 (SMBJ33A TVS) →
 C11 (100 µF)** in that order at J14. This is a long DC run into a metal building;
 treat it as an outdoor cable, not as a bench supply.
+
+### Q2 — the reverse-polarity FET is wired backwards on purpose
+
+`Q2` was one BOM row and one box in a diagram, and it has two ways of being built
+wrong that both *pass a bench test*. This section is its schematic.
+
+**The part.** Diodes Incorporated **DMP6023LE-13**, a P-channel enhancement-mode
+MOSFET in **SOT-223** (3 pins + tab). The numbers that matter:
+
+| Parameter | Value | What it means here |
+|---|---|---|
+| V_DS | **−60 V** | Satisfies §5's ≥60 V rule. It sees the full reverse bank voltage |
+| **V_GS max** | **±20 V** | **The number that shapes this whole circuit** — see *Why the Zener is not optional* |
+| R_DS(on) | **28 mΩ** @ V_GS = −10 V (35 mΩ @ −4.5 V) | 2.8 mV of drop at our 100 mA peak |
+| I_D | 7 A (T_a) / 18.2 A (T_c) | ~70× the peak this node draws |
+| V_GS(th) | ≤ **3 V** @ 250 µA | *Not* a logic-level part despite the "LE" — do not gate it from 3.3 V |
+| C_iss | ≈ **2.6 nF** | Sets the turn-on ramp with the gate resistor |
+| P_D | 2 W (T_a) | Against ~0.3 mW dissipated |
+| **Tab / case** | **DRAIN** | Sits at the *raw, unprotected* input. Layout consequence below |
+
+Like Q1, this part is **chosen for its voltage rating, not its current rating**.
+The node draws about **5 mA average and 100 mA peak** at 24 V (the S88's 300 mA and
+the LoRa TX's 150 mA are both reflected through the bucks, so they arrive here
+divided by roughly 24/5 and 24/3.3). Every current axis is over-specified by more
+than an order of magnitude.
+
+#### The circuit
+
+```
+   J14 (+)
+      │
+   [ F1 ]   2 A time-lag cartridge
+      │
+      ●──── 24V_RAW ── TP25        the tab (= drain) sits at THIS potential
+      │
+      │ D
+   ┌──┴───┐
+   │  Q2  │  DMP6023LE       body diode:  D ──►|── S   (points at the LOAD)
+   └──┬───┘
+      │ S                  G ──●── TP26
+      │                        │
+      ●──── 24V_PROT ── TP1    ├──[ D10  12 V ]──── to S   (cathode at S)
+      │                        │
+      ├──► D9 ─ C11 ─ U6 / U7  └──[ R38  470 k ]─── GND
+      │
+   J14 (−) ─────────────────────────────────────── GND
+```
+
+Reading it as a netlist, because the drawing above is the part people get wrong:
+
+| Terminal | Net | Note |
+|---|---|---|
+| **Drain** (and tab) | `24V_RAW` — the J14 side, after F1 | Yes, the drain faces the supply |
+| **Source** | `24V_PROT` — the load side, feeding D9/C11/U6/U7 | |
+| **Gate** | junction of `R38` (to GND) and `D10`'s anode | |
+| `D10` cathode | **Source**, i.e. `24V_PROT` | Zener sits gate-to-source, physically at the FET |
+
+> **Pin numbering:** on Diodes' SOT-223 MOSFETs this is pin 1 = G, pin 2 = D,
+> pin 3 = S with the tab tied to D. The **tab = drain** is confirmed by the
+> datasheet's case-connection note; **verify the 1/2/3 assignment against the
+> datasheet's "Pin Out — Top View" diagram before committing the footprint.**
+
+#### Why the drain faces the supply
+
+A P-channel MOSFET's body diode runs **drain → source**. That single fact decides
+the orientation, and it is the opposite of how the same part is wired in an
+ideal-diode/ORing circuit — which is exactly why this trips people.
+
+- **Correct polarity.** The body diode is forward-biased the instant power is
+  applied, so `24V_PROT` comes up one diode drop below `24V_RAW`. The gate, pulled
+  toward GND by `R38`, then goes strongly negative with respect to the source, the
+  channel enhances, and the 0.7 V collapses to 2.8 mV. The diode gets the circuit
+  started; the channel does the work.
+- **Reversed polarity.** `24V_RAW` sits *below* GND. `24V_PROT` is held at GND by
+  the load, so the body diode is reverse-biased and blocks. The gate sits at GND
+  through `R38` and the source sits at GND, so **V_GS = 0** and the channel is off
+  too. No current anywhere, nothing warm, and **F1 does not blow** — a wiring
+  mistake costs nothing but the time to notice it.
+
+**Wire it the other way round** — source to the supply, drain to the load — and it
+still works perfectly on the bench with correct polarity. Reversed, the body diode
+now points from the load node back into the negative supply terminal, so current
+runs GND → load → body diode → supply, and the "protection" does nothing except
+blow F1 with luck and destroy the bucks without it. **This failure is invisible
+until the day it matters**, which is why the reverse test is a numbered bring-up
+step and not an optional extra.
+
+#### Why the Zener is not optional
+
+With the gate pulled to GND and the source at the bank voltage,
+**V_GS = −V_bank**: −24 V nominal, **−32 V at the top of the design range**, against
+an absolute-maximum gate rating of **±20 V**. A bare gate resistor destroys this
+FET — not immediately, and not on a 12 V bench supply, but on a 24 V bank on an
+absorb cycle.
+
+`D10` clamps V_GS at about −12 V. `R38` is what limits the Zener current, so the
+two are a pair; neither works alone:
+
+| Part | Value | Why this value |
+|---|---|---|
+| `R38` gate → GND | **470 kΩ** | Sets Zener current to 26 µA at 24 V and 43 µA at 32 V — **0.6 mW, or 15 mWh/day** against the node's 2500 mWh/day. 100 kΩ would cost 5× that for nothing; 1 MΩ starts to be noise-sensitive on a long outdoor input |
+| `D10` gate → source | **12 V**, 250 mW (BZX84C12, SOT-23; or MMSZ5242B, SOD-123) | Comfortably above the −10 V where R_DS(on) is specified, and comfortably below the ±20 V limit. **Cathode to source, anode to gate** |
+
+> **The Zener runs far below its test current, and that is fine here.** A 12 V
+> Zener characterised at 5 mA sits nearer 10–11 V at 26 µA. That still exceeds the
+> −10 V at which the 28 mΩ figure is specified, so nothing is lost. It does mean
+> you cannot pick a 16 V or 18 V part and assume the soft knee will save you at
+> 32 V input — stay at 12 V.
+
+`R38` × `C_iss` = 470 kΩ × 2.6 nF ≈ **1.2 ms**, so the gate ramps rather than
+snaps. That is a small bonus for EMI and for the bucks' input step, but read the
+inrush trap below before treating it as a soft-start: it is not one.
+
+#### Why the order is F1 → Q2 → D9, and not F1 → D9 → Q2
+
+This is deliberate and it is the reason `D9` can be a **unidirectional** SMBJ33A
+rather than a bidirectional part.
+
+Put the TVS **ahead** of the FET and a reversed connection forward-biases it
+directly across the bank. An SMBJ conducts hundreds of amps in that direction; F1
+opens, if you are lucky, and the TVS is destroyed either way — every time someone
+guesses the polarity of two faded wires. Put it **after** the FET, as here, and the
+reverse voltage never reaches it: `Q2` blocks first, so the TVS only ever sees
+positive transients, which is precisely what a unidirectional part is for.
+
+The cost is that `Q2`'s drain is exposed to the unclamped input for the nanoseconds
+before `D9` conducts. That is survivable at these energies because the FET is *on*
+when it happens: the surge passes through the channel, `D9` clamps `24V_PROT` at
+≤53.3 V, and `Q2`'s own V_DS stays near zero against its −60 V rating. Its V_GS
+stays clamped by `D10` throughout.
+
+**What each part is actually for**, since three protection devices in a row invite
+the assumption that they overlap:
+
+- **F1** — a *downstream* short: a buck failing shorted, or C11 failing shorted.
+  It does nothing for reverse polarity, because with `Q2` correct there is no
+  current to blow it.
+- **Q2** — reverse polarity, and nothing else.
+- **D9** — positive transients: switching on the charge controller, nearby
+  lightning, a long DC run acting as an antenna.
+- **C11** — bulk, and damping the resonance between the input cable's inductance
+  and the bucks' ceramic input capacitors.
+
+> **Q2 is not an ideal diode and does not block reverse *current*.** Once enhanced,
+> the channel conducts both ways. If the bank voltage ever falls below `24V_PROT`,
+> C11 discharges back into it. That is harmless at these energies and is worth
+> stating only so nobody designs on the assumption that it does not happen.
+
+#### Two traps
+
+**1. Hot-plug inrush goes through the body diode, not through the channel — so the
+1.2 ms gate ramp is not a soft-start.** Connecting a charged bank to a discharged
+board dumps ~2.6 mC into `C11` plus the bucks' 8.8 µF of ceramic input capacitance,
+through the body diode, limited only by cable resistance. Estimate ~0.1 A²s of
+I²t. **Specify F1 by I²t, not just by amps**: a 5×20 mm **T2A** cartridge has ample
+margin; some 1206 SMD "slow-blow" 2 A parts are rated near 0.1 A²s and will
+nuisance-blow on connection. §4a offers both footprints — **prefer the cartridge**,
+which is also the one you can replace on a pole with a screwdriver. If you increase
+`C11`, check the FET's pulsed body-diode rating as well as the fuse.
+
+**2. The tab is the drain, which means it sits at `24V_RAW` — unprotected,
+unclamped input.** It is the largest copper feature on the part and the obvious
+place to pour a plane for thermal reasons. Do not: the thermal argument is void
+here (0.3 mW), and that copper is on the wrong side of both the FET and the TVS.
+Keep the drain pour minimal, keep clearance to the GND pour and the enclosure
+appropriate for a 60 V part on a long outdoor cable, and put the heat-sinking
+effort where it is actually needed, which is nowhere on this board.
 
 ### Two rails, deliberately independent
 
@@ -1655,78 +1825,86 @@ everything else:
    **U7 and the 3.3 V rail must not move at all.** This is the one test that proves
    §5's "an S88 fault cannot brown out the LoRa transmitter" — do it once, on the
    bench, with the boards not yet on a pole.
-3. **Reverse the bench supply deliberately.** Q2 should block and nothing should
-   get warm. Do it now, on a bench, rather than discovering it at a charge
-   controller with the polarity guessed from faded insulation.
-4. **Only then connect J8 to the Nucleo.**
+3. **Check Q2's gate clamp before anything else, at TP26.** With 24 V in and
+   correct polarity, `TP26 − TP1` must read about **−10 to −12 V**, never more
+   negative than −20 V. If it reads −24 V, D10 is missing, backwards, or the wrong
+   value, and the FET is already outside its absolute maximum. `TP25 − TP1` (the
+   drop across Q2) should be **millivolts**, not 0.7 V — 0.7 V means the channel
+   never enhanced and you are running on the body diode.
+4. **Reverse the bench supply deliberately.** Q2 should block: **zero current**,
+   `24V_PROT` at 0 V, and nothing warm anywhere. If current flows, Q2 is in
+   backwards — source and drain swapped — which is the one build error that passes
+   every correct-polarity test. Do this now, on a bench, rather than discovering it
+   at a charge controller with the polarity guessed from faded insulation.
+5. **Only then connect J8 to the Nucleo.**
 
 **Cable alone, nothing connected** — five minutes that pays for itself:
 
-5. **Buzz the signal ribbon end to end** against §2's map. Confirm continuity on
+6. **Buzz the signal ribbon end to end** against §2's map. Confirm continuity on
    the **eighteen** contract positions and, critically, that **nothing** rings out
    to CN10-2, -4, -7, -22, -32 or -38. Note that **-35 and -37 are now used**
    (`DBG_TX`/`DBG_RX`) — they left the forbidden list this revision. A ribbon
    assembled one position out is the single most likely fault in this design, and
    this is the last moment it is cheap.
-6. **Check the key.** With CN10-6 clipped and the socket hole plugged, the socket
+7. **Check the key.** With CN10-6 clipped and the socket hole plugged, the socket
    must seat one way and refuse the other. If it seats both ways, the key is not
    done — go back and do it.
 
 **Front-end alone, ribbon unplugged from the Nucleo** — this is why the test pads
 exist:
 
-7. Pull `SENS_GATE` high → `VSENS` = 0 V. Pull it low → `VSENS` = 3.3 V, and all
+8. Pull `SENS_GATE` high → `VSENS` = 0 V. Pull it low → `VSENS` = 3.3 V, and all
    eight switched signal lines (six DQ, upstream SDA, SCL) idle high through their
    pull-ups. **`V5_S88` must be 5.1 V in both states** — it is not gated.
-8. **Pin-probe every DQ line** → `pull-up=1 pull-down=1` on all six (proves each
+9. **Pin-probe every DQ line** → `pull-up=1 pull-down=1` on all six (proves each
    pull-up is really on `VSENS`, not GND). Steps 6 and 7 catch the
    resistor-to-GND class of fault — all-zero scratchpads that pass CRC and decode
    as a convincing `0.00 °C`, which `ds18b20_read()` rejects explicitly.
-9. **Check `VBAT_SENSE` before trusting any reported voltage.** With 24.0 V at J14,
+10. **Check `VBAT_SENSE` before trusting any reported voltage.** With 24.0 V at J14,
    PB3 should sit at **24.0 / 11 = 2.18 V**. Sweep the supply and confirm it tracks
    linearly. A divider off by one resistor decade reports a plausible-looking
    constant and you will believe it for months.
 
 **Connected:**
 
-10. Gate off → with the rail off, SDA and SCL must read **0 V**, not a diode drop
+11. Gate off → with the rail off, SDA and SCL must read **0 V**, not a diode drop
    below 3.3 V — anything else means an I2C pull-up landed on permanent 3V3
    instead of `VSENS`.
-11. **Plug in ONE probe at a time**, starting at `P0`, and confirm the reading
+12. **Plug in ONE probe at a time**, starting at `P0`, and confirm the reading
     appears under the expected metric name before adding the next. Warm each probe
     by hand and watch the right series move. Six probes plugged in at once, with one
     channel miswired, is a much worse debugging session than six one-probe checks.
-12. All six fitted → six plausible, **independent** temperatures, CRC OK. Two
+13. All six fitted → six plausible, **independent** temperatures, CRC OK. Two
     channels that track each other exactly are two connectors wired to one MCU pin.
-13. **I2C scan with every mux channel closed** → exactly **`0x70` and nothing
+14. **I2C scan with every mux channel closed** → exactly **`0x70` and nothing
     else**. No `0x44` (an SHT45 wired upstream, which will collide the moment a
     channel opens) and no `0x62` — the SCD41 is gone; if something answers there,
     you are looking at the wrong board.
-14. **Scan again with each channel open in turn** → exactly one `0x44` each time.
+15. **Scan again with each channel open in turn** → exactly one `0x44` each time.
     Two at once means more than one channel is open; none means that channel's
     pull-ups or its sensor are missing. Do this before trying to read anything: an
     address that does not appear is a wiring or pull-up fault, while an address that
     appears but returns CRC failures is a signal-integrity one, and the two want
     different fixes.
-15. **Read all three SHT45s with the real 5 m cables fitted, not bench leads.**
+16. **Read all three SHT45s with the real 5 m cables fitted, not bench leads.**
     This is the step that catches a 4.7 kΩ downstream pull-up: it works on a 300 mm
     lead and starts NACKing at 5 m. Then **breathe on one sensor** — exactly one
     series should move. If two move, two channels are bridged; if the wrong one
     moves, the channel-to-location mapping is off and every reading is mislabelled
     from then on. Verify against the silkscreen: `CH0 หัว`, `CH1 ท้าย`, `CH2 นอก`.
-16. **Modbus link, before the S88 is fitted.** Loop `A`/`B` at the far end of the
+17. **Modbus link, before the S88 is fitted.** Loop `A`/`B` at the far end of the
     5 m cable and confirm the MCU receives its own transmission. That separates
     "the RS-485 path works" from "the sensor answers", which are different faults
     with different fixes.
-17. **Read the S88** (once fitted — see the staged plan in §3). Outdoor air is
+18. **Read the S88** (once fitted — see the staged plan in §3). Outdoor air is
     **~420 ppm**; a greenhouse in daylight runs lower as the crop draws it down, and
     higher at night. A CRC failure on the Modbus frame is a wiring or termination
     problem; a valid frame with an implausible number is a sensor or calibration
     problem.
-18. **Wiggle test.** With everything reading, flex the ribbon and tug each of the
+19. **Wiggle test.** With everything reading, flex the ribbon and tug each of the
     eleven cable entries. Nothing should glitch. This is the test that finds a
     marginal IDC crimp before the pole does.
-19. Full cycle → wake, read, TX, sleep. Confirm the gateway logs `6/6 probes and
+20. Full cycle → wake, read, TX, sleep. Confirm the gateway logs `6/6 probes and
     3/3 air sensors reading`, and confirm the sensor rail actually goes off
     **during** the sleep rather than at the next wake — while `V5_S88` stays up.
 

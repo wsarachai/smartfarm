@@ -21,12 +21,13 @@ Digi-Key TH ships from US stock with THB pricing and DDP customs.
 | **L1, L2** | Coilcraft **MSS1246** family, 47 µH | Shielded, **I_sat ≥1.5 A** (set by the LM5164's current limit, not by the load), DCR ≤300 mΩ. Würth **WE-LQS** and Bourns **SRN** equivalents are fine. One value serves both rails |
 | **C16, C22** | 2.2 nF, **50 V X7R**, 0603 | `C_BST`. TI specifies 1.5–2.5 nF as an absolute maximum-ratings entry, not a suggestion — a bigger cap stresses the internal VCC regulator and damages the device |
 | **Q1** | AOS **AO3401A** (SOT-23) | Select on **R_DS(on) at V_GS = −2.5 V**, not the headline −4.5 V. Alternates: **DMG3415U**, **SI2301CDS** |
-| **Q2** | P-FET, **≥60 V**, R_DS(on) ≤100 mΩ, SOT-223 or DPAK | Reverse-polarity on the 24 V input. Filter Digi-Key on V_DS ≥60 V — do **not** reuse the AO3401A here, it is a 30 V part |
+| **Q2** | Diodes **DMP6023LE-13** (SOT-223) | Reverse-polarity on the 24 V input. −60 V, 7 A, 28 mΩ @ V_GS = −10 V, **tab = drain**. Substitutes need V_DS ≥60 V and R_DS(on) specified at −10 V — do **not** reuse the AO3401A, it is a 30 V part. Whatever you fit, check **V_GS(max)**: at ±20 V the gate clamp `D10` is mandatory, and a part rated ±12 V would need a lower-voltage Zener |
+| **D10** | 12 V Zener, 250 mW — **BZX84C12** (SOT-23) or **MMSZ5242B** (SOD-123) | Q2's gate clamp. **Not** interchangeable with a TVS. Stay at 12 V: 16 V or 18 V leaves too little margin against Q2's ±20 V gate limit at a 32 V bank |
 | **D9** | Littelfuse **SMBJ33A** | 33 V standoff / 600 W, on the 24 V input. Unidirectional; the bus never goes negative once Q2 is in |
 | **D1–D6** | Bourns **CDSOD323-T05LC** | 5 V, 1 pF, SOD-323. Budget alternate: onsemi **ESD9B5.0ST5G** (15 pF, SOD-923 — 0.8×0.6 mm, fine for assembly, unpleasant by hand). **Reject** anything whose datasheet buries the capacitance figure |
 | **D7, D8** | same family as D1–D6 | On RS-485 `A`/`B`. ±12 V standoff is fine here — these are not 3.3 V logic lines |
 | LDO (head) | **AP2112K-3.3TRG1** or **MCP1700T-3302E/TT** | Powers U5 off the 5 V rail so `DVCC_out` stays unloaded (datasheet: 6 mA max, and loading it "may affect sensor performance") |
-| **F1** | 2 A slow-blow, 5×20 mm holder or 1206 | On the 24 V input, before Q2 |
+| **F1** | 2 A **time-lag (T)**, 5×20 mm cartridge + holder — **prefer this over the 1206** | On the 24 V input, before Q2. Specify by **I²t ≥0.5 A²s**, not by amps: the hot-plug inrush through Q2's body diode is ~0.1 A²s and some 1206 "slow-blow" 2 A parts sit right on that number. A cartridge is also the one you can replace on a pole |
 
 ## Connectors
 
