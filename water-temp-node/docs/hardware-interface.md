@@ -1277,8 +1277,10 @@ affordable to run continuously, and it is what broke `battery_read_mv()`.
 | **Design range** | **18–32 V continuous** | margin both ways |
 | **Part rating** | **≥60 V** | a controller fault, a disconnected battery, or a cold-morning panel Voc can put far more than 29 V on the wire |
 
-Fit **F1 (2 A slow-blow) → Q2 (reverse-polarity P-FET) → D9 (SMBJ33A TVS) →
-C11 (100 µF)** in that order at J14. This is a long DC run into a metal building;
+Fit **F1 (2 A time-lag) → Q2 (reverse-polarity P-FET) → D9 (SMBJ33A TVS) →
+C11 (100 µF)** in that **physical order along the trace** from J14 — F1 and Q2 are
+series elements, D9 and C11 shunt to ground, and *The `24V_PROT` node* below draws
+what that actually means. This is a long DC run into a metal building;
 treat it as an outdoor cable, not as a bench supply.
 
 ### Q2 — the reverse-polarity FET is wired backwards on purpose
@@ -1323,7 +1325,8 @@ than an order of magnitude.
       │                        │
       ●──── 24V_PROT ── TP1    ├──[ D10  12 V ]──── to S   (cathode at S)
       │                        │
-      ├──► D9 ─ C11 ─ U6 / U7  └──[ R38  470 k ]─── GND
+      ├──► D9, C11, U6, U7     └──[ R38  470 k ]─── GND
+      │    (all in PARALLEL — see the next section)
       │
    J14 (−) ─────────────────────────────────────── GND
 ```
@@ -1447,6 +1450,104 @@ here (0.3 mW), and that copper is on the wrong side of both the FET and the TVS.
 Keep the drain pour minimal, keep clearance to the GND pour and the enclosure
 appropriate for a 60 V part on a long outdoor cable, and put the heat-sinking
 effort where it is actually needed, which is nowhere on this board.
+
+### The `24V_PROT` node — D9, C11 and both bucks are all in parallel
+
+**"F1 → Q2 → D9 → C11" describes physical order along the trace, not an electrical
+chain**, and the shorthand has caused enough confusion to be worth replacing with a
+drawing. Only **F1 and Q2 are series elements**. Everything after Q2 hangs off a
+single node:
+
+```
+   Q2 source
+       │
+       ●━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━  24V_PROT
+       │      │        │            │            │          │
+      TP1   ══╪══     ═╪═         ══╪══        ══╪══     [R24 300k]
+              │        │            │            │          │
+            [D9]     [C11]     [C12+C13]     [C19+C20]      ●──── VBAT_SENSE
+           SMBJ33A   100 µF     2×2.2 µF      2×2.2 µF      │      → PB3
+          cathode ↑   + ↑        100 V         100 V     [R25 30k]
+              │        │            │            │          │
+              │        │        U6 pin 2     U7 pin 2       │
+              │        │         (VIN)        (VIN)         │
+       ───────┴────────┴────────────┴────────────┴──────────┴──── GND
+              ↑        ↑            ↑            ↑
+          at J14   next to it   ≤5 mm from   ≤5 mm from
+                                 U6's pins    U7's pins
+```
+
+Read as a netlist, since polarity is where this node gets destroyed:
+
+| Part | Terminal | Goes to |
+|---|---|---|
+| **D9** SMBJ33A | **cathode — the banded end** | `24V_PROT` |
+| | anode | `GND`, straight back to J14's ground pin |
+| **C11** 100 µF ≥63 V | **`+`** | `24V_PROT` |
+| | `−` | `GND` |
+| **C12, C13** 2.2 µF/100 V | — | across **U6's** pins 2 (VIN) and 1 (GND) |
+| **C19, C20** 2.2 µF/100 V | — | across **U7's** pins 2 (VIN) and 1 (GND) |
+| **U6** pin 2 | — | `24V_PROT` |
+| **U7** pin 2 | — | `24V_PROT` |
+| **R24** 300 kΩ | — | `24V_PROT` (top of the `VBAT_SENSE` divider) |
+
+**Both bucks tap the same node independently**, which is the whole point of §5's
+*Two rails, deliberately independent* — "independent" means independent *rails*,
+not independent *inputs*. They share this node and the 24 V bank behind it; what
+they do not share is any path from one output to the other.
+
+**`VBAT_SENSE` is measured here, not at `24V_RAW`**, and that is deliberate: the
+divider then sits inside D9's clamp and behind Q2, so it never sees a raw
+transient, and it reads 0 V rather than a negative voltage if someone reverses the
+supply. The 2.8 mV of error Q2 contributes is three orders of magnitude below the
+divider's own tolerance.
+
+#### Why the physical order still matters, even though it is all one node
+
+Electrically these parts are in parallel; on copper they are not, and the sequence
+along the trace is a real specification:
+
+1. **D9 sits closest to J14/Q2.** A surge should be shunted to ground *at the door*
+   so its current never flows through the rest of the board's copper. An SMBJ33A
+   passes up to **11.3 A** while clamping (600 W ÷ 53.3 V) — put it 40 mm
+   downstream of C11 and that current takes a tour of your board on the way.
+2. **C11 immediately after it**, so the electrolytic sits inside the clamp rather
+   than being the first thing a transient meets.
+3. **Each buck's own `C_IN` within 5 mm of its own VIN/GND pins.** C11 cannot do
+   this job — see *The bucks themselves*, layout rule 1. The LM5164 datasheet's
+   converse rule also applies: bulk is *required* if the part is more than about
+   5 cm from the input source, which is what C11 is for.
+4. **R24/R25 last**, farthest from both SW nodes. It is a 27 kΩ analog source; it
+   has no business near switching copper.
+
+**Trace width is set by the surge, not by the load.** The DC current here is 100 mA
+peak, which any width carries — but D9's 11.3 A pulse and its return want a wide
+trace, so do not route `24V_PROT` as a thin signal track just because the load is
+small. **Give D9's anode and C11's `−` their own wide copper straight back to
+J14's ground pin**, and keep that return off the analog ground and off R25. This is
+the one node on this board where "ground is just ground" is wrong.
+
+#### Three ways this node gets built wrong
+
+**1. D9 backwards.** The SMBJ33A is **unidirectional**. Banded end (cathode) to
+`24V_PROT`, unbanded to GND. Fitted the other way it is a plain forward diode
+across your 24 V rail — F1 opens instantly if you are lucky, and the TVS is dead
+either way. **Q2 cannot save you**, because D9 is downstream of it.
+
+**2. C11 backwards.** It is polarised: `+` to `24V_PROT`. A reversed 100 µF
+electrolytic on a 24 V rail vents. Same note as above — being downstream of Q2, the
+reverse-polarity FET offers no protection against a part fitted backwards *on the
+board*. Q2 protects against a reversed *supply*, nothing else.
+
+**3. Choosing a low-ESR polymer for C11 because low ESR sounds better.** It is not
+better here. The input cable's inductance (~5 µH for a 5 m run) resonates with the
+bucks' 8.8 µF of ceramic input capacitance at roughly **24 kHz**, and connecting a
+charged bank rings that circuit. Cable resistance alone (~0.2 Ω for 5 m of 18 AWG,
+round trip) already puts the damping ratio near 0.5, and D9 backstops whatever is
+left — so this is margin, not a crisis. But **C11's job here is damping, not ripple
+current** (the local ceramics carry the 400 kHz ripple), so its ESR is a feature.
+Prefer the **aluminium electrolytic** over the polymer, and read the "≥63 V"
+requirement as covering both D9's 53.3 V clamp *and* this ring.
 
 ### Two rails, deliberately independent
 
@@ -1825,12 +1926,26 @@ everything else:
    **U7 and the 3.3 V rail must not move at all.** This is the one test that proves
    §5's "an S88 fault cannot brown out the LoRa transmitter" — do it once, on the
    bench, with the boards not yet on a pole.
-3. **Check Q2's gate clamp before anything else, at TP26.** With 24 V in and
-   correct polarity, `TP26 − TP1` must read about **−10 to −12 V**, never more
-   negative than −20 V. If it reads −24 V, D10 is missing, backwards, or the wrong
-   value, and the FET is already outside its absolute maximum. `TP25 − TP1` (the
-   drop across Q2) should be **millivolts**, not 0.7 V — 0.7 V means the channel
-   never enhanced and you are running on the body diode.
+3. **Read the input chain at TP25 / TP1 / TP26, all referenced to the `GND` pad,
+   before anything else.** Three DMM readings at 24.0 V in, correct polarity,
+   separate every way this chain gets built wrong:
+
+   | TP25 `24V_RAW` | TP1 `24V_PROT` | TP26 gate | Diagnosis |
+   |---|---|---|---|
+   | 24 V | ≈24 V | **≈12 V** | **Correct.** V_GS = −12 V, channel fully enhanced |
+   | **0 V** | 0 V | 0 V | **F1 open**, or no supply reaching J14 |
+   | 24 V | **≈23.3 V** | ≈ same as TP1 | **`R38` open/unfitted, or `D10` shorted** → V_GS ≈ 0, running on the body diode |
+   | 24 V | ≈24 V | **≈0 V** | **`D10` missing, backwards or wrong value** → V_GS = −24 V, past the ±20 V limit. Replace D10 **and** Q2 |
+   | 24 V | **0 V** | 0 V | Q2 open — dead, or not actually soldered down |
+
+   **Row 3 is a 0 V-versus-0.7 V test, not a precision measurement.** At the 5 mA
+   average load the real drop across Q2 is 0.14 mV and no field meter resolves it;
+   what you are looking for is whether it is *0.7 V*, which means the channel never
+   enhanced and the whole node is being fed through the body diode. That survives a
+   bench test and then runs hot and sags in the field.
+
+   **What this measurement cannot catch: Q2 fitted backwards** (source and drain
+   swapped). Every reading above comes out normal. Only step 4 finds it.
 4. **Reverse the bench supply deliberately.** Q2 should block: **zero current**,
    `24V_PROT` at 0 V, and nothing warm anywhere. If current flows, Q2 is in
    backwards — source and drain swapped — which is the one build error that passes
