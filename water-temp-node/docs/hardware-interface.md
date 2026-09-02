@@ -1218,9 +1218,9 @@ Split in two, because the board is no longer the whole design: parts on the
 | F1 | Fuse, **time-lag (T)**, 5×20 mm cartridge preferred | 2 A, **I²t ≥ 0.5 A²s** | 24 V input. Sized by I²t, not amps: hot-plug inrush through Q2's body diode is ~0.1 A²s and will nuisance-blow a low-I²t 1206 |
 | C11 | Electrolytic / polymer | 100 µF, **≥63 V** | 24 V bulk, before the modules. **63 V, not 50 V** — D9 clamps as high as 53.3 V |
 | **Power — the two buck modules (§5)** ||||
-| U6 | Buck module, **fixed 5 V** | Traco **TSR 1-2450**, SIP-3 through-hole | 6.5–36 V in, 1 A, ±2 %, continuous short-circuit protection. **Ungated** → J12 (S88). ⚠ Confirm the pin order (expected 1 = V_in, 2 = GND, 3 = V_out) against the datasheet before the footprint is committed |
-| U7 | Buck module, **fixed 3.3 V** | Traco **TSR 1-2433**, SIP-3 through-hole | 4.6–36 V in, 1 A, ±2 %. MCU (J8) + `VSENS`. **Fixed output only** — never an adjustable module with a trim pot; CN6-4 and the STM32WL die at 3.6 V |
-| C12 / C19 | Ceramic X7R, 1210 | **10 µF, 50 V** | `C_IN`, one per module, **directly across its V_in and GND pins**, ≤5 mm |
+| U6 | Buck module, **fixed 5 V** | Traco **TSR 1-2450**, SIP-3 through-hole | 6.5–36 V in, 1 A, ±2 %, continuous short-circuit protection. **Ungated** → J12 (S88). Pins **1 = +V_in, 2 = GND, 3 = +V_out** (datasheet rev. 2026-07-02); **no traces under the module** |
+| U7 | Buck module, **fixed 3.3 V** | Traco **TSR 1-2433**, SIP-3 through-hole | 4.75–36 V in, 1 A, ±2 %. MCU (J8) + `VSENS`. **Fixed output only** — never an adjustable module with a trim pot; CN6-4 and the STM32WL die at 3.6 V |
+| C12 / C19 | Ceramic X7R 1210, or small electrolytic | **22 µF, 50 V** | `C_IN`, one per module, **directly across pins 1 and 2**, ≤5 mm. **22 µF is Traco's requirement, not a choice** — the datasheet demands an external 22 µF/50 V input capacitor for V_in > 32 V |
 | C14 / C21 | Ceramic X7R | 22 µF, 16 V | `C_OUT`, one per module. **Optional** — the modules need none; fitted for the LoRa TX and S88 current steps. DNP without consequence |
 | C15 | Polymer / electrolytic | 100 µF, 16 V | **U6 only** — bulk for the S88's 300 mA steps down 5 m of cable |
 | — | LED + series resistor | ×2 | **DNP.** Rail indicators for bring-up only — ~0.5 Wh/day if left fitted |
@@ -1440,7 +1440,7 @@ the assumption that they overlap:
 
 **1. Hot-plug inrush goes through the body diode, not through the channel — so the
 1.2 ms gate ramp is not a soft-start.** Connecting a charged bank to a discharged
-board dumps ~2.6 mC into `C11` plus the modules' ~20 µF of ceramic input capacitance,
+board dumps ~2.6 mC into `C11` plus the modules' ~44 µF of local input capacitance,
 through the body diode, limited only by cable resistance. Estimate ~0.1 A²s of
 I²t. **Specify F1 by I²t, not just by amps**: a 5×20 mm **T2A** cartridge has ample
 margin; some 1206 SMD "slow-blow" 2 A parts are rated near 0.1 A²s and will
@@ -1471,7 +1471,7 @@ single node:
       TP1   ══╪══     ═╪═         ══╪══        ══╪══     [R24 300k]
               │        │            │            │          │
             [D9]     [C11]       [C12]        [C19]         ●──── VBAT_SENSE
-           SMBJ33A   100 µF        10 µF        10 µF         │      → PB3
+           SMBJ33A   100 µF        22 µF        22 µF         │      → PB3
           cathode ↑   + ↑         50 V         50 V      [R25 30k]
               │        │            │            │          │
               │        │        U6 V_in      U7 V_in        │
@@ -1490,8 +1490,8 @@ Read as a netlist, since polarity is where this node gets destroyed:
 | | anode | `GND`, straight back to J14's ground pin |
 | **C11** 100 µF ≥63 V | **`+`** | `24V_PROT` |
 | | `−` | `GND` |
-| **C12** 10 µF/50 V | — | across **U6's** V_in and GND pins |
-| **C19** 10 µF/50 V | — | across **U7's** V_in and GND pins |
+| **C12** 22 µF/50 V | — | across **U6's** pins 1 (+V_in) and 2 (GND) |
+| **C19** 22 µF/50 V | — | across **U7's** pins 1 (+V_in) and 2 (GND) |
 | **U6** V_in (pin 1) | — | `24V_PROT` |
 | **U7** V_in (pin 1) | — | `24V_PROT` |
 | **R24** 300 kΩ | — | `24V_PROT` (top of the `VBAT_SENSE` divider) |
@@ -1546,7 +1546,7 @@ board*. Q2 protects against a reversed *supply*, nothing else.
 
 **3. Choosing a low-ESR polymer for C11 because low ESR sounds better.** It is not
 better here. The input cable's inductance (~5 µH for a 5 m run) resonates with the
-modules' ~20 µF of ceramic input capacitance at roughly **16 kHz**, and connecting a
+modules' ~44 µF of local input capacitance at roughly **11 kHz**, and connecting a
 charged bank rings that circuit. Cable resistance alone (~0.2 Ω for 5 m of 18 AWG,
 round trip) already supplies most of the damping, and D9 backstops whatever is
 left — so this is margin, not a crisis. But **C11's job here is damping, not ripple
@@ -1592,13 +1592,19 @@ with the sensors. A module puts the whole converter behind three pins.
 |---|---|---|
 | Part | Traco **TSR 1-2450** | Traco **TSR 1-2433** |
 | Output | **5.0 V ±2 %** (4.90–5.10 V) | **3.3 V ±2 %** (3.23–3.37 V) |
-| Input range | 6.5–36 V | 4.6–36 V |
+| Input range | 6.5–36 V | 4.75–36 V |
 | Output current | 1 A | 1 A |
 | Load here | S88: 300 mA peak, 18 mA average | MCU + radio + `VSENS`: ~150 mA peak, ~1 mA average |
-| Short-circuit | continuous, auto-recovery (limit ≈350 % of I_out) | same |
+| Short-circuit | continuous, auto-recovery; current limit **250 %** of I_out typ | same |
+| Over-temperature | 150 °C internal, auto-recovery | same |
+| No-load input current | **1 mA typ** | same |
+| Output ripple | 50 mV_pp typ (20 MHz BW) | same |
+| Switching frequency | 500 kHz typ (400–600) | same |
+| Max capacitive load | 470 µF | same |
+| Size | 11.7 × 7.5 × 10.1 mm, 2.54 mm pitch | same |
 | Package | SIP-3 through-hole, 78xx pin layout | same |
 | Operating temperature | −40…+85 °C | same |
-| Price / source | ~206 ฿, Digi-Key TH stock | ⚠ confirm TH stock for the -2433 |
+| Price / source (2026-09-02) | ฿206.49, Digi-Key TH, 26 k in stock | ฿206.49, Digi-Key TH, 10 k in stock |
 
 **U7's worst case is 3.37 V, under the 3.6 V ceiling of CN6-4 and the STM32WL.**
 That is why it must be the fixed-output part and never an adjustable module: the
@@ -1621,12 +1627,13 @@ simplicity, deliberately, and this document says so rather than hiding it.
 
 #### Pins
 
-Three pins in 78xx order — ⚠ **confirm against the TSR 1 datasheet before the
-footprint is committed**; the table is the expected arrangement, not a verified one.
+Three pins in 78xx order, **confirmed from the TSR 1 datasheet (rev. 2026-07-02,
+*Pinout* table)**. Traco adds one layout instruction of its own: *"avoid routing PCB
+traces under the converter."*
 
 | Pin | Name | Connect to |
 |---|---|---|
-| 1 | `+V_in` | `24V_PROT`. **`C_IN` (10 µF / 50 V X7R) directly across pins 1 and 2** |
+| 1 | `+V_in` | `24V_PROT`. **`C_IN` (22 µF / 50 V) directly across pins 1 and 2** |
 | 2 | `GND` | Ground plane, with its own wide copper back toward J14's ground pin |
 | 3 | `+V_out` | The rail. U6 → C14, C15, J12. U7 → C21, J8, Q1's source |
 
@@ -1638,7 +1645,7 @@ below; what it saves is every other row of the old BOM.
    24V_PROT ────┬───────┤1 +Vin  +Vout 3├───────┬─────────── V_OUT
                 │       │               │       │
             [ C_IN ]    │  TSR 1-24xx   │   [ C_OUT ]   (+ C15 on U6)
-           10 µF/50 V   │   U6 / U7     │    22 µF
+           22 µF/50 V   │   U6 / U7     │    22 µF
                 │       │    2 GND      │       │
                GND      └───────┬───────┘      GND
                                GND
@@ -1648,19 +1655,24 @@ below; what it saves is every other row of the old BOM.
 
 | LM5164 feature | In revision 1.0 |
 |---|---|
-| **EN/UVLO** — R30/R31, 16.1 V on / 15.1 V off | **Gone, deliberately.** The modules run down to 6.5 V / 4.6 V. The 15 V threshold was never a battery-protection number — a 24 V lead-acid bank at 15 V is already destroyed — it was a backstop *below* any controller's LVD so the node kept reporting `VBAT_SENSE` to the end. Without it the node simply reports further down. Bank protection is the charge controller's job and, at ~4.3 Wh/day, this node cannot flatten a bank in any realistic outage (*The energy budget*). Connect to the **battery terminal**, as *Three traps* §3 says |
+| **EN/UVLO** — R30/R31, 16.1 V on / 15.1 V off | **Gone, deliberately.** The modules run down to 6.5 V / 4.6 V. The 15 V threshold was never a battery-protection number — a 24 V lead-acid bank at 15 V is already destroyed — it was a backstop *below* any controller's LVD so the node kept reporting `VBAT_SENSE` to the end. Without it the node simply reports further down. Bank protection is the charge controller's job and, at ~3.8 Wh/day, this node cannot flatten a bank in any realistic outage (*The energy budget*). Connect to the **battery terminal**, as *Three traps* §3 says |
 | **`PGOOD`** | Gone. It only ever reached a test pad; TP21–24 now carry V_in/V_out of each module instead |
-| **10.5 µA quiescent current** | **Traded away.** TSR 1 no-load draw is ⚠ ≈1–2 mA per module (confirm in the datasheet): 2 × ~1.5 mA × 24 V ≈ 72 mW ≈ **1.7 Wh/day**, roughly the S88's own consumption. Affordable on solar — *The energy budget* has the new totals |
+| **10.5 µA quiescent current** | **Traded away.** TSR 1 no-load input current is **1 mA typ** per module (datasheet, 9/12 V_in models): 2 × 1 mA × 24 V ≈ 48 mW ≈ **1.15 Wh/day**, about half the S88's own consumption. Affordable on solar — *The energy budget* has the new totals |
 | **100 V input rating** | **Traded down to 36 V.** *What the input chain no longer covers* |
 | Type-3 ripple injection, `R_RON`, `C_BST`, inductor selection, layout of `SW`/`RON` | Inside the module. Nothing to tune, nothing to scope |
 | Short-circuit fold-back on the 5 V rail | **Kept.** TSR 1 has continuous short-circuit protection, so bring-up step 2 (short J12, watch 3.3 V not move) still proves the two-rail argument |
 
 #### Capacitors
 
-- **`C_IN` — 10 µF / 50 V X7R (1210), one per module, across pins 1–2 within
-  5 mm.** Replaces the two 2.2 µF/100 V parts per rail. 50 V is enough: it only
-  has to outlive the module it protects, and the module is a 36 V part. C11
-  upstream still does the bulk and cable-damping job (*The `24V_PROT` node*).
+- **`C_IN` — 22 µF / 50 V, one per module, across pins 1–2 within 5 mm.** The
+  value is Traco's, not ours: the datasheet requires *"an external input capacitor
+  22 µF / 50 V for input voltage higher than 32 VDC"*, and 32 V is the top of the
+  design range. Either a 1210 X7R (accept ~40 % DC-bias loss at 32 V — still more
+  than the 8.8 µF the LM5164 rails had) or a small aluminium electrolytic; the
+  module has its own internal filter capacitor, so ESR is not critical. 50 V is
+  enough: it only has to outlive the module it protects, and the module is a 36 V
+  part. C11 upstream still does the bulk and cable-damping job (*The `24V_PROT`
+  node*).
 - **`C_OUT` — 22 µF / 16 V X7R, one per module, optional.** The modules are
   internally compensated and Traco requires no output capacitor. It is fitted
   because it is cheap and takes the edge off the LoRa TX and S88 current steps;
@@ -1668,12 +1680,13 @@ below; what it saves is every other row of the old BOM.
 - **C15 — 100 µF on the 5 V rail, keep.** Its job is the S88's 300 mA steps
   through 5 m of cable inductance, which has nothing to do with which regulator is
   upstream. The head carries its own 100 µF (§4b) — both are needed, at opposite
-  ends.
+  ends. Total on the 5 V rail is ~222 µF, inside Traco's **470 µF** capacitive-load
+  limit; do not add bulk beyond that without checking the limit again.
 - **C11 — 100 µF / ≥63 V electrolytic, keep, and keep the voltage rating.** It
   sits on the clamped side of D9, which reaches 53.3 V during a surge. That the
   modules are 36 V parts does not lower what C11 sees.
 
-#### Layout — three rules
+#### Layout — four rules
 
 1. **`C_IN` across pins 1 and 2, within 5 mm.** The switching loop is inside the
    module, but its on-board input decoupling is small and the 500 kHz input ripple
@@ -1685,6 +1698,8 @@ below; what it saves is every other row of the old BOM.
 3. **Give each module's pin 2 its own wide GND return to J14.** It is the only
    ground pin the module has; do not let it share a thin trace with the analog
    ground or R25.
+4. **Nothing routed under the modules** — Traco's own instruction. The body sits
+   0.5 mm off the board; keep that footprint area copper-free on the top layer.
 
 The LM5164 rules about `SW` copper and the `RON` node have no equivalent — those
 nets are now inside the module.
@@ -1701,8 +1716,9 @@ parts**. Be clear about what F1/Q2/D9/C11 do and do not do for them:
   that stays off at 32 V clamps below ~45 V; that is TVS physics, not a wrong part
   number. D9 keeps a lightning-induced or switching transient from destroying the
   board; it does not keep the module inside its rating during one. Expect the
-  modules to survive brief clamp events (their absolute-maximum input is ⚠ to be
-  read off the datasheet) but do not design on it.
+  modules to survive brief clamp events — but the datasheet publishes no absolute
+  maximum beyond the 36 V operating limit, so treat 36 V as the ceiling and do not
+  design on anything above it.
 - **A charge controller that fails and passes panel V_oc (~44 V for a "24 V"
   panel) through kills both modules.** Nothing passive on this board prevents that,
   and adding an active OVP disconnect would put back the kind of circuit this
@@ -1721,16 +1737,15 @@ parts**. Be clear about what F1/Q2/D9/C11 do and do not do for them:
 *Why these and not the cheap 28 V modules*. The failure is slow: the module
 survives 24.0 V on the bench and dies the first afternoon the bank reaches absorb.
 
-**2. The pin order is an assumption until the datasheet says otherwise.** ⚠ 78xx
-order (V_in, GND, V_out) is expected. A reversed footprint puts 24 V on the output
-pin, and the S88 or the Nucleo is downstream of it. Check before the board is
-ordered, and buzz the footprint out before the modules are soldered.
+**2. The pin order is 78xx — 1 = +V_in, 2 = GND, 3 = +V_out — confirmed, but
+buzz the footprint out before the modules are soldered anyway.** A reversed
+footprint puts 24 V on the output pin, and the S88 or the Nucleo is downstream of
+it. It is a thirty-second check against a dead Nucleo.
 
-**3. No-load current is the number that moved the most, and it is not yet
-confirmed.** ⚠ The LM5164 drew 10.5 µA; the TSR 1 draws milliamps. The energy
-table below assumes ~1.5 mA per module. If the datasheet says more, the table
-moves — measure it during bring-up step 1 with both outputs unloaded and write the
-real number in.
+**3. No-load current is the number that moved the most.** The LM5164 drew 10.5 µA;
+the TSR 1 draws **1 mA typ** per module (datasheet). The energy table below uses
+that figure — but it is a *typical*, with no maximum published, so bring-up step 1
+still measures it with both outputs unloaded and writes the real number in.
 
 ### 5 V goes down the cable, not 24 V
 
@@ -1753,17 +1768,18 @@ For a 5 m run it buys nothing.
 |---|---|---|
 | **S88 LP, continuous** | 18 mA @ 5 V = 90 mW | **2.16 Wh** |
 | Module conversion loss (~85 % at these loads) | | ~0.4 Wh |
-| **Module no-load current, ×2** ⚠ | ~1.5 mA each × 24 V ≈ 72 mW | **~1.7 Wh** |
+| **Module no-load current, ×2** | 1 mA typ each × 24 V ≈ 48 mW | **~1.15 Wh** |
 | MCU + LoRa + probes + SHT45s | ~1 mA avg @ 3.3 V | <0.1 Wh |
 | ST-LINK, **if** you power it | ~5 mA @ 3.3 V | ~0.4 Wh |
-| **Total** | | **≈4.3 Wh/day** (≈2.5 with the LM5164s) |
+| **Total** | | **≈3.8 Wh/day** (≈2.5 with the LM5164s) |
 
 Against ~80 Wh/day from a 20 W panel at four peak-sun hours, the whole node — CO2
 sensor and regulators included — is **~5 %** of the yield. Overnight carry is 12 h ×
-~180 mW ≈ **2.1 Wh**; three cloudy days is ~13 Wh. Size the bank for the cloudy-day
-case, not for the node: a 20 Ah bank holds 480 Wh, over a hundred sunless days of
-this. The regulators' no-load current is now the second-largest line in the table,
-which is the price of revision 1.0 and the ⚠ that most wants a measured number.
+~155 mW ≈ **1.9 Wh**; three cloudy days is ~11.5 Wh. Size the bank for the
+cloudy-day case, not for the node: a 20 Ah bank holds 480 Wh, well over a hundred
+sunless days of this. The regulators' no-load current is now the second-largest
+line in the table, which is the price of revision 1.0; it is a datasheet *typical*,
+so bring-up step 1 measures it.
 
 **Consequences of that table**, all of which simplify the design:
 
@@ -1802,7 +1818,7 @@ controllers have a LOAD terminal that disconnects around 11.5 V/cell to protect 
 bank. A node on that terminal goes silent exactly when you most want telemetry
 about a failing solar system. **Connect to the battery terminal**, with F1/Q2/D9 as
 your own protection — and accept that the node is then responsible for not flattening
-the bank, which at ~4.3 Wh/day it will not: a 20 Ah bank outlasts a hundred sunless
+the bank, which at ~3.8 Wh/day it will not: a 20 Ah bank outlasts a hundred sunless
 days. The LM5164 revision kept a 15 V UVLO under this as a last backstop; the TSR 1
 has none and runs down to 6.5 V, so the node now reports right down to the bank's
 death — which, for a node whose job includes measuring the bank, is the behaviour
@@ -1888,12 +1904,13 @@ everything else:
    confirm **U6 = 5.0 V ±2 %** and **U7 = 3.3 V ±2 %** on a bench supply swept
    **18 → 32 V**. U7 must never read above **3.6 V** at any input voltage; if it
    does, stop — CN6-4 and the STM32WL are both absolute-max 3.6 V. A DMM is enough
-   for the rails; a scope on each output should show **<50 mV_pp** of ripple at
-   ~500 kHz and nothing slower. There is no `SW` node to inspect and no COT
+   for the rails; a scope on each output should show **≈50 mV_pp** of ripple
+   (datasheet typical) at ~500 kHz and nothing slower. There is no `SW` node to inspect and no COT
    bursting to catch — the converter is inside the module.
    **Measure and record the no-load input current** here, from the bench supply's
-   readout with both rails unloaded: §5's energy table assumes ⚠ ~3 mA total.
-   Write the real number into that table.
+   readout with both rails unloaded: §5's energy table uses the datasheet typical
+   of 1 mA per module, 2 mA total, and no maximum is published. Write the measured
+   number into that table.
 2. **Deliberately short the 5 V output at J12.** U6 should current-limit, run warm
    and recover when the short is removed; **U7 and the 3.3 V rail must not move at
    all.** This is the one test that proves §5's "an S88 fault cannot brown out the
@@ -2005,9 +2022,11 @@ exist:
   connectors pinout") for the CN6 power tap; **Table 9** ("External power sources:
   3V3") for the CN6-4 battery input; §6.6.5 and the solder-bridge tables cover the
   VCP/D0-D1 arrangement.
-- Traco Power **TSR 1 series** datasheet — U6/U7 (TSR 1-2450, TSR 1-2433): input
-  range, ±2 % output accuracy, short-circuit behaviour, and the two numbers §5
-  still carries a ⚠ against — the SIP-3 pin order and the no-load input current.
+- Traco Power **TSR 1 series** datasheet, rev. 2026-07-02 — U6/U7 (TSR 1-2450,
+  TSR 1-2433): input ranges, ±2 % set accuracy, 250 % current limit, 1 mA typ
+  no-load input current, the SIP-3 pinout (1 = +V_in, 2 = GND, 3 = +V_out), the
+  470 µF capacitive-load limit, the **22 µF / 50 V input capacitor required above
+  32 V_in**, and *"avoid routing PCB traces under the converter"*.
 - TI **LM5164** datasheet (SNVSAU4) and **AN-1481** — the discrete bucks of the
   previous revision, retained in
   [`hardware-interface-back.md`](hardware-interface-back.md). Not used by this build.

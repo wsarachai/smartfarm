@@ -158,7 +158,7 @@ Both bucks are **off-the-shelf modules** — Traco **TSR 1-2450** (5 V) and
 **TSR 1-2433** (3.3 V), 36 V input, 1 A, three pins each, no external network. They
 replaced two discrete TI LM5164 converters in revision 1.0 (2026-09) because ~30
 hand-tuned passives were too much to get right on a first board; the price is a
-36 V ceiling instead of 100 V and ~1.7 Wh/day of module no-load current. Why a
+36 V ceiling instead of 100 V and ~1.15 Wh/day of module no-load current. Why a
 **36 V** module and not a cheaper 28 V one: a 24 V bank sits at 28.8 V every
 afternoon. See [`docs/hardware-interface.md`](docs/hardware-interface.md) §5 *The
 buck modules* ([ฉบับภาษาไทย](docs/hardware-interface.th.md)); the LM5164 design is
@@ -269,13 +269,13 @@ quietly destroys the measurement.
 |---|---|---|
 | **S88 LP, continuous** | 18 mA @ 5 V = 90 mW | **2.16 Wh** |
 | Module conversion loss (~85 %) | | ~0.4 Wh |
-| Module no-load current, ×2 (⚠ datasheet) | ~1.5 mA each @ 24 V | ~1.7 Wh |
+| Module no-load current, ×2 | 1 mA typ each @ 24 V | ~1.15 Wh |
 | MCU + LoRa + probes + SHT45s | ~1 mA avg @ 3.3 V | <0.1 Wh |
-| **Total** | | **≈4.3 Wh/day** |
+| **Total** | | **≈3.8 Wh/day** |
 
 Against ~80 Wh/day from a 20 W panel at four peak-sun hours, the whole node —
 CO2 sensor 24/7 and both regulators — costs **~5 %** of the yield. Overnight carry
-is 12 h × ~180 mW ≈ **2.1 Wh**. Size the bank for three cloudy days (~13 Wh), not
+is 12 h × ~155 mW ≈ **1.9 Wh**. Size the bank for three cloudy days (~11.5 Wh), not
 for the node.
 
 **A bonus nobody planned:** 90 mW dissipated continuously holds the module a degree
