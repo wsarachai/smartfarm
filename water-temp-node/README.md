@@ -41,7 +41,7 @@ RTC wake (Stop2, 15 min)
   |                                       each at the end of its own 5 m cable)
   -> gate OFF -> park 1-Wire + I2C pins analog
   -> S88 CO2 read over Modbus/RS-485   <- AFTER the gate closes: the S88 has its
-  |                                       own always-on 5.1 V rail and its own
+  |                                       own always-on 5 V rail and its own
   |                                       UART, so it shares nothing with I2C
   -> bank_mv: VREFINT (real VDDA) + 300k/30k divider on PB3
   -> pack 36-byte v5 frame -> LoRa TX (923.2 MHz SF9BW125, 14 dBm)
@@ -54,7 +54,7 @@ RTC wake (Stop2, 15 min)
 > NUCLEO-WL55JC1 plus a large custom front-end carrying the six probe connectors,
 > **three connectors for the remote SHT45 branches**, an **RS-485 transceiver** for
 > the S88 CO2 head, the TCA9548A bus switch, the P-MOSFET gate, protection, and
-> **a 24 V solar input feeding two bucks**. Logic
+> **a 24 V solar input feeding two off-the-shelf buck modules**. Logic
 > travels one **2×19 IDC ribbon on morpho CN10**; the 3.3 V feed takes its own
 > keyed 2-pin lead to **CN6**, deliberately kept off the ribbon so a reversed
 > insertion cannot put the supply rail on a GPIO. See
@@ -130,7 +130,7 @@ S88 LP on RS-485. See [`docs/hardware-interface.md`](docs/hardware-interface.md)
 Power gate + sensors (Q1 = **AO3401A** or equivalent — pick on the
 R_DS(on) @ V_GS = −2.5 V row, not the −4.5 V one). The six probes, their pull-ups,
 the bus switch and every I2C pull-up sit on the switched rail. **The S88 does
-not** — it has its own always-on 5.1 V rail:
+not** — it has its own always-on 5 V rail:
 
 ```
                 3V3 ──S│ Q1    │D──┬──────────── VSENS (switched rail)
@@ -150,16 +150,19 @@ not** — it has its own always-on 5.1 V rail:
                                    │      ch2 ─[2.2k x2]══5 m══ SHT45 #2  นอก
                                    └── GND rail ── probe + sensor GNDs
 
-  24 V ─[F1]─[Q2]─[TVS]─┬─[U6 buck]─ 5.1 V ══ 5 m ══> S88 LP  (UNGATED)
-                        └─[U7 buck]─ 3.3 V ──> CN6-4 and Q1 above
+  24 V ─[F1]─[Q2]─[TVS]─┬─[U6 TSR1]─ 5.0 V ══ 5 m ══> S88 LP  (UNGATED)
+                        └─[U7 TSR1]─ 3.3 V ──> CN6-4 and Q1 above
 ```
 
-Both bucks are the **same chip twice** — a TI **LM5164DDAR**, 100 V input, 1 A,
-10.5 µA quiescent — differing only in three resistor values. The pin-by-pin
-schematic, every computed component value and the Type-3 ripple-injection network
-a constant-on-time converter needs are in
-[`docs/hardware-interface.md`](docs/hardware-interface.md) §5 *The bucks
-themselves* ([ฉบับภาษาไทย](docs/hardware-interface.th.md)).
+Both bucks are **off-the-shelf modules** — Traco **TSR 1-2450** (5 V) and
+**TSR 1-2433** (3.3 V), 36 V input, 1 A, three pins each, no external network. They
+replaced two discrete TI LM5164 converters in revision 1.0 (2026-09) because ~30
+hand-tuned passives were too much to get right on a first board; the price is a
+36 V ceiling instead of 100 V and ~1.7 Wh/day of module no-load current. Why a
+**36 V** module and not a cheaper 28 V one: a 24 V bank sits at 28.8 V every
+afternoon. See [`docs/hardware-interface.md`](docs/hardware-interface.md) §5 *The
+buck modules* ([ฉบับภาษาไทย](docs/hardware-interface.th.md)); the LM5164 design is
+kept in [`docs/hardware-interface-back.md`](docs/hardware-interface-back.md).
 
 Which probe is which is fixed by **which connector it is plugged into** — SKIP
 ROM, no ROM addressing, so two probes can never get swapped in software and there
@@ -181,7 +184,7 @@ in. An unconnected line sees no presence pulse, goes out as the invalid sentinel
 and is dropped by the gateway rather than showing up as a convincing `0.00 °C`.
 
 > **The 205 mA CO2 burst is gone from this rail.** The S88's 300 mA peaks are on
-> its own ungated 5.1 V buck output, so `VSENS` now carries only ~9 mA of probes
+> its own ungated 5 V buck output, so `VSENS` now carries only ~9 mA of probes
 > plus µA of SHT45s. Q1 is hugely over-specified for that, which is fine — its job
 > is now fault recovery, not current. See the settle-time
 > constraint in [`docs/hardware-interface.md`](docs/hardware-interface.md),
@@ -265,13 +268,15 @@ quietly destroys the measurement.
 | Load | Draw | Per day |
 |---|---|---|
 | **S88 LP, continuous** | 18 mA @ 5 V = 90 mW | **2.16 Wh** |
-| Buck losses (~90 %) | | ~0.24 Wh |
+| Module conversion loss (~85 %) | | ~0.4 Wh |
+| Module no-load current, ×2 (⚠ datasheet) | ~1.5 mA each @ 24 V | ~1.7 Wh |
 | MCU + LoRa + probes + SHT45s | ~1 mA avg @ 3.3 V | <0.1 Wh |
-| **Total** | | **≈2.5 Wh/day** |
+| **Total** | | **≈4.3 Wh/day** |
 
-Against ~80 Wh/day from a 20 W panel at four peak-sun hours, running the CO2 sensor
-24/7 costs **~3 %** of the yield. Overnight carry is 12 h × 90 mW ≈ **1.1 Wh**.
-Size the bank for three cloudy days (~7.5 Wh), not for the node.
+Against ~80 Wh/day from a 20 W panel at four peak-sun hours, the whole node —
+CO2 sensor 24/7 and both regulators — costs **~5 %** of the yield. Overnight carry
+is 12 h × ~180 mW ≈ **2.1 Wh**. Size the bank for three cloudy days (~13 Wh), not
+for the node.
 
 **A bonus nobody planned:** 90 mW dissipated continuously holds the module a degree
 or two above ambient, which is exactly what keeps local humidity off the dew point.
