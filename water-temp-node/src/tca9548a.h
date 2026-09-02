@@ -18,10 +18,18 @@
  * I2C device) and no extra signals across the board-to-board connector.
  *
  * Topology (see docs/hardware-interface.md):
- *   MCU I2C ---+--- TCA9548A (0x70) --+-- ch0 -- SHT45 #0 (0x44)
- *              |                      +-- ch1 -- SHT45 #1 (0x44)
- *              |                      +-- ch2 -- SHT45 #2 (0x44)
- *              +--- SCD41 (0x62)   <-- upstream: no collision, no channel needed
+ *   MCU I2C ------- TCA9548A (0x70) --+-- ch0 -- SHT45 #0 (0x44)  5 m
+ *                                     +-- ch1 -- SHT45 #1 (0x44)  5 m
+ *                                     +-- ch2 -- SHT45 #2 (0x44)  5 m
+ *                                     +-- ch3 -- SCD41   (0x62)  5 m
+ *
+ * NOTHING sits upstream of the switch. The SCD41's 0x62 does not collide with
+ * 0x44, so it looks like it could hang there directly -- and an earlier revision
+ * did exactly that, back when it was on the board. It cannot now: it is 5 m
+ * away, and an unswitched branch puts its ~320 pF on the bus permanently. With
+ * 4.7k upstream pull-ups that is a ~2 us rise time against the 1 us standard-mode
+ * limit, and worse again while a SHT45 channel is also open. Load-stacking is
+ * the whole reason this part is here, so the SCD41 gets a channel like the rest.
  *
  * The device has no register map. You write ONE byte, a bitmask of the channels
  * to connect; 0x00 disconnects everything. We only ever set a single bit, so the

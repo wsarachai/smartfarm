@@ -4,20 +4,22 @@
 **NUCLEO-WL55JC1** (STM32WL55JC). Every 15 minutes it wakes from **Stop2**, powers
 the sensor rail through an **AO3401A P-MOSFET**, reads **water temperature from up
 to six DS18B20 probes**, **air temperature + humidity from three remote SHT45s**
-and **CO2** (Senseair **S88 LP** over Modbus/RS-485), measures the 24 V bank
+and **CO2** (Sensirion **SCD41** over I2C), measures the 24 V bank
 through a divider, transmits one compact **AS923** LoRa uplink, and sleeps. It is
 **uplink-only** — it never listens for a downlink.
 
-**The MCU box lives outside the greenhouse; only sensors go inside.** The three
-SHT45s sit at three places on ≤5 m cables (head of the greenhouse, tail, and one
-outside as an ambient reference), and the S88 sits at the midpoint on its own 5 m
-RS-485 run.
+**The MCU box lives outside the mushroom house; only sensors go inside.** Four
+sensors sit at four places on ≤5 m cables, all four on the same I2C bus behind a
+TCA9548A bus switch: SHT45s at the head of the house, at the tail, and one outside
+as an ambient reference — and the **SCD41 at mid-house, at crop level**, which is
+where CO2 stratifies and where a ventilation decision has to be made.
 
 The probes and SHT45s sit on the **one gated rail**, so that part of the front-end
 is dead between wakes; each probe owns its own pin, so all six convert **in
 parallel** and rail-on time is one 750 ms conversion no matter how many are fitted.
-**The S88 is not gated** — it runs continuously: it has no sleep mode, its warm-up
-and IIR filter assume it, and solar can afford it. See [CO2 on a solar node](#co2-on-a-solar-node).
+**Everything is gated, including CO2** — the SCD41 takes on-demand single shots, so
+unlike the Senseair S88 it replaced it needs no always-on rail. See
+[CO2 on a solar node](#co2-on-a-solar-node).
 
 It does **not** talk to the web-server directly (that server only speaks HTTP on
 the WiFi LAN). The uplink is received by [`../lora-gateway`](../lora-gateway),
@@ -39,10 +41,9 @@ RTC wake (Stop2, 15 min)
   -> SHT45 x3 read (~10 ms each)       -> air temp + humidity, one mux
   |                                       channel at a time (all three are 0x44,
   |                                       each at the end of its own 5 m cable)
+  -> SCD41 CO2: 2x single shot (~10 s) <- LAST, still INSIDE the gate: 205 mA
+  |  on mux ch3, warm-up shot discarded    bursts must not overlap the probes
   -> gate OFF -> park 1-Wire + I2C pins analog
-  -> S88 CO2 read over Modbus/RS-485   <- AFTER the gate closes: the S88 has its
-  |                                       own always-on 5 V rail and its own
-  |                                       UART, so it shares nothing with I2C
   -> bank_mv: VREFINT (real VDDA) + 300k/30k divider on PB3
   -> pack 36-byte v5 frame -> LoRa TX (923.2 MHz SF9BW125, 14 dBm)
   -> radio cold-sleep -> Stop2
@@ -52,8 +53,8 @@ RTC wake (Stop2, 15 min)
 
 > Building the **real hardware**? It is two PCBs joined by a **cable** — the
 > NUCLEO-WL55JC1 plus a large custom front-end carrying the six probe connectors,
-> **three connectors for the remote SHT45 branches**, an **RS-485 transceiver** for
-> the S88 CO2 head, the TCA9548A bus switch, the P-MOSFET gate, protection, and
+> **four connectors for the remote I2C branches** (three SHT45s and the SCD41),
+> the TCA9548A bus switch, the P-MOSFET gate, protection, and
 > **a 24 V solar input feeding two off-the-shelf buck modules**. Logic
 > travels one **2×19 IDC ribbon on morpho CN10**; the 3.3 V feed takes its own
 > keyed 2-pin lead to **CN6**, deliberately kept off the ribbon so a reversed
@@ -83,14 +84,14 @@ build). They deliberately avoid the RF-switch pins **PC3/PC4/PC5**, SWD
 | **SDA** (3x remote SHT45 via mux)   | PA11 | CN10-5 |
 | **SCL** (3x remote SHT45 via mux)   | PA12 | CN10-3 |
 | Sensor-rail power gate (P-MOSFET)   | PA8  | CN10-16 |
-| **S88 CO2** (LPUART1 → RS-485)      | **PC1** (TX) / **PC0** (RX) | CN10-23 / CN10-14 |
-| **S88 RS-485 direction** (`DE`+`!RE`) | **PA7** | **CN10-15** |
 | **24 V bank sense** (ADC1_IN2)      | **PB3** | **CN10-31** |
 | Signal grounds                      | —    | CN10-9, CN10-20 |
 | 3.3 V in (from the buck)            | —    | CN6-4 (own cable) |
 | Debug log (**USART1 → 3-pin header**) | **PB6** (TX) / **PB7** (RX) | CN10-35/37 |
 
-> **`DQ_P4` moved from PC1 to PB8** to free PC1 as `LPUART1_TX` for the S88.
+> **`DQ_P4` moved from PC1 to PB8** in 2026-08 to free PC1 for the Senseair S88.
+> That sensor is gone and PC1 is free again, but `DQ_P4` **stays on PB8** — moving
+> it back would churn the connector contract and the board for no gain.
 > **The debug log moved off the ST-LINK VCP**: feeding 3V3 directly at CN6-4
 > leaves the ST-LINK unpowered, and PA2/PA3 are not on the morpho at all — so
 > USART1 goes out to a 3-pin header for a USB-serial adapter instead.
@@ -124,13 +125,15 @@ loads the bus at any moment — three 5 m branches never add up to a 15 m bus. T
 is what keeps plain I2C viable at this distance, and it is why the **downstream
 pull-ups are 2.2 kΩ, not 4.7 kΩ**: at 5 m, 4.7 kΩ gives a 1.27 µs rise against a
 1000 ns budget, so it passes on a bench lead and starts NACKing on the real cable.
-**Nothing sits upstream of the switch any more** — the SCD41 was replaced by the
-S88 LP on RS-485. See [`docs/hardware-interface.md`](docs/hardware-interface.md) §3.
+**Nothing sits upstream of the switch** — the SCD41's 0x62 would not collide with
+0x44, but it is 5 m away, and an unswitched branch would park ~320 pF on the bus
+permanently. It gets **channel 3**. See
+[`docs/hardware-interface.md`](docs/hardware-interface.md) §3.
 
 Power gate + sensors (Q1 = **AO3401A** or equivalent — pick on the
 R_DS(on) @ V_GS = −2.5 V row, not the −4.5 V one). The six probes, their pull-ups,
-the bus switch and every I2C pull-up sit on the switched rail. **The S88 does
-not** — it has its own always-on 5 V rail:
+the bus switch, every I2C pull-up **and the SCD41** sit on the switched rail —
+there is no always-on sensor rail in this revision:
 
 ```
                 3V3 ──S│ Q1    │D──┬──────────── VSENS (switched rail)
@@ -150,12 +153,12 @@ not** — it has its own always-on 5 V rail:
                                    │      ch2 ─[2.2k x2]══5 m══ SHT45 #2  นอก
                                    └── GND rail ── probe + sensor GNDs
 
-  24 V ─[F1]─[Q2]─[TVS]─┬─[U6 TSR1]─ 5.0 V ══ 5 m ══> S88 LP  (UNGATED)
-                        └─[U7 TSR1]─ 3.3 V ──> CN6-4 and Q1 above
+  24 V ─[F1]─[Q2]─[TVS]───[U7 TSR1-2433]─ 3.3 V ──> CN6-4 and Q1 above
 ```
 
-Both bucks are **off-the-shelf modules** — Traco **TSR 1-2450** (5 V) and
-**TSR 1-2433** (3.3 V), 36 V input, 1 A, three pins each, no external network. They
+The buck is a single **off-the-shelf module** — Traco **TSR 1-2433**, 36 V input,
+1 A, three pins, no external network. The 5 V module went with the S88 in revision
+2.0. It
 replaced two discrete TI LM5164 converters in revision 1.0 (2026-09) because ~30
 hand-tuned passives were too much to get right on a first board; the price is a
 36 V ceiling instead of 100 V and ~1.15 Wh/day of module no-load current. Why a
@@ -183,10 +186,11 @@ Fewer than six probes fitted? Leave the pin table alone and just don't plug them
 in. An unconnected line sees no presence pulse, goes out as the invalid sentinel,
 and is dropped by the gateway rather than showing up as a convincing `0.00 °C`.
 
-> **The 205 mA CO2 burst is gone from this rail.** The S88's 300 mA peaks are on
-> its own ungated 5 V buck output, so `VSENS` now carries only ~9 mA of probes
-> plus µA of SHT45s. Q1 is hugely over-specified for that, which is fine — its job
-> is now fault recovery, not current. See the settle-time
+> **The 205 mA CO2 burst is back on this rail**, and it is the number that sizes
+> Q1: `VSENS` carries the six probes (~9 mA), the SHT45s and mux (µA) and the
+> SCD41's 175 mA typ / 205 mA max bursts. `main.cpp` reads the SCD41 **last**, so
+> those bursts never overlap a DS18B20 conversion. The AO3401A passes 205 mA with
+> two orders of magnitude to spare. See the settle-time
 > constraint in [`docs/hardware-interface.md`](docs/hardware-interface.md),
 > because more bulk fights the 10 ms `DS_POWER_SETTLE_MS`.
 
@@ -249,74 +253,85 @@ numbers mean.
 
 ## CO2 on a solar node
 
-**This section used to be about rationing the SCD41. It is now about why no
-rationing is needed.** The CO2 sensor is a **Senseair S88 LP** on Modbus/RS-485,
-and it runs **continuously**.
+**This section has been rewritten twice, and the direction is the point.** It was
+about rationing an SCD41; then about why a Senseair S88 could not be rationed at
+all; it is now about a CO2 sensor that costs **0.024 Wh/day** and is no longer
+worth arguing about. The sensor is a **Sensirion SCD41** on I2C at `0x62`, on mux
+channel 3, at mid-house crop level, and it is **power-cycled with everything else**.
 
-### Why it cannot be duty-cycled
+### Why it goes back behind the gate
 
-The S88 has **no sleep mode** — "LP" just means a 4 s lamp period — and three
-things assume it is always on: the `WarmUp` status bit (set for <10 s after every
-power-up), the IIR filter that needs measurement history, and the self-heating that
-keeps the optics off the dew point. A fourth, **ABC (Automatic Baseline
-Correction)**, has an **8-day period** with accuracy "defined at continuous
-operation (at least three (3) ABC periods … with ABC turned on)"; under the old
-pacing — ~10 s per hour, a **0.28 % duty cycle** — eight days of powered time would
-have taken **7.8 years**. Whether ABC should even be *on* in a greenhouse (it
-assumes the 8-day minimum is 400 ppm fresh air, and a closed greenhouse can
-photosynthesise below that) is a separate decision recorded in
-[`docs/hardware-interface.md`](docs/hardware-interface.md) §3 *ABC in a greenhouse*;
-continuous operation is right either way. Duty-cycling this part does not save
-energy so much as it quietly destroys the measurement.
+The S88 it replaced had to run continuously — warm-up, an IIR filter needing
+history, and an 8-day ABC period. None of those bind on the SCD41:
+
+- **Warm-up** is handled per wake by a **throwaway first shot**. The first
+  single-shot after the rail comes up reads low, so `scd41_read_single_shot(1)`
+  takes two and discards one. ~10 s of sensor-on time per wake, and not optional.
+- **Filter history** is irrelevant: τ63 is 60 s and the node samples every 15 min.
+- **ASC is switched off here anyway** (below), so the 8-day period is moot — and
+  the datasheet's warning that *ASC is unavailable in power-cycled single-shot
+  operation* costs us nothing as a result.
+
+So the node has **no always-on sensor rail at all**, and `SENS_GATE` can recover a
+latched CO2 branch exactly as it recovers a latched SHT45 branch.
+
+### ASC must be OFF, and this is the most dangerous default in the design
+
+The SCD41 ships with **ASC enabled** and a 400 ppm baseline target. ASC assumes the
+sensor sees outdoor air at 400 ppm for >3 minutes every week and calibrates the
+lowest reading it has seen toward that.
+
+**A mushroom house never reaches 400 ppm.** A well-ventilated fruiting room sits at
+800–1500 ppm. ASC would drag every reading down, the controller would believe the
+air is fine, the house would be **under-ventilated** — long stems, small caps —
+and nothing on the dashboard would look wrong.
+
+`scd41_ensure_asc()` therefore enforces ASC-off on **every** wake (a 1 ms read;
+EEPROM is written only on a mismatch), and recalibration is done by hand with
+**FRC in outdoor air at each crop changeover**, when the house is emptied and
+cleaned anyway. Full procedure and its preconditions:
+[`docs/hardware-interface.md`](docs/hardware-interface.md) §3.
 
 ### Why that is affordable
 
 | Load | Draw | Per day |
 |---|---|---|
-| **S88 LP, continuous** | 18 mA @ 5 V = 90 mW | **2.16 Wh** |
-| Module conversion loss (~85 %) | | ~0.4 Wh |
-| Module no-load current, ×2 | 1 mA typ each @ 24 V | ~1.15 Wh |
+| U7 no-load input current | 1 mA typ @ 24 V | **0.58 Wh** |
 | MCU + LoRa + probes + SHT45s | ~1 mA avg @ 3.3 V | <0.1 Wh |
-| **Total** | | **≈3.8 Wh/day** |
+| Module conversion loss | | ~0.1 Wh |
+| **SCD41** — 2 single shots × 96 wakes | 0.45 mA per shot-cycle | **0.024 Wh** |
+| **Total** | | **≈0.8 Wh/day** |
 
-Against ~80 Wh/day from a 20 W panel at four peak-sun hours, the whole node —
-CO2 sensor 24/7 and both regulators — costs **~5 %** of the yield. Overnight carry
-is 12 h × ~155 mW ≈ **1.9 Wh**. Size the bank for three cloudy days (~11.5 Wh), not
-for the node.
+Against ~80 Wh/day from a 20 W panel at four peak-sun hours the whole node is
+**~1 %** of the yield — of which **72 % is a regulator doing nothing** and the CO2
+sensor is 3 %. There is no load left on this node worth optimising.
 
-**A bonus nobody planned:** 90 mW dissipated continuously holds the module a degree
-or two above ambient, which is exactly what keeps local humidity off the dew point.
-Duty-cycling it in a greenhouse would have made condensation **worse**.
+### The one thing the SCD41 is worse at
 
-So `CO2_ENABLED`, `CO2_EVERY_N_WAKES` and `CO2_SINGLE_SHOT_WARMUP` are **gone**.
-The cache in `main.cpp` survives for a different reason: to ride out a failed
-Modbus exchange by re-sending the last good value rather than dropping the metric.
-
-### What is still unverified
-
-| Item | Status |
-|---|---|
-| `S88_SITE_PRESSURE_DHPA` | **Set it for the site.** The S88 reads 1.6 % low per kPa below sea-level pressure (~6 % at Maejo's ~330 m) and compensates itself once HR27 holds the site pressure; the firmware writes it on the first wake. 0 = leave the sensor at factory default (uncompensated) |
-| Environmental fit | The S88 is rated **0–50 °C, 0–85 %RH non-condensing**, which a Thai greenhouse plausibly violates daily. See below |
+The S88 dissipated 90 mW and, by accident, that kept its optics a degree above
+ambient and off the dew point. The SCD41 dissipates ~1.5 mW averaged — **that
+protection is gone, in a wetter building.** A **heater resistor pad is laid out at
+the head and left DNP**: ~220 Ω / ~50 mW would add ~1.2 Wh/day, taking the node to
+~2.0 Wh/day, still less than the S88 revision consumed. Whether to fit it is a
+question for the SHT45 dew-point logs, not for the schematic.
 
 ### Staged deployment
 
-Because of that second row, the plan is deliberately staged:
+1. **Build the full board and all cabling now** — including J12, the channel-3
+   pull-ups and the heater pad. Nothing needs rework later.
+2. **Deploy with the three SHT45s only.** Log T/RH for a few weeks, including at
+   mid-house where the SCD41 will go, and compute the **dew point** — that, not RH
+   alone, is what the sensor cares about.
+3. **Fit the SCD41** (the `SEK-SCD41-SENSOR` breakout is the sane choice — the bare
+   part is reflow-only), and the heater resistor only if the logs call for it.
 
-1. **Build the full board and all cabling now** — connector, transceiver, 5 V rail,
-   protection. Nothing needs rework later.
-2. **Deploy with the three SHT45s only** (they are fine to 100 %RH and recover from
-   condensation). Log T/RH for a few weeks, including at the midpoint where the S88
-   will go.
-3. **Fit the S88 once the logs show you are inside 0–50 °C and ≤85 %RH.** If dawn
-   condensation is persistent, add a small heater resistor at the head first.
+Mount it in a vented, splash-protected housing with the **diffusion opening facing
+downward**, behind a PTFE/Gore membrane, **never sealed**, and **not in a misting
+nozzle's path**. **No radiation shield** — a mushroom house is dark.
 
-Mount it in a ventilated radiation shield with the **diffusion area facing
-downward**, behind a PTFE/Gore membrane. Never sealed — a sealed enclosure measures
-the CO2 of its own interior.
-
-**Why the F103 prototype still uses an SCD41:** it is mains-powered, on I2C, and
-already working. The S88 change applies to the WL55 node only.
+**Why the F103 prototype also uses an SCD41:** it always did. The 2026-08 S88
+detour applied to the WL55 node only, and revision 2.0 brings the two back into
+line — the same `src/scd41.{h,cpp}` driver now serves both.
 
 ## Build / flash
 
@@ -350,20 +365,22 @@ SWDIO=PA13, SWCLK=PA14, NRST, GND, 3V3 and remove the onboard ST-LINK jumpers.
 - `DS_*` pins, `DS_POWER_SETTLE_MS`, `DS_CONVERT_MS`.
 - `I2C_SDA_PIN` / `I2C_SCL_PIN` / `I2C_CLOCK_HZ`, `SHT45_ADDR`,
   `I2C_MUX_ADDR` / `I2C_MUX_CHANNELS` (channel = greenhouse location = frame slot).
-- `I2C_POWER_SETTLE_MS` — **now 10 ms**, was 1000 ms for the SCD41's power-up.
-- `S88_UART_TX_PIN` / `S88_UART_RX_PIN` / `S88_UART_BAUD`, `S88_MODBUS_ADDR`
-  (`0xFE`, "any sensor" — a point-to-point link), the register addresses
-  (`S88_IR_STATUS`, `S88_HR_PRESSURE`, `S88_HR_DEFAULT_PRESSURE`, all verified
-  against TDE14367 rev 5), `S88_SITE_PRESSURE_DHPA`,
-  `S88_RESPONSE_TIMEOUT_MS`, `S88_RETRIES`. See
+- `I2C_POWER_SETTLE_MS` — **10 ms**. It was 1000 ms for years, on the strength of
+  an SCD41 power-up figure the datasheet does not give: SCD4x v1.7 Table 7 says
+  **30 ms**. Corrected in 2026-09.
+- `SCD41_ADDR` (`0x62`), `SCD41_MUX_CHANNEL` (3), **`SCD41_ASC_ENABLED` (0 — the
+  factory default is 1 and it is wrong here)**, `SCD41_SITE_ALTITUDE_M` (330 m for
+  Maejo; EEPROM-backed, unlike ambient pressure which would be lost every wake),
+  and `SCD41_FRC_TARGET_PPM` for the service recalibration. See
   [CO2 on a solar node](#co2-on-a-solar-node).
 - `VBAT_SENSE_PIN` / `VBAT_SENSE_NUM` / `VBAT_SENSE_DEN` — the 24 V divider.
   Change these two if you fit different resistors, or every reported bank voltage
   is wrong by exactly that ratio.
 - `DEBUG_UART_ENABLED` / `DEBUG_UART_TX_PIN` / `DEBUG_UART_RX_PIN` — USART1 out to
   the 3-pin header, **not** the ST-LINK VCP. Comment out to drop serial logging.
-- **Gone:** `SCD41_ADDR`, `CO2_ENABLED`, `CO2_EVERY_N_WAKES`,
-  `CO2_SINGLE_SHOT_WARMUP` — the S88 runs continuously, so there is nothing to pace.
+- **Gone:** every `S88_*` symbol, and `CO2_ENABLED` / `CO2_EVERY_N_WAKES` /
+  `CO2_SINGLE_SHOT_WARMUP` — the SCD41 is read once per wake with no pacing, and
+  its warm-up is a discarded shot rather than a delay.
 
 ## DS18B20 bring-up test on an STM32F103C8T6 (Blue Pill)
 

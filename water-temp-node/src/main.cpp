@@ -6,16 +6,17 @@
  * (DS_PROBE_COUNT x DS18B20, one per pin), air temperature + humidity
  * (SHT45_COUNT x SHT45, behind a TCA9548A bus switch because they share one
  * factory-fixed I2C address)
- * and CO2 (Senseair S88 LP over Modbus/RS-485), measures the 24 V supply through
- * a divider, transmits ONE compact LoRa uplink (AS923), then sleeps. Uplink-only.
+ * and CO2 (Sensirion SCD41, on the same bus behind the switch), measures the
+ * 24 V supply through a divider, transmits ONE compact LoRa uplink (AS923),
+ * then sleeps. Uplink-only.
  *
- * The DS18B20s and SHT45s sit on the ONE gated rail, so that part of the
- * front-end is off between wakes. The S88 does NOT — it runs continuously from
- * its own 5.1 V rail, because its ABC needs continuous operation and 24 V solar
- * can afford it. The probes are nearly
- * free by comparison: each owns its own pin, so all six convert in PARALLEL
- * and the rail-on time is one 750 ms conversion regardless of how many are
- * fitted.
+ * EVERYTHING sits on the ONE gated rail, so the whole front-end is off between
+ * wakes. That includes the CO2 sensor as of 2026-09: the Senseair S88 it
+ * replaced had to run continuously on its own 5 V rail for its ABC, while the
+ * SCD41 takes on-demand single shots and is happiest power-cycled. The probes
+ * are nearly free by comparison: each owns its own pin, so all six convert in
+ * PARALLEL and their rail-on time is one 750 ms conversion regardless of how
+ * many are fitted.
  *
  * Deep sleep (Stop2) + the RTC wake timer are done with RAW HAL here (not the
  * STM32duino Low Power/RTC libraries — those 2.0.0 releases #error against the
@@ -33,7 +34,7 @@ extern "C" {
 #include "ds18b20.h"
 #include "sht45.h"
 #include "tca9548a.h"
-#include "s88.h"
+#include "scd41.h"
 #include "battery.h"
 #include "node_config.h"
 
@@ -75,17 +76,15 @@ static int sht45_select(int i)
 }
 
 /*
- * CO2 is now read EVERY wake — the S88 is always powered, so there is nothing to
- * pace. The cache remains for a different reason: to ride out a failed Modbus
- * exchange (a snagged cable, a wet connector) by re-sending the last good value
- * rather than dropping the metric. RAM survives Stop2.
+ * CO2 is read EVERY wake — one on-demand pair of single shots, no pacing.
+ * The cache rides out a failed exchange (a snagged cable, a wet connector) by
+ * re-sending the last good value rather than dropping the metric. Sensirion's
+ * per-word CRC-8 is what makes that safe: a corrupted reply fails its checksum
+ * and never reaches this cache, so a stale-but-real number is the worst case.
+ * RAM survives Stop2.
  */
 static uint16_t co2_last   = 0;
 static uint8_t  co2_valid  = 0;
-/* Site pressure (S88_SITE_PRESSURE_DHPA) is pushed into the sensor's EEPROM
- * once; this remembers that it succeeded so we do not re-read HR27 every wake.
- * Retried on each wake until the sensor has answered once. */
-static uint8_t  co2_site_ok = (S88_SITE_PRESSURE_DHPA == 0);
 
 /* -------------------------------------------------------------------------- */
 static void dbgf(const char *fmt, ...)
@@ -264,34 +263,58 @@ void loop(void)
                   && sht45_init(&i2c_sens, SHT45_ADDR)
                   && sht45_read(&air[i], &hum[i]);
     }
-    /* Leave nothing downstream bridged on when we let go of the bus. */
-    sht45_select(-1);
+    /* --- CO2 (SCD41 on mux channel 3), still inside the gated window ---
+     *
+     * LAST on purpose. The SCD41 draws 175 mA typ / 205 mA max in bursts while
+     * it measures — ten times anything else on this rail — so it is addressed
+     * only after every DS18B20 conversion has been read out and the SHT45s are
+     * done. Nothing that cares about a quiet supply is still working by then.
+     *
+     * The ordering pays for the power-up wait as well: SCD41_POWER_UP_MS has
+     * already elapsed several times over during the 750 ms conversion, so
+     * scd41_init() can go straight to work.
+     *
+     * warmup=1 costs a second 5 s shot and is not optional — the first
+     * measurement after the rail comes up reads low, and this node power-cycles
+     * the sensor on every single wake. See src/scd41.h. */
+    uint16_t co2       = 0;
+    int16_t  co2_t     = 0;           /* the SCD41's own T/RH: bring-up only, */
+    uint16_t co2_rh    = 0;           /* never transmitted (it self-heats)    */
+    int      okco2     = 0;
+    int      co2_asc   = -1;          /* -1 = never asked */
 
-    i2c_sens.end();
-    gate_off();
-    sensor_pins_park();
+    if (tca9548a_select(&i2c_sens, I2C_MUX_ADDR, SCD41_MUX_CHANNEL)
+        && scd41_init(&i2c_sens, SCD41_ADDR)) {
+        /* Both of these read first and write only on a mismatch, so the steady
+         * state is two 1 ms reads per wake and no EEPROM wear. They are checked
+         * every wake rather than once so that a replaced sensor is corrected
+         * automatically instead of quietly running the factory defaults —
+         * and the factory default for ASC is the one that would ruin the
+         * measurement here. See node_config.h. */
+        (void)scd41_ensure_asc(SCD41_ASC_ENABLED);
+        (void)scd41_ensure_altitude(SCD41_SITE_ALTITUDE_M);
+        (void)scd41_get_asc(&co2_asc);
 
-    /* --- CO2 (S88), AFTER the gate closes ---
-     * Deliberately outside the gated section: the S88 has its own always-on
-     * 5 V rail and its own UART, so it shares nothing with the I2C parts.
-     * Reading it here makes that independence obvious, and keeps the gated rail
-     * on for the shortest possible time. */
-    if (!co2_site_ok)
-        co2_site_ok = (uint8_t)s88_apply_site_pressure(S88_SITE_PRESSURE_DHPA);
-    uint16_t co2        = 0;
-    uint16_t co2_status = 0xFFFF;     /* 0xFFFF = no valid frame at all */
-    int      okco2      = s88_read_co2(&co2, &co2_status);
+        okco2 = scd41_read_single_shot(1, &co2, &co2_t, &co2_rh);
+    }
+
     const int co2_fresh = okco2;      /* for the log line, below */
     if (okco2) {
         co2_last  = co2;
         co2_valid = 1;
     } else if (co2_valid) {
-        /* Modbus CRC caught a bad frame, or the sensor did not answer. Re-send
-         * the last good value rather than dropping the metric — it is real, just
-         * one wake stale. */
+        /* A CRC failure or a dead branch. Re-send the last good value rather
+         * than dropping the metric — it is real, just one wake stale. */
         co2   = co2_last;
         okco2 = 1;
     }
+
+    /* Leave nothing downstream bridged on when we let go of the bus. */
+    tca9548a_none(&i2c_sens, I2C_MUX_ADDR);
+
+    i2c_sens.end();
+    gate_off();
+    sensor_pins_park();
 
     /* --- battery --- */
     uint16_t vmv = battery_read_mv();
@@ -343,11 +366,9 @@ void loop(void)
             dbgf("         air%d=%d/%d rh%d=%u\r\n",
                  i, (int)air[i], oksh[i], i, (unsigned)hum[i]);
         }
-        dbgf("         co2=%u/%d st=0x%04X%s\r\n", (unsigned)co2, okco2,
-             (unsigned)co2_status,
-             co2_fresh ? "" : (co2_status == 0xFFFF
-                                   ? " (cached - S88 did not answer)"
-                                   : " (cached - S88 status not OK)"));
+        dbgf("         co2=%u/%d asc=%d t=%d rh=%u%s\r\n",
+             (unsigned)co2, okco2, co2_asc, (int)co2_t, (unsigned)co2_rh,
+             co2_fresh ? "" : " (cached - SCD41 did not answer)");
         subghz_lora_sleep();
     } else {
         dbgf("radio init FAILED\r\n");

@@ -1,11 +1,20 @@
 # water-temp-node — hardware interface spec
 
+> ⚠ **SUPERSEDED — 2026-09.** This is the **Senseair S88 revision**: CO2 over
+> Modbus/RS-485 on an ungated 5 V rail. Kept verbatim because it is a complete,
+> costed design and because the S88 GH remains the fallback if the CO2 range
+> requirement ever widens past the SCD41's specified 400–5000 ppm.
+> The current spec is [`hardware-interface.md`](hardware-interface.md), whose
+> revision 2.0 replaces the S88 with a **Sensirion SCD41 on I2C**, deletes the
+> entire RS-485 subsystem and the 5 V rail with it, and puts the CO2 sensor back
+> behind `SENS_GATE`. **Do not build from this file.**
+
 The real (non-breadboard) build is **two PCBs joined by a cable**:
 
 | Board | What it is | Carries |
 |---|---|---|
 | **Brain** | NUCLEO-WL55JC1 (off-the-shelf) | STM32WL55JC, radio, RF switch, TCXO, antenna, ST-LINK |
-| **Front-end** | Large custom PCB, this spec | **6× DS18B20 probe connectors**, **4× I2C branch connectors** behind a bus switch (3× SHT45 + the SCD41 CO2 head), AO3401A rail gate, pull-ups, line protection, **24 V solar input and one off-the-shelf buck module** |
+| **Front-end** | Large custom PCB, this spec | **6× DS18B20 probe connectors**, **3× remote-SHT45 branch connectors** behind a bus switch, **RS-485 transceiver** for the S88 CO2 head, AO3401A rail gate, pull-ups, line protection, **24 V solar input and two off-the-shelf buck modules** |
 
 The front-end is a **large board sitting beside the Nucleo**, not stacked on it,
 and the two are joined by a short cable. This document specifies that joint: the
@@ -20,27 +29,6 @@ forced by code, the code is cited — change one and you change the other.
 - Cable-length guidance: [README → *Probe cable runs*](../README.md)
 - Thai translation: [`hardware-interface.th.md`](hardware-interface.th.md) — **this English file is the source of truth**; update it first
 
-> **Revision 2.0 (2026-09) — the CO2 sensor is a Sensirion SCD41 on I2C, and the
-> RS-485 subsystem is gone with the Senseair S88 that needed it.** The S88
-> wanted 4.5–5.25 V and Modbus over a 5 m differential pair, which cost this
-> board a second regulator, two transceivers, an LDO at the head, and three of
-> the eighteen signals crossing the joint. The SCD41 runs from the same 3.3 V as
-> everything else, speaks I2C with a CRC-8 on every word, and takes on-demand
-> single shots — so it joins the bus switch as a fourth branch and goes back
-> behind `SENS_GATE` with the rest of the front-end. The contract drops to
-> **fifteen** signals, the 5 V rail and its module are deleted, and the node's
-> whole budget falls to **~0.8 Wh/day**.
->
-> The deployment is a **mushroom house (โรงเรือนเพาะเห็ด)**, which is why the
-> part changed: dark, 90–95 %RH, misted, 15–30 °C, and CO2-rich by design. Text
-> written for a plant greenhouse — sun loads, radiation shields, crops drawing
-> CO2 down in daylight — has been corrected throughout, not just in this section.
->
-> The S88 revision is preserved in
-> [`hardware-interface-s88.md`](hardware-interface-s88.md); it stays readable
-> because the **S88 GH** is the fallback if the CO2 range requirement ever
-> widens past the SCD41's specified 400–5000 ppm. Do not build from it.
-
 > **Revision 1.0 (2026-09) — the discrete bucks are gone.** U6/U7 were two TI
 > LM5164 constant-on-time converters with a hand-calculated Type-3 ripple-injection
 > network, ~30 passives and a shared UVLO divider. They are replaced by two
@@ -54,8 +42,8 @@ forced by code, the code is cited — change one and you change the other.
 
 ## 1. The joint — which bus, and why
 
-Six probe connectors, four remote-sensor branch connectors, protection, a buck
-module and a 24 V solar input do not fit on a
+Six probe connectors, three remote-sensor branch connectors, an RS-485 head
+connector, protection, two buck regulators and a 24 V solar input do not fit on a
 68.6 × 53.4 mm ARDUINO outline. Once the front-end has to be its own
 large board it becomes a cabled peripheral rather than anything that mounts on
 the Nucleo — which is what decides the connector question.
@@ -66,7 +54,7 @@ the Nucleo — which is what decides the connector question.
 
 | Cable | Carries | Nucleo end | Front-end end |
 |---|---|---|---|
-| **Signal** | `SENS_GATE`, 6× `DQ_Pn`, `SDA`, `SCL`, `DBG_TX/RX`, `VBAT_SENSE`, 2× `GND` | **2×19 IDC socket over the whole of morpho CN10** | shrouded, keyed 2×19 box header |
+| **Signal** | `SENS_GATE`, 6× `DQ_Pn`, `SDA`, `SCL`, `S88_TX/RX`, `DBG_TX/RX`, `VBAT_SENSE`, 2× `GND` | **2×19 IDC socket over the whole of morpho CN10** | shrouded, keyed 2×19 box header |
 | **Power** | `V3V3_MCU`, `GND` | **1×8 socket over the whole of ARDUINO CN6** (only pins 4/6/7 wired) | keyed, latching 2-pin (JST-XH or Micro-Fit 3.0) |
 
 Signal cable: 2.54 mm, 40-way rainbow ribbon cut to **38 conductors**, IDC
@@ -126,8 +114,9 @@ Still worth doing on top:
    ┌────────────────────────────────────────────┐
    │  FRONT-END PCB (large, custom)             │
    │  J1..J6 probe terminals · Q1 gate · TVS    │   <- this spec
-   │  U3 mux -> J9..J12 (3x SHT45 + SCD41, 5 m) │
-   │  U7 TSR 1-2433 · J14 24 V solar in         │
+   │  U3 mux -> J9..J11 (3x SHT45, 5 m each)    │
+   │  U4 RS-485 -> J12 (S88 CO2 head, 5 m)      │
+   │  U6/U7 TSR 1 · J14 24 V solar in           │
    │                                            │
    │   [2x19 box header, keyed]      [2-pin]    │
    └────────────┬──────────────────────┬────────┘
@@ -153,32 +142,22 @@ vibration and thermal cycling long before anything electrical fails.
 
 ## 2. Signals crossing the connector
 
-**Fifteen** signals. Freeze this table; it is the interface. Every other position
+**Eighteen** signals. Freeze this table; it is the interface. Every other position
 on CN10 is **left unconnected** at the front-end.
 
-Note what is *not* here: **four** remote sensors — three SHT45s and the SCD41 —
-add **no** signals at all, even though they sit at four different places in the
-mushroom house. They are separated on the front-end by a bus switch that is
-itself an I2C device (§3), so the joint does not grow with them. That is the
-single most valuable property of this interface: sensor count is decoupled from
-connector width.
+Note what is *not* here: the three SHT45s add **no** signals even though they now
+sit at three *different* places in the greenhouse. They are separated on the
+front-end by a bus switch that is itself an I2C device (§3), so the joint does not
+grow with them. Resolving their shared address with three individual power gates
+instead would have cost three more — and would not have worked; see below.
 
-> **The contract went twelve → eighteen → fifteen. Read the direction.** The
-> 2026-08 revision *grew* it: a Senseair S88 replaced the SCD41 and spoke
-> UART/Modbus rather than I2C, bringing `S88_TX`/`S88_RX`/`S88_DE`; a 24 V solar
-> supply put the MCU behind a buck and broke `battery_read_mv()`'s VREFINT
-> trick, bringing `VBAT_SENSE`; and an unpowered ST-LINK forced the debug log
-> onto its own pins, `DBG_TX`/`DBG_RX`.
->
-> Revision 2.0 (2026-09) *shrinks* it: the SCD41 returns, so all three `S88_*`
-> signals go. **`PC1`, `PC0` and `PA7` are now free and are deliberately left
-> unused** — the front-end must not connect them. `DQ_P4` stays on **PB8** even
-> though `PC1` is available again; moving it back would churn this table, the
-> firmware pin map and the board layout for no gain.
->
-> **Older front-end boards are not forward-compatible at any of these steps** —
-> and an eighteen-signal board is not merely over-provisioned for this revision,
-> it is wrong: it has a 5 V rail this design does not generate.
+> **What grew the contract from twelve to eighteen (2026-08).** The SCD41 was
+> replaced by a **Senseair S88 LP**, which speaks **UART/Modbus, not I2C**, and
+> wants **4.5–5.25 V** — so it brought `S88_TX`/`S88_RX`/`S88_DE`. Supply moved to a **24 V
+> solar bank**, which put the MCU behind a buck and broke `battery_read_mv()`'s
+> VREFINT trick, so a divider brought `VBAT_SENSE`. And with the ST-LINK
+> deliberately unpowered, the debug log needs its own pins: `DBG_TX`/`DBG_RX`.
+> **Older front-end boards are not forward-compatible.**
 
 | Signal | WL55 pin | Connector | Direction | Electrical | Forced by |
 |--------|----------|-----------|-----------|------------|-----------|
@@ -189,24 +168,25 @@ connector width.
 | `DQ_P1` | **PA4** | **CN10-17** | bidir, open-drain | 1-Wire | `DS_PROBE_BUSES` |
 | `DQ_P2` | **PA9** | **CN10-19** | bidir, open-drain | 1-Wire | `DS_PROBE_BUSES` |
 | `DQ_P3` | **PC2** | **CN10-21** | bidir, open-drain | 1-Wire | `DS_PROBE_BUSES` |
-| `DQ_P4` | **PB8** | **CN10-27** | bidir, open-drain | 1-Wire — moved off PC1 in 2026-08 and **stays here** | `DS_PROBE_BUSES` |
+| `DQ_P4` | **PB8** | **CN10-27** | bidir, open-drain | 1-Wire — **moved off PC1**, which is now `S88_TX` | `DS_PROBE_BUSES` |
 | `DQ_P5` | **PB10** | **CN10-25** | bidir, open-drain | 1-Wire | `DS_PROBE_BUSES` |
 | `I2C_SDA` | **PA11** | **CN10-5** | bidir, open-drain | I2C @ 100 kHz; parked **analog** in sleep | `node_config.h` `I2C_SDA_PIN` |
 | `I2C_SCL` | **PA12** | **CN10-3** | out of brain, open-drain | I2C @ 100 kHz | `node_config.h` `I2C_SCL_PIN` |
+| `S88_TX` | **PC1** | **CN10-23** | out of brain, push-pull | LPUART1 TX, 9600 8N1 Modbus RTU → RS-485 driver | `node_config.h` `S88_UART_*` |
+| `S88_RX` | **PC0** | **CN10-14** | in to brain | LPUART1 RX ← RS-485 receiver | `S88_UART_*` |
+| `S88_DE` | **PA7** | **CN10-15** | out of brain, push-pull | RS-485 driver enable: HIGH while transmitting, LOW otherwise | `node_config.h` `S88_DE_PIN` |
 | `VBAT_SENSE` | **PB3** | **CN10-31** | in to brain, **analog** | divided 24 V bank voltage, 0–3.0 V — ADC1_IN2 | `battery.cpp` |
 | `DBG_TX` | **PB6** | **CN10-35** | out of brain, push-pull | USART1 TX, 115200 → 3-pin debug header | `DEBUG_UART_*` |
 | `DBG_RX` | **PB7** | **CN10-37** | in to brain | USART1 RX ← debug header | `DEBUG_UART_*` |
 | `GND` (signal) | — | **CN10-9**, **CN10-20** | — | one net (GND); wire **both** — see *Returns vs guards* | — |
-| `VSENS` | — | — | front-end internal | **gated** 3.3 V to probes, **all four** I2C branches, mux **and** all pull-ups | `main.cpp` `gate_on()` |
+| `VSENS` | — | — | front-end internal | **gated** 3.3 V to probes, SHT45 branches, mux **and** all pull-ups | `main.cpp` `gate_on()` |
+| `V5_S88` | — | — | front-end internal | **ungated** 5 V to the S88 head — runs continuously | §5 |
 
-**There is exactly one internal rail now.** `V5_S88` is gone with the sensor that
-needed it, so the front-end generates `VSENS` and nothing else.
-
-**Sizing `V3V3_MCU`:** the largest single draw is still the **LoRa TX's ~150 mA**,
-but the SCD41 is now on this rail too and bursts to **175 mA typ / 205 mA max**
-while it measures. Those two never overlap — the radio is powered only after the
-gate has closed (§7, and `main.cpp`) — so the rail is sized for ~205 mA, not for
-their sum. The six probes add ~9 mA during their conversion.
+**The peak-current figure changed with the CO2 sensor.** It is now the **LoRa TX's
+~150 mA**, because the S88 LP no longer shares this rail — it lives on its own
+ungated 5 V buck output (§5), and its 300 mA peaks are drawn there, not from
+`V3V3_MCU`. The six probes add ~9 mA during the conversion. Size `V3V3_MCU` for the
+radio, not for the sensors.
 
 > **`VBAT_SENSE` is the one analog conductor in the ribbon.** It sits at CN10-31,
 > between LED3 (CN10-30, left open) and AGND (CN10-32, left open) — the quietest
@@ -216,7 +196,7 @@ their sum. The six probes add ~9 mA during their conversion.
 
 `VSENS` is generated **on the front-end** and never crosses back to the Nucleo. The
 only power crossing the joint is `V3V3_MCU` and its ground, on their own cable.
-The buck module, and the 24 V input that feeds it, live entirely on the front-end.
+Both buck modules, and the 24 V input that feeds them, live entirely on the front-end.
 
 ### Two rules the front-end must honor
 
@@ -416,12 +396,12 @@ must not connect. The CN7 map is in
 | 7   | AVDD      | ⛔ VREF+ — do not load | 8 | 5V_USB_CHGR | leave open |
 | 9   | **GND**   | ✅ GND return 1 of 2   | 10 | NC    | guard (GND at front-end only) |
 | 11  | **PA5**   | ✅ `DQ_P0`             | 12 | PC6   | button B3 — leave open |
-| 13  | PA6       | spare                  | 14 | PC0     | spare — **freed in rev 2.0**, leave open |
-| 15  | PA7       | spare — **freed in rev 2.0**, leave open | 16 | **PA8** | ✅ `SENS_GATE` |
+| 13  | PA6       | spare                  | 14 | **PC0** | ✅ `S88_RX` (LPUART1 RX) |
+| 15  | **PA7**   | ✅ `S88_DE` (RS-485 dir) | 16 | **PA8** | ✅ `SENS_GATE` |
 | 17  | **PA4**   | ✅ `DQ_P1`            | 18 | NC     | guard (GND at front-end only) |
 | 19  | **PA9**   | ✅ `DQ_P2`            | 20 | **GND** | ✅ GND return 2 of 2 |
 | 21  | **PC2**   | ✅ `DQ_P3`            | 22 | PB0     | ⛔ VDD_TCXO |
-| 23  | PC1       | spare — **freed in rev 2.0**, leave open | 24 | NC   | guard (GND at front-end only) |
+| 23  | **PC1**   | ✅ `S88_TX` (LPUART1 TX) | 24 | NC   | guard (GND at front-end only) |
 | 25  | **PB10**  | ✅ `DQ_P5`            | 26 | PB9     | LED2 — leave open |
 | 27  | **PB8**   | ✅ `DQ_P4` (moved off PC1) | 28 | PB15 | LED1 — leave open |
 | 29  | PB5       | spare                 | 30 | PB11    | LED3 — leave open |
@@ -575,10 +555,11 @@ part that lives **off** the PCB. Counting the whole front-end:
 | C2                          | 100 nF     | 1     | On the PCB — `VSENS` decoupling |
 | *(no ref — not on the PCB)* | **100 nF** | **3** | **At each SHT45**, across VDD/VSS at the far end of that branch |
 | C8                          | 100 nF     | 1     | On the PCB — at the TCA9548A bus switch |
+| C9                          | 100 nF     | 1     | On the PCB — at the RS-485 transceiver |
 | C1                          | 1–10 µF    | 1     | On the PCB — `VSENS` bulk (bounded by `DS_POWER_SETTLE_MS`, § below) |
-| *(no ref — not on the PCB)* | **100 µF + 100 nF** | 1 ea | **At the SCD41 head**, for its 205 mA bursts — the reservoir that keeps them off 5 m of cable |
+| *(no ref — not on the PCB)* | 100 µF + 100 nF | 1 ea | **At the S88 head**, for its 300 mA peaks |
 
-So **twelve 100 nF parts: ten out at the sensors, two on the board** — and the
+So **eleven 100 nF parts: nine out at the sensors, two on the board** — and the
 nine remote ones are bought with the sensor harnesses, not with the PCB assembly.
 **This inverted in 2026-08**: the SHT45s left the board and took their capacitors
 with them, and the SCD41's C3/C7 went with the part.
@@ -611,36 +592,27 @@ A probe that is not fitted needs nothing populated but is harmless if it is: an
 unconnected line sees no presence pulse, is transmitted as the invalid sentinel,
 and is dropped by the gateway rather than appearing as a fake 0.00 °C.
 
-### The I2C sensors — three SHT45s and the SCD41, all remote
+### The I2C sensors — three REMOTE SHT45s
 
-**Four branches, one per channel.** Every sensor on this bus is at the far end of
-its own cable; nothing measures anything inside the enclosure:
+**This reversed in 2026-08.** The three SHT45s used to mount on the front-end board
+and read three points *inside the enclosure*. They now sit at **three different
+places in the โรงเรือน**, each on its own cable:
 
-| Sensor | Addr | Mux ch | Location | Frame slot |
-|---|---|---|---|---|
-| SHT45 #0 | 0x44 | 0 | **หัวโรงเรือน** — house head | `air_temp0` / `humidity0` |
-| SHT45 #1 | 0x44 | 1 | **ท้ายโรงเรือน** — house tail | `air_temp1` / `humidity1` |
-| SHT45 #2 | 0x44 | 2 | **นอกโรงเรือน** — outside, ambient reference | `air_temp2` / `humidity2` |
-| **SCD41** | **0x62** | **3** | **กลางโรงเรือน** — mid-house, **at crop level** | `co2` |
+| Sensor | Mux ch | Location | Frame slot |
+|---|---|---|---|
+| SHT45 #0 | 0 | **หัวโรงเรือน** — greenhouse head | `air_temp0` / `humidity0` |
+| SHT45 #1 | 1 | **ท้ายโรงเรือน** — greenhouse tail | `air_temp1` / `humidity1` |
+| SHT45 #2 | 2 | **นอกโรงเรือน** — outside, ambient reference | `air_temp2` / `humidity2` |
 
-The MCU box lives **outside** the mushroom house, because the house is humid and
-misted and the electronics should not be. Only sensors go inside. Every branch is
+The MCU box lives **outside** the greenhouse, because the greenhouse is hot and
+humid and the electronics should not be. Only sensors go inside. Every branch is
 **≤5 m**.
-
-**The SCD41 gets a channel even though its address does not collide.** 0x62 and
-0x44 could coexist upstream of the switch, and an earlier revision did exactly
-that — back when the SCD41 was *on the board*. It cannot now: an unswitched
-branch puts its ~320 pF on the bus permanently. With the 4.7 kΩ upstream pull-ups
-that is a ~2 µs rise time against standard mode's 1 µs limit, and worse again
-whenever an SHT45 channel is open at the same time. Load-stacking is the whole
-reason the switch is here; the CO2 sensor does not get an exemption from it.
 
 Sensor #0 keeps mux channel 0 because its history is continuous with the old
 single-SHT45 series — see *Which sensor is which* below. **Sensor #2 is the
-ambient reference**, and it is the only one that sees sun: it needs a
-**radiation shield**, not merely an enclosure, because an unshielded sensor in
-Thai sun reads 10–15 °C above true air temperature and the reference becomes
-worthless. The three inside the house need no shield — a mushroom house is dark.
+ambient reference** and needs a **radiation shield**, not merely an enclosure: an
+unshielded sensor in Thai sun reads 10–15 °C above true air temperature and the
+reference becomes worthless.
 
 > **Why ≤5 m matters, and where it stops working.** I2C's standard-mode limits are
 > **400 pF** of bus capacitance and **1000 ns** rise time. Cat5 is ~56 pF/m, and the
@@ -659,9 +631,7 @@ worthless. The three inside the house need no shield — a mushroom house is dar
 > needs a chip at *both* ends of *every* branch, which is six ICs and power at
 > three wet locations to solve what one P82B715 per branch solves.
 
-The CO2 sensor is **back on this bus** as of revision 2.0 — see *The CO2 sensor*
-below for why, and for the one way it is not like the other three: it draws
-**205 mA in bursts**, which is ten times anything else the front-end powers.
+The CO2 sensor is **no longer on this bus at all** — see *The CO2 sensor* below.
 
 #### Why there is a bus switch
 
@@ -688,10 +658,9 @@ to be switched is the bus, not the power.**
 So the three SHT45s sit behind a **TCA9548A** (or PCA9548A) bus switch, one
 channel connected at a time. It is itself an I2C device, so it costs **no MCU
 pins and no connector signals** — which is why three sensors at three places in the
-house still fit inside the same contract — and a fourth, the SCD41, joined them in
-revision 2.0 without widening it by a single signal. **Nothing sits upstream of
-the switch:** the SCD41's 0x62 would not collide with 0x44, but it is 5 m away, so
-it takes channel 3 rather than loading the bus permanently.
+greenhouse still fit inside the same contract. **Nothing else is on this bus:** the
+SCD41 that used to sit upstream at 0x62 has been replaced by the S88 LP, which is
+on RS-485 and not on I2C at all.
 
 Drawn as a net list rather than as art:
 
@@ -727,12 +696,12 @@ the probe capacitors and for the same reason.
 | U1a SHT45 | `0x44` | mux ch0 | air temp 0, humidity 0 | Frame slot 0 — the historic `air_temp`/`humidity` series. **หัวโรงเรือน** |
 | U1b SHT45 | `0x44` | mux ch1 | air temp 1, humidity 1 | `air_temp_2` / `humidity_2`. **ท้ายโรงเรือน** |
 | U1c SHT45 | `0x44` | mux ch2 | air temp 2, humidity 2 | `air_temp_3` / `humidity_3`. **นอกโรงเรือน**, in a radiation shield |
-| U3 TCA9548A | `0x70` | upstream | — | 8-channel bus switch; A2/A1/A0 to GND. **Channels 0–3 used**, four spare |
+| U3 TCA9548A | `0x70` | upstream | — | 8-channel bus switch; A2/A1/A0 to GND. Only 3 channels used |
 
-**Nothing is upstream of the switch except the switch itself**, which is what makes
-the **all-channels-closed I2C scan** in §7 a clean test: with every channel closed
-you should see **`0x70` and nothing else**. Open channels 0–2 and each shows
-**`0x44`**; open channel 3 and it shows **`0x62`**.
+The SCD41 that used to sit upstream at `0x62` is **gone** — replaced by the S88 LP
+on RS-485. Nothing is upstream of the switch now except the switch itself, which
+simplifies the **all-channels-closed I2C scan** in §7: with every channel closed you
+should see **`0x70` and nothing else**.
 
 **Each downstream channel needs its own pull-ups.** The mux passes signals, not
 the pull-ups: a channel with none floats and the SHT45 on it never answers. That
@@ -834,7 +803,7 @@ gate FET's copper — nothing on this PCB measures air any more. What replaces t
 
 1. **Each sensor needs its own small vented housing at its own location**, and #2
    needs a **radiation shield** (§6). The front-end enclosure itself no longer has
-   to be vented for humidity — but see *The CO2 sensor*, because the SCD41's head
+   to be vented for humidity — but see the S88 section, because the *sensor head*
    emphatically does.
 2. **Silkscreen the destination, not just the channel number.** `CH0 → หัว`,
    `CH1 → ท้าย`, `CH2 → นอก` next to J9/J10/J11. Three identical connectors feeding
@@ -845,277 +814,321 @@ gate FET's copper — nothing on this PCB measures air any more. What replaces t
    electrical; it is someone reconnecting J10 and J11 after maintenance and
    silently swapping "inside the greenhouse" with "ambient reference".
 
-### The CO2 sensor — Sensirion SCD41, on I2C
+### The CO2 sensor — Senseair S88 LP, on RS-485
 
-**Revision 2.0 (2026-09).** The CO2 part is a **Sensirion SCD41** (`SCD41-D-R2`,
-Digi-Key TH ฿673.73), photoacoustic NDIR, I2C at **0x62**, on **mux channel 3**
-and a 5 m cable to the middle of the house at crop level. Everything below is
-from the SCD4x datasheet **v1.7, April 2025**.
+**This replaced the SCD41 in 2026-08 and it is not a drop-in.** The numbers below
+are from Senseair's own documents, all read in full on 2026-09-02: **PSP14281**
+rev 4 (S88 LP product spec), **TDE14367** rev 5 (*Modbus on Senseair S88*),
+**TDE15154** rev 1 (*Customer Integration Guidelines*), and **PSP15075** rev 3
+(S88 LP **PH**, the pin-header variant). Anything marked *measured* is from the
+oscilloscope captures in TDE15154, not the spec table.
 
-It replaces a **Senseair S88 LP**, and the reason is the building. The S88 LP is
-rated **0–50 °C, 0–85 %RH** with the RH limit derating to 45 % at 50 °C. A
-mushroom house sits at **90–95 %RH**, is misted directly, and condenses. That was
-never going to hold.
+| Spec | S88 LP (004-1-0101) | SCD41 it replaced | Consequence |
+|---|---|---|---|
+| Interface | **UART, Modbus RTU** — no I2C at all | I2C `0x62` | Leaves the I2C bus entirely; needs LPUART1 + RS-485 |
+| Supply | **4.5–5.25 V**, abs-max 5.5 V | 3.3 V | Forces a second rail (§5) |
+| Peak current | ≤300 mA (measured 240–290 mA, each 4 s lamp pulse) | ~205 mA | Sized at the 5 V rail, not `V3V3_MCU` |
+| Average current | ≤18 mA spec; **measured 5–8 mA at 25 °C, ~10 mA at 50 °C** | — | 90 mW is the worst case the budget uses; reality is about half |
+| Measurement interval | **4 s** (LP); 2 s on the Residential part | 5 s/shot | The sensor has no sleep mode — this is how "LP" saves power |
+| Warm-up / response | <10 s / τ63 <40 s | 5 s ×2 | Nothing to wait for at a 15 min wake |
+| Accuracy | ±40 ppm ±3 % of reading (400–3000 ppm); ±10 % to 10 000 ppm | ±(40 ppm + 5 %) | Comparable |
+| Operating range | **0–50 °C, 0–85 %RH, dew point ≤35 °C**; RH limit *derates* from 85 % at 38 °C to 45 % at 50 °C | −10–60 °C, 0–95 %RH | **The main deployment risk — see below, and the GH variant** |
+| ABC | 8-day period, on by default, tuning ≤30–50 ppm per period | ASC | Continuous power required *if* ABC is used — see *ABC in a greenhouse* |
+| Pressure | 1.6 % of reading per kPa; **compensation built in but off** (HR27) | external value | Fixable in one register write — see below |
+| Protection | **unprotected against surges and reverse connection** | — | Needs external protection on a 5 m outdoor run |
+| Size | 33.9 × 19.8 × 8.7 mm, <5 g; castellated pads, or 2.54 mm headers on the **PH** variant | — | Buy the **PH (004-1-0103)** for a hand-built head board |
 
-| | S88 LP (replaced) | **SCD41** |
+#### Why it runs continuously
+
+The S88 has **no sleep mode** (TDE15154: *"does not use any sleep feature"*); its
+low-power trick is simply a 4 s lamp period. Four things want it powered all the
+time, and only the last is negotiable:
+
+1. **Warm-up.** The `WarmUp` status bit stays set until the first unfiltered
+   reading (<10 s). A node that powered the sensor for one Modbus read per wake
+   would spend every wake inside warm-up.
+2. **The IIR filter.** Readings are filtered across multiple measurement periods
+   with dynamic adjustment; a cold-started sensor has no history and returns a
+   settling value.
+3. **Self-heating keeps the optics dry.** Even at the measured 5–8 mA the module
+   sits above ambient, which is what keeps local humidity off the dew point in a
+   greenhouse. Duty-cycling it would have made condensation **worse**.
+4. **ABC**, if enabled: an 8-day period with accuracy *"defined at continuous
+   operation (at least three ABC periods)"*. At the old `CO2_EVERY_N_WAKES = 4`
+   pacing — ~10 s per hour, a 0.28 % duty cycle — eight days of *powered* time
+   would have taken **7.8 years**.
+
+Solar makes all of this affordable: at the spec 18 mA the S88 is **90 mW ≈
+2.16 Wh/day**, ~3 % of a 20 W panel's ~80 Wh/day, and the measured average is
+about half that. So `CO2_ENABLED`, `CO2_EVERY_N_WAKES` and `CO2_SINGLE_SHOT_WARMUP`
+are **deleted**, the S88 is **not** on `SENS_GATE`, and the firmware reads the
+latest value every wake.
+
+#### ABC in a greenhouse — a decision, not a default
+
+PSP14281 Note 1: *"Exposure to concentrations below 400 ppm may result in incorrect
+operation of ABC algorithm and shall be avoided for model with ABC ON."* ABC works
+by assuming the **lowest** reading in each 8-day window is fresh air at 400 ppm
+(HR33 `ABC Target`) and slowly pulling the calibration toward it. A ventilated
+greenhouse at night sits above 400 ppm from plant respiration and ABC is fine. A
+**closed** greenhouse in the afternoon can be *drawn down* below 400 ppm by
+photosynthesis — and ABC would then recalibrate a real 300 ppm to read 400,
+biasing every reading for the next eight days.
+
+Which case this greenhouse is cannot be known from the desk, so:
+
+- **Ship with ABC on** (factory default, HR32 = 180 h) and **log the daily
+  minimum for the first two weeks.** If it stays ≥ ~420 ppm, ABC is safe; leave it.
+- If the daily minimum drops toward 400, **disable ABC** — write HR32 = 0 once (it
+  suspends ABC without erasing its history) — and instead do a **background
+  calibration in outdoor air** (HR2 = 0x7C06) at install and every ~6 months. That
+  is the maintenance Senseair's own S88 **GH** part assumes (below).
+- Do **not** raise HR33 to "typical greenhouse minimum": that number changes with
+  crop stage and ventilation and is exactly what you are trying to measure.
+
+> This weakens one argument in the previous revision — "ABC forces continuous
+> operation" — without changing the conclusion: the first three reasons above are
+> enough on their own.
+
+#### The alternative part — Senseair S88 GH (004-1-0102)
+
+Senseair sells a greenhouse variant on the same platform, and Digi-Key TH stocks
+it next to the LP (PSP14808 rev 2; ฿896.64, 307 in stock on 2026-09-02, against
+฿628.99 / 427 for the LP):
+
+| | **S88 LP** 004-1-0101 | **S88 GH** 004-1-0102 |
 |---|---|---|
-| Supply | 4.5–5.25 V | **2.4–5.5 V** — the same 3.3 V as everything else |
-| Interface | UART/Modbus over RS-485 | **I2C, CRC-8 on every 16-bit word** |
-| Operating range | 0–50 °C, 0–85 %RH (derating) | **−10–60 °C, 0–95 %RH** non-condensing |
-| Duty | continuous — ABC needs it | **on-demand single shot** |
-| Average current | 18 mA, forever | **0.45 mA** at one shot / 5 min |
-| Peak current | 300 mA | 175 typ / **205 max mA** |
-| Output range | 400–10 000 ppm | **0–40 000 ppm** (specified 400–5000) |
-| Accuracy | ±40 ppm ±3 % | ±(50 ppm + 2.5 %) 400–1000 · ±(50 + 3 %) to 2000 · ±(40 + 5 %) to 5000 |
-| Response τ63 | <40 s | 60 s |
-| On the board it costs | 2nd regulator, U4, U5, head LDO, A/B TVS, 3 signals | **one mux channel** |
+| Humidity | 0–85 %RH, derating above 38 °C | **0–95 %RH** non-condensing |
+| Range / accuracy | 400–10 000 ppm; ±40 ppm ±3 % | **0–20 000 ppm**; ±50 ppm ±5 % |
+| Measurement interval | 4 s | **1 s** |
+| Average current | ≤18 mA (measured 5–8) | **≤60 mA** — ~300 mW, ~7 Wh/day |
+| Warm-up | <10 s | <3 s |
+| ABC | on by default | **off by default**; "requires periodic calibration" |
+| Life expectancy | >15 years, maintenance-free | >5 years |
+| Footprint, pinout, Modbus map, 5 V supply | identical | identical |
 
-What that table is really saying: **the S88 cost this board a whole subsystem, and
-the SCD41 costs it a connector.** §5's second rail, §4's RS-485 parts and three of
-the eighteen signals in §2 all existed to carry one sensor 5 m. They are gone.
+It is a **drop-in for the head board and the firmware**: same nine pads in the same
+places, same `UART_R/T`, same TDE14367 registers. What it changes is the *system*:
+the deployment risk in the next section largely disappears, and in exchange the
+node's energy budget roughly doubles (~7 Wh/day for the sensor alone — still under
+10 % of the panel, but no longer "uninteresting"), the sensor needs a background
+calibration every few months, and the 5 V rail's average load rises to ~60 mA
+(TSR 1-2450 is a 1 A part; unaffected). **The staged deployment below defers the
+S88 purchase anyway, so this decision can wait for the SHT45 logs** — if they show
+RH above 85 % for hours every night, buy the GH.
 
-> **Dropping Modbus costs no data integrity.** That was the one real argument for
-> the S88 — a corrupted Modbus frame fails CRC16 and is retried, while a
-> corrupted I2C transaction hands back a plausible wrong number. The SCD41 closes
-> that hole itself: **every 16-bit word carries a CRC-8** (poly 0x31, init 0xFF),
-> which `src/sensirion_i2c.cpp` already verifies for the SHT45s. A bad read never
-> reaches the cache in `main.cpp`.
+#### The pins, electrically
 
-#### Where it goes, and why there
+PSP14281 Table 2. Every logic pin is referenced to **`DVCC_out`, the S88's internal
+3.3 V**, and none has any protection.
 
-**กลางโรงเรือน, at crop level.** CO2 is heavier than air and the blocks are what
-produce it, so it stratifies and is densest at bed height. The number that should
-drive a ventilation fan is the one the crop is actually sitting in — not the one
-at the ridge, and not the one by the door.
+| Pin | Direction | Electrical | What this design does with it |
+|---|---|---|---|
+| `G+` / `G0` | power | 4.5–5.25 V, abs-max **5.5 V**, no reverse protection | 5 V from U6 over 22 AWG; reverse-polarity FET at the head |
+| `DVCC_out` | out | 3.3 V ±3 %, **6 mA max**, no protection; "external series resistor strongly recommended" | **Unloaded.** U5 gets its own LDO |
+| `UART_TxD` | out | high 2.4 V @ 2 mA, low ≤0.5 V @ 8 mA; 120 kΩ pull-up to `DVCC_out`; **abs-max `DVCC_out` + 0.5 V** | → U5 `DI` |
+| `UART_RxD` | in | V_IH 2.3 V … `DVCC_out` + 0.3 V; 120 kΩ pull-up; **abs-max `DVCC_out` + 0.5 V = 3.8 V** | ← U5 `RO`. **A 5 V transceiver's RO destroys this pin** |
+| `UART_R/T` | out | high 2.4 V @ 2 mA; 120 kΩ pull-**down** (receive at reset); "for half-duplex RS485 transceiver like MAX485" | → U5 `DE` + `!RE`. 2.4 V clears a 3.3 V transceiver's 2.0 V V_IH |
+| `bCAL_in` | in | 120 kΩ pull-up to `DVCC_out`; **closed to `G0` for 4–8 s = background calibration to 400 ppm; ≥16 s = zero calibration** | **Not routed, not padded.** See the trap below |
+| `PWM 1kHz` | out | 3.3 V CMOS, 0–2000 ppm | Unused, leave open |
+| `Alarm_OC` | out | open collector, **10 kΩ pull-up to `G+` (5 V)**, 100 mA sink | Unused, leave open — and never tie it to a 3.3 V input |
 
-That is a different place from all three SHT45s (head, tail, outside), which is
-why the SCD41 gets its own cable and its own channel rather than sharing a head.
+Three consequences that were not written down before:
 
-#### What this node measures, and what it does not
+- **The head transceiver must be a 3.3 V part. Full stop.** `sourcing-th.md`
+  used to say a MAX485 "works if you power it from 5 V and accept 5 V logic". It
+  does not: a 5 V `RO` into `UART_RxD` exceeds the pin's absolute maximum by
+  1.2 V. THVD1450 / MAX3485 / SP3485 at 3.3 V, or nothing.
+- **`bCAL_in` is a live calibration button with no debounce and no confirmation.**
+  In a head enclosure at 95 %RH, a film of condensate bridging an exposed
+  `bCAL_in` pad to ground for four seconds silently recalibrates the sensor to
+  400 ppm; sixteen seconds and it zero-calibrates to 0 ppm. On the castellated
+  part leave the pad unsoldered and un-routed; on the PH part clip the pin.
+  Calibration is done over Modbus (HR2), deliberately, from the bench.
+- **The 120 kΩ internal pulls are weak.** TDE15154 warns that long or capacitive
+  TxD/RxD/R/T wiring may need external pull-up/down. On the head board these
+  three lines are a few millimetres long, so nothing is added; do not run them
+  off-board.
 
-**The design case is ventilation control during fruiting: 400–3000 ppm.** That is
-the band where the SCD41 is most accurate — ±(50 ppm + 2.5 %) below 1000 ppm — and
-it is the band where the decision actually lives, because oyster mushrooms
-answer high CO2 with long stems and small caps.
+#### The link — RS-485, and who drives the direction pin
 
-**During spawn run the house is deliberately CO2-rich and will read past 5000 ppm.**
-The SCD41 keeps outputting up to **40 000 ppm**, so the data does not clip — but
-above 5000 ppm it is outside its specified accuracy. Treat those numbers as
-qualitative ("still colonising"), not as research-grade measurements. If a
-future crop plan needs calibrated spawn-run figures, that is the point at which
-the **S88 GH** (0–20 000 ppm, 0–95 %RH) in
-[`hardware-interface-s88.md`](hardware-interface-s88.md) comes back — and it
-brings the 5 V rail and RS-485 back with it.
+The S88 drives its own transceiver's direction from `UART_R/T`; the front-end
+drives its transceiver from `PA7`. No firmware knows about the head end.
 
-#### Why it sits behind the gate, unlike its predecessor
+```
+  FRONT-END PCB (dry box)                 SENSOR HEAD (greenhouse, 5 m)
 
-The S88 had to run continuously: warm-up, an IIR filter that needed history, and
-an ABC period measured in days. Take those one at a time against the SCD41:
+  PC1 S88_TX ------- U4.DI                    U5.RO --- S88.UART_RxD
+  PC0 S88_RX ------- U4.RO                    U5.DI --- S88.UART_TxD
+  PA7 S88_DE --+---- U4.DE                    U5.DE --+- S88.UART_R/T
+               +---- U4.nRE                   U5.nRE -+  (the S88 drives it)
 
-| Reason the S88 needed continuous power | SCD41 |
-|---|---|
-| Warm-up | Handled per wake by a **throwaway first shot** — see below |
-| Filter history | Not needed: τ63 is 60 s and the node samples every 15 min |
-| Self-heating kept the optics dry | Lost either way — see *Condensation* below |
-| ABC period of 8 days | **ASC is switched off here anyway** — see *ASC* below |
+  U4.A ========== twisted pair A =========== U5.A
+  U4.B ========== twisted pair B =========== U5.B
 
-So the CO2 sensor goes back on `VSENS` with the probes and the SHT45s, and this
-board has **no always-on sensor rail at all**. `SENS_GATE` recovers a latched CO2
-branch exactly as it recovers a latched SHT45 branch.
+  V5_S88 ======== 5.0 V, 22 AWG ============ S88.G+   + 100uF + 100nF
+  GND    ======== GND   ==================== S88.G0
+                                             U5.VCC <- local 3V3 LDO off 5 V
+                                             S88.bCAL_in, PWM, Alarm_OC: open
+```
 
-**The cost is the throwaway shot.** The first single shot after the rail comes up
-reads low — the photoacoustic cell needs one cycle to settle — so
-`scd41_read_single_shot(warmup=1)` takes two and discards the first. That is
-**~10 s of sensor-on time per wake**, and it is not optional on a node that
-power-cycles the sensor 96 times a day. Datasheet §3.11; the caveat is written
-into `src/scd41.h` where the next person will meet it.
+Three decisions are embedded there:
 
-Energy: 2 shots × 96 wakes/day ≈ **0.024 Wh/day**, against a node budget of
-~0.8 Wh/day and a panel yield of ~80 Wh/day. It is the smallest line in §5's table.
+1. **`DE` and `!RE` are tied together and driven by one MCU pin.** Firmware raises
+   `S88_DE`, writes the request, waits for the transmit-complete flag, then drops
+   it — `src/s88.cpp` does this around `flush()`, which is exactly what blocks
+   until the last stop bit has left the shift register. Dropping `DE` before that
+   truncates the frame, which is the classic RS-485 bug; using `flush()` rather
+   than a delay is what avoids it.
 
-#### ASC — turn it off, and understand why before you turn it back on
+   > **Why not an auto-direction transceiver.** It was the first choice, because it
+   > would have saved this signal and removed the bug class entirely. It does not
+   > survive contact with the supply rails: the common auto-direction parts
+   > (MAX13487E/MAX13488E) are **5 V** devices, and their `RO` output would drive
+   > 5 V into an STM32WL pin that is **not 5 V tolerant** — and, at the head end,
+   > into the S88's 3.8 V-absolute-maximum `UART_RxD`. Level-shifting to save one
+   > pin is not a trade worth making. A plain 3.3 V transceiver plus one GPIO is
+   > the honest answer, and `PA7` was spare.
 
-**The SCD41 ships with ASC (Automatic Self-Calibration) enabled** and a baseline
-target of **400 ppm**. ASC assumes the sensor is *"exposed to outdoor fresh air at
-400 ppm CO2 at least once for >3 minutes after every week of operation"*
-(datasheet §3.8) and slowly calibrates the lowest reading it has seen toward that
-target.
+2. **Do not power the head transceiver from `DVCC_out`.** It is tempting: the S88
+   offers a 3.3 V output right there. But it is rated **6 mA max** with a warning
+   that *"induced noise or excessive current drawn may affect sensor performance"*,
+   and a THVD1450 alone idles at ~1 mA and drives the pair at far more. Use a small
+   3.3 V LDO off the 5 V rail and leave `DVCC_out` unloaded.
+3. **No termination resistors at 5 m.** At 9600 baud the edges are microseconds and
+   5 m is electrically nothing; a 120 Ω terminator would only waste current. Do
+   choose a **true-failsafe** receiver (THVD1450, MAX3485E) so an idle undriven bus
+   reads as a stop bit rather than as garbage — that saves the bias resistor pair
+   as well.
 
-**A mushroom house never reaches 400 ppm.** A well-ventilated fruiting room sits
-at 800–1500 ppm. If the true weekly minimum is 700 ppm and ASC believes it is 400,
-ASC drags every reading down by ~300 ppm, and keeps going each period until it
-saturates.
+> **`S88_DE` sits at CN10-15, between `S88_RX` (14) and `SENS_GATE` (16).** That
+> looks like it breaks the "every signal gets a guard neighbour" rule, and it is
+> deliberate: all three are **slow** lines (a 9600-baud direction line held for
+> ~8 ms, a 9600-baud receive line, and a rail gate that changes twice per wake).
+> Grouping the slow signals together is what keeps them away from the six
+> bit-banged DQ conductors, which are the ones that actually need the guards.
 
-Follow that through to the failure: the sensor reads low → the controller
-believes the air is fine → **the house is under-ventilated** → long stems, small
-caps. That is precisely the outcome the sensor was fitted to prevent, and
-**nothing on the dashboard looks wrong while it happens.** This is the single
-most dangerous default in this design.
+**Protection is not optional here.** The datasheet states the part is unprotected
+against surges and reverse connection, and this is 5 m of cable in a wet building.
+Fit a **reverse-polarity FET on `G+` at the head**, and TVS on A/B at both ends.
+`G+` absolute maximum is 5.5 V: the 5.0 V ±2 % rail is inside it, but nothing else
+may ever reach that pin.
 
-So:
+#### Modbus — what the sensor actually speaks
 
-- **ASC off.** `set_automatic_self_calibration_enabled` (0x2416) with 0, then
-  `persist_settings` (0x3615, 800 ms) to survive the power cycling.
-- **The firmware enforces it on every wake**, not once — `scd41_ensure_asc()`
-  reads first (1 ms) and writes only on a mismatch, so a replaced sensor is
-  corrected automatically and the EEPROM is never written twice for the same
-  value. Unlike everything else on this board, this is a setting the firmware
-  must actively *change*, because the factory default is the wrong one.
-- **Recalibrate by hand with FRC**, in outdoor air, at each crop changeover —
-  which is when the house is emptied and cleaned anyway, so it is an existing
-  operational rhythm rather than an invented chore.
+TDE14367 rev 5, in full, as far as this node needs it. **The previous revision of
+this document guessed a holding register; that guess was wrong** — CO2 is an
+*input* register, read with function `0x04`, and function `0x03` at the same
+address returns the pressure setting. `src/s88.cpp` was corrected on 2026-09-02.
 
-**The FRC procedure**, and its preconditions are strict (datasheet §3.8.1):
-
-1. Take the head **outdoors**, into open air away from people and exhausts.
-2. Let it run **>3 minutes in stable, homogeneous CO2** — in single-shot terms,
-   **more than three shots at 1-minute intervals**. FRC on a sensor that has not
-   been measuring returns `0xFFFF` and does nothing.
-3. Altitude compensation must already be set (below). Supply must be the normal
-   3.3 V, not a bench 5 V.
-4. `perform_forced_recalibration` (0x362f, 400 ms) with the reference value —
-   **~420 ppm** for outdoor air, `SCD41_FRC_TARGET_PPM` in `node_config.h`.
-5. Read back the correction it applied. A large jump is worth writing down.
-
-`scd41_perform_frc()` implements this but **does not enforce the preconditions** —
-it is a bench/service call, deliberately not wired into the wake loop.
-
-> **Do not "fix" ASC by raising the target instead.** Setting
-> `set_automatic_self_calibration_target` to the house's typical minimum looks
-> tempting and is a trap: that minimum moves with crop stage, flush timing and
-> the ventilation schedule — it is the quantity you are trying to measure.
-
-#### Altitude, not pressure
-
-The SCD41 reads high or low with air density, and it has no barometer. Two
-commands can tell it where it is:
-
-- `set_ambient_pressure` (0xe000) — lives in **RAM**, and this node drops the
-  sensor's rail every 15 minutes, so it would be lost every wake. Useless here.
-- `set_sensor_altitude` (0x2427) — **EEPROM-backed** after `persist_settings`.
-  Written once, survives the power cycling. This is the one to use.
-
-`SCD41_SITE_ALTITUDE_M` in `node_config.h` holds it (**330 m** for Maejo), and
-`scd41_ensure_altitude()` applies the same read-before-write rule as ASC. Set it
-before the first FRC — a recalibration performed at the wrong altitude bakes the
-error in.
-
-#### The 205 mA problem, and the three things done about it
-
-This is the one axis on which the SCD41 is *harder* than the part it replaced,
-relative to everything else on the rail. It draws **175 mA typ / 205 mA max** in
-bursts while measuring — ten times its own average, and ten times anything else
-the front-end powers. The datasheet also asks that the supply, measured without
-the sensor's own load, *"not vary by more than 30 mV (e.g. ripples or drops caused
-by other loads)"*, and recommends giving it a dedicated LDO.
-
-Three mitigations, and together they are enough:
-
-1. **22 AWG on the CO2 branch**, not the 24 AWG used for the SHT45s. Round-trip
-   resistance drops to **0.53 Ω** (22 AWG is 52.96 Ω/km, and 5 m out and back is
-   10 m), so the worst-case IR drop at 205 mA is **109 mV**: the head sees ~3.12 V
-   against a 2.4 V minimum. (24 AWG would give 173 mV — it would still work, but
-   there is no reason to spend the margin.)
-2. **100 µF + 100 nF at the head**, across VDD/GND and close to the sensor. This
-   is the local reservoir that keeps the burst off the cable in the first place,
-   and it is the practical substitute for the dedicated LDO the datasheet asks for.
-3. **Read it last, inside the gated window.** `main.cpp` addresses the SCD41 only
-   after every DS18B20 conversion has been read out and all three SHT45s are done.
-   Nothing that cares about a quiet 3.3 V is still working when the bursts start.
-   The ordering pays for the power-up wait too: by then the rail has been up for
-   the whole 750 ms conversion, so `SCD41_POWER_UP_MS` costs nothing.
-
-> **`VDD` and `VDDH` must be tied together** at the sensor, and the datasheet is
-> explicit that both are supplied from the same rail. On a breakout board this is
-> already done; on a bare LGA it is a mistake that is easy to make once.
-
-#### The head
-
-The SCD41 is a **10.1 × 10.1 × 6.5 mm LGA, MSL 1, reflow-solderable** — there is
-no through-hole variant. Two honest ways to build the head:
-
-| | Part | Notes |
+| | Value | Note |
 |---|---|---|
-| **Breakout** | Sensirion **`SEK-SCD41-SENSOR`** (Digi-Key TH) | VDD/VDDH already bridged, pull-ups fitted, 2.54 mm pins. **The right choice for a research build** — no reflow, no rework risk on a part that costs ฿674 |
-| Bare | **`SCD41-D-R2`** on a small custom head PCB | Cheaper per unit and smaller; needs reflow or hot air, and the land pattern in datasheet §4.2 |
+| Framing | RTU only, **9600 baud only**, 8 data, no parity | 19200 is not supported |
+| Stop bits | Sensor accepts 1; **sensor replies with 2** | An 8N1 receiver sees the second as idle — harmless |
+| Silent interval | 3.5 characters ≈ **4 ms** at 9600 (11-bit chars) | Between frames; inter-byte gap <1.5 chars |
+| Response time-out | **180 ms max** | `S88_RESPONSE_TIMEOUT_MS` is 200 |
+| Address | 1–247 individual; **`0xFE` = "any sensor"**; 0 = broadcast | Factory individual address is in HR20 and not stated in the docs. This is a point-to-point link with one slave, so the node uses **`0xFE`** — every S88 answers it and a swapped sensor needs no reconfiguration. Senseair notes it violates Modbus on a shared bus; there is no shared bus here |
+| CO2 | **IR4**, address `0x0003`, function **`0x04`**, ppm | Pressure-compensated when HR4 ≠ 0 |
+| Status | **IR1**, address `0x0000`: bit0 Fatal, bit2 Algorithm, bit3 Output, bit4 Self-diag, bit5 Out-of-range, bit6 Memory, **bit7 Warm-Up** | Read with the CO2 in one frame; any of Fatal/Algorithm/Self-diag/Out-of-range/Memory/Warm-Up invalidates the CO2 |
+| Also readable | IR5 board temperature (°C × 100), IR7 supply mV, IR24/25 elapsed hours, IR29 FW rev, IR30/31 serial | Bring-up diagnostics; not in the LoRa frame |
+| Pressure | **HR4** (RAM, live) and **HR27** (EEPROM, loaded into HR4 at power-up), LSB 0.1 hPa, 0 = off | Function `0x06`. HR27 is the one to set at install |
+| Calibration | HR1 acknowledge (clear with 0), **HR2 = `0x7C06` background (400 ppm)**, `0x7C05` target (ppm in HR3), `0x7C07` zero, `0x7C03` force ABC | Wait ≥2 lamp cycles, then read HR1 bit 5 (CI6) = 1 |
+| ABC | **HR32** period in hours (180 = 7.5 d default; 0 suspends), **HR33** target ppm (400) | EEPROM |
+| EEPROM | HR1–HR4 and HR22 are RAM; **everything else is EEPROM, 10 000 writes total**; wait ≥180 ms after a write before power-down | Read before write; never write per wake |
 
-Either way the head carries the sensor, the 100 µF + 100 nF, the branch's 2.2 kΩ
-pull-up pair, and the **DNP heater pad** below.
+The node's one recurring transaction, byte for byte (Senseair example §8.3):
 
-**Mounting, for a mushroom house specifically:**
+```
+  Master:  FE 04 00 00 00 04 E5 C6
+           │  │  └──┬──┘ └──┬──┘ └─┬─┘
+           │  │  IR1..    4 regs  CRC16 (low byte first)
+           │  read input registers
+           "any sensor"
 
-- **No radiation shield.** A mushroom house is dark; there is no solar load to
-  shield from. That requirement belonged to the plant-greenhouse revision and has
-  been deleted, not merely relaxed.
-- **Vented, splash-protected housing** with the **diffusion opening facing
-  downward** so condensate drips away instead of pooling, behind a **PTFE/Gore
-  membrane** that passes CO2 but not liquid water.
-- **Never sealed.** A sealed box measures the CO2 of its own interior, which is a
-  number that means nothing.
-- **Not in the direct path of a misting nozzle.** This is the one placement rule
-  that is specific to this building; site it before you cut the gland.
+  Sensor:  FE 04 08 00 00 00 00 00 00 01 90 16 E6
+                 │  └─┬──┘ └─┬──┘ └─┬──┘ └─┬──┘ └─┬─┘
+                 8   status  alarm  output CO2=400 CRC
+```
 
-#### Condensation, and the heater that is not fitted yet
+The firmware rejects the CO2 when `status & 0x00F5` is non-zero and keeps its
+cached value, which is how the debug log distinguishes *"S88 status not OK"*
+(warming up, out of range) from *"S88 did not answer"* (cable).
 
-The S88 dissipated 90 mW continuously, and the previous revision noted the
-accidental benefit: a module a degree or two above ambient keeps local humidity
-off the dew point. **The SCD41 dissipates ~1.5 mW averaged** — that benefit is
-gone, in a wetter building. On this axis the new part is a regression, and it is
-worth being blunt about it.
+> **Modbus CRC16 is a real advantage over what it replaced.** A corrupted I2C
+> transaction produces a plausible wrong number; a corrupted Modbus frame fails its
+> CRC and is simply retried. On a 5 m run through a greenhouse full of pump
+> contactors, that difference matters more than the accuracy spec does. Senseair
+> quotes a 7 × 10⁻⁶ chance of a response time-out under normal conditions and asks
+> that the host retry — `S88_RETRIES` is 2.
 
-The answer is a **heater resistor pad at the head, laid out now and left DNP**:
+#### Pressure — the 9 % nobody would look for
 
-- ~**220 Ω across the branch's 3.3 V**, i.e. ~50 mW, ~15 mA — enough to hold a
-  small housing a degree or so above ambient.
-- It would add **~1.2 Wh/day**, taking the node from ~0.8 to ~2.0 Wh/day. That is
-  still **less than the S88 revision consumed doing nothing special**, and 2.5 %
-  of the panel. The energy freed by deleting the 5 V rail pays for it several
-  times over.
-- **Whether it is needed is a question for the logs, not for this document.**
-  Deploy with the SHT45s first, log T/RH at mid-house, compute the dew point, and
-  fit the resistor if condensation is real. Laying the pad out now is what makes
-  that a soldering job rather than an enclosure redesign.
+The S88 reads **1.6 % of reading per kPa** away from 1013.25 hPa. The previous
+revision called this "~1 % at 500 m", which is wrong by an order of magnitude:
+500 m is ≈ −5.8 kPa, so **≈ −9 %**; Maejo at ~330 m is ≈ −3.9 kPa, **≈ −6 %**,
+i.e. 1000 ppm reads as ~940. The old design fed the SCD41 a live BME280 value;
+there is no barometer on this node, and there does not need to be:
 
-> The heater goes on the **branch's own 3.3 V**, downstream of the gate, so it
-> heats only while the node is awake — ~11 s in 900 s. If the logs show
-> persistent dawn condensation that duty cycle is not enough, and the honest fix
-> is a resistor fed from `V3V3_MCU` ahead of the gate. Do not discover this on a
-> pole: decide it from the logs.
+**Write the site's mean pressure once into HR27 (0.1 hPa)** — 9777 for 300 m,
+9661 for 400 m — and the sensor compensates every reading itself, forever, from
+EEPROM. `S88_SITE_PRESSURE_DHPA` in `node_config.h` holds the value; on the first
+wake the firmware reads HR27, writes it (and HR4, so it takes effect immediately)
+only if it differs, and never touches EEPROM again. 0 leaves the sensor at the
+factory default. Weather moves pressure by ±1 kPa, i.e. ±1.6 %, which is below the
+sensor's own accuracy; altitude is the term that matters, and it is now handled.
 
-#### What the SCD41 reports that this node throws away
+#### The deployment risk, and the staged answer
 
-`read_measurement` returns CO2 **and** temperature **and** humidity, and
-`scd41_read()` hands all three back. Only CO2 is transmitted.
+The S88 LP is rated **0–50 °C and 0–85 %RH, non-condensing, dew point ≤35 °C** — and
+the RH limit is not flat: PSP14281 Figure 3 derates it linearly above 38 °C down
+to **45 %RH at 50 °C**. A Thai โรงเรือน routinely sits at 90–100 %RH overnight with
+visible condensation at dawn, and a closed greenhouse in afternoon sun can pass
+50 °C at canopy height. **Both limits are plausibly violated daily.** An NDIR
+sensor with a fogged optical path does not fail loudly — it drifts, and returns
+plausible wrong numbers; the `Out of range` and `Self-diagnostic` bits are the only
+warning you get, which is another reason the firmware now reads them.
 
-That is deliberate: the SCD41 self-heats, so its own T/RH read high — the
-datasheet devotes a whole section (§3.7) to the temperature offset needed to
-correct them. An SHT45 is ±0.1 °C / ±1 %RH and unheated. Its T/RH are exposed only
-because they arrive for free and are useful in bring-up: **if the SCD41's
-temperature reads far above the nearest SHT45, the head is not ventilating.**
+The SHT45s are fine here (0–100 %RH, and they recover from condensation). This is
+an S88-specific problem, and the agreed answer is **staged deployment**:
+
+1. **Build the full board and all cabling now**, S88 branch included — connector,
+   transceiver, 5 V rail, protection. Nothing needs rework later, and nothing in it
+   depends on LP versus GH.
+2. **Deploy with the three SHT45s only.** Log T/RH for a few weeks, including at the
+   midpoint where the S88 will go. Compute the dew point; that is the S88's real
+   enemy, not RH by itself.
+3. **Then buy the sensor the logs call for.** Inside 0–50 °C, ≤85 %RH and below
+   the derating line → the **LP**, with ABC per the decision above. Above it for
+   hours every night → the **GH**, and budget ~7 Wh/day and a six-monthly
+   background calibration for it. If dawn condensation is persistent with either,
+   add a small heater resistor at the head before fitting the sensor.
+
+Mount it in a **ventilated radiation shield with the diffusion area facing
+downward**, so condensate drips away instead of pooling on the optical window,
+behind a **PTFE/Gore membrane** that passes CO2 but not liquid water. Do not seal
+it: a sealed enclosure measures the CO2 of its own interior, which is a number that
+means nothing.
 
 ### The rail gate — now a recovery mechanism, not an energy measure
 
 **Its purpose changed completely when the supply became solar.** On a battery the
 gate existed to stop µA of leakage mattering over months; the 5 µA I_DSS budget
 below was a real constraint. On a 24 V bank fed by a panel, that arithmetic is
-irrelevant — the whole node now averages under a milliamp and the panel makes
-eighty times what it uses.
+irrelevant — the S88 alone draws 18 mA continuously and nobody notices.
 
-**Keep the gate anyway, for a different reason.** There are **four** unshielded
-5 m I2C branches running through a misted mushroom house, and the characteristic
-I2C failure is a glitch that latches SDA low until something clocks the bus free.
-Power-cycling the rail is the one recovery that always works. The gate is the
-node's **I2C and 1-Wire reset button**, and firmware should use it that way: on a
-failed transaction, gate off, wait, gate on, retry.
+**Keep the gate anyway, for a different reason.** There are now three unshielded
+5 m I2C branches running through a greenhouse full of pump contactors, and the
+characteristic I2C failure is a glitch that latches SDA low until something clocks
+the bus free. Power-cycling the rail is the one recovery that always works. The
+gate is now the node's **I2C and 1-Wire reset button**, and firmware should use it
+that way: on a failed transaction, gate off, wait, gate on, retry.
 
-> **Revision 2.0 put the CO2 sensor back behind the gate.** The S88 could not be:
-> it wanted 5 V and its ABC needed continuous operation, so it sat on its own
-> ungated rail and was the one thing `SENS_GATE` could not rescue. The SCD41 takes
-> on-demand single shots, so **everything the front-end reads is now switched**,
-> and there is no always-on sensor rail left to reason about.
+> **What is no longer behind the gate: the S88.** Its 5 V rail is ungated and
+> always live, because ABC requires continuous operation. Only the 3.3 V sensor
+> rail is switched.
 
-Upstream of the six probes, all four I2C branches and the bus switch that fans
-them out — which is now everything:
+Upstream of the six probes, the three SHT45 branches and the bus switch that fans
+them out — but **not** the CO2 sensor:
 
 ```
   U7 3V3 ─────┬──────────────── S │ Q1 (P-MOSFET) │ D ──┬──── VSENS
@@ -1236,18 +1249,12 @@ There are **two** settle windows, and they pull in opposite directions:
 | `DS_POWER_SETTLE_MS` | **10 ms** | `VSENS` fully up, so the first 1-Wire reset sees a valid bus |
 | `I2C_POWER_SETTLE_MS` | **10 ms** | An SHT45 will accept a command (its soft-reset time is ~1 ms) |
 
-**The 1000 ms window was never real.** The firmware carried a 1000 ms SCD41
-power-up constant, and this document repeated it as fact — it dominated every wake
-and the sequencing was built around overlapping it with the 750 ms DS18B20
-conversion. **SCD4x v1.7 Table 7 says the power-up time is 30 ms max**, and nothing
-in that revision supports 1000. The constant was corrected in 2026-09; the
-overlapping remains, because it is good practice and now costs nothing at all.
-The SHT45 needs about a millisecond, so `I2C_POWER_SETTLE_MS` stays at **10 ms**
-and rail-on time is set by the **750 ms conversion**.
-
-**What the SCD41 does add is measurement time, not settle time:** two 5 s single
-shots, taking the gated window from ~1 s to **~11 s**. Averaged over the wake that
-is 0.024 Wh/day, the smallest line in §5's budget.
+**The 1000 ms window is gone with the SCD41.** That figure was the SCD41's
+datasheet power-up time and it dominated every wake; the firmware had to overlap it
+with the 750 ms DS18B20 conversion to avoid paying for it twice. The SHT45 needs
+about a millisecond, so both settle windows now collapse to the same **10 ms**, and
+the rail-on time is set purely by the **750 ms conversion**. The S88 needs no settle
+window at all — it is never powered down.
 
 Keep total `VSENS` bulk at **≤10 µF** and put **100 Ω–1 kΩ in series with the gate**
 to tame inrush — that lands around a millisecond. The SCD41's separate 10 µF local
@@ -1309,13 +1316,11 @@ Current capability is a non-issue — over-specified by more than an order of
 magnitude on every axis. Leakage used to be the one line worth arguing about; on
 solar it no longer is.
 
-**What the gate carries, and the one number that sizes Q1.** `VSENS` feeds the six
-probes (~9 mA during conversion), three SHT45s (µA), the mux (µA) — and the
-**SCD41's 175 mA typ / 205 mA max bursts**, which came back onto this rail in
-revision 2.0 along with the sensor. That 205 mA is now the figure Q1 must pass,
-and the AO3401A does it with two orders of magnitude to spare. Its real job
-remains **fault recovery** (§ *The rail gate*), not current handling — but it is
-no longer true that nothing on this rail draws current.
+**What the gate now carries is much less than it used to.** With the S88 on its own
+ungated 5 V rail, `VSENS` feeds only the six probes (~9 mA), three remote SHT45s
+(µA) and the mux — the 205 mA CO2 burst is gone from this rail entirely. Q1 is now
+enormously over-specified, which is fine: it is the same part, and its real job is
+now **fault recovery** (§ *The rail gate*), not current handling.
 
 Route **U7's 3.3 V** → Q1 → `VSENS` as a wide trace anyway. On a large board it is
 tempting to let `VSENS` wander to reach six probe connectors and three branch
@@ -1341,7 +1346,8 @@ Split in two, because the board is no longer the whole design: parts on the
 | J8 | Power connector 2-pin | keyed, latching (JST-XH, Micro-Fit 3.0) | **3.3 V buck output** + GND to Nucleo CN6-4/6 |
 | J14 | Solar input 2-pin | keyed, latching, ≥5 A | **24 V bank in** from the charge controller |
 | J1–J6 | Pluggable screw terminal, 3-pin | Phoenix MC 1,5/3-ST-3,5 or clone | **One per probe** — six of them |
-| J9–J12 | Pluggable screw terminal, 4-pin | same family | **One per I2C branch — four identical connectors, one part number.** `V / SDA / SCL / G`. Silkscreen the destination: `CH0 หัว`, `CH1 ท้าย`, `CH2 นอก`, **`CH3 CO2 กลาง`** |
+| J9–J11 | Pluggable screw terminal, 4-pin | same family | **One per SHT45 branch.** `V / SDA / SCL / G`. Silkscreen the destination: `CH0 หัว`, `CH1 ท้าย`, `CH2 นอก` |
+| J12 | Pluggable screw terminal, 4-pin | same family | **S88 head.** `5V / GND / A / B` |
 | J13 | Pin header 1×3 | 2.54 mm | **Debug UART.** `TX / RX / GND` for a USB-serial adapter |
 | **Rail gate** ||||
 | Q1 | P-MOSFET SOT-23 | **AO3401A** (AOS) or equiv: R_DS(on) at **V_GS = −2.5 V** ≤85 mΩ, ≥0.5 A | High-side gate for the 3.3 V sensor rail. See *On the P-FET* |
@@ -1357,7 +1363,10 @@ Split in two, because the board is no longer the whole design: parts on the
 | R15, R16 | Resistor 0805 | 4.7 kΩ | **Upstream** SDA/SCL pull-ups. Board-local, 30 mm — 4.7 kΩ is right here |
 | R17–R22 | Resistor 0805 | **2.2 kΩ** | **Downstream**, one pair per channel. **2.2 kΩ, not 4.7 kΩ** — each pair drives 5 m of cable |
 | C8 | Ceramic | 100 nF | U3 decoupling |
-| R39, R40 | Resistor 0805 | **2.2 kΩ** | Channel 3's downstream SDA/SCL pull-up pair — the SCD41 branch. Same value and same reason as R17–R22 |
+| **CO2 link** ||||
+| U4 | RS-485 transceiver, **3.3 V, true-failsafe** | TI **THVD1450DR** (SOIC-8), or **MAX3485ESA+** / **SP3485EN-L** | `DE` and `!RE` tied together to `S88_DE`. See *The link* for why not an auto-direction part |
+| C9 | Ceramic | 100 nF | U4 decoupling |
+| D7, D8 | TVS bidirectional | ≥ ±12 V standoff, low-C | On `A` and `B` at the board end |
 | **Power — input protection (§5)** ||||
 | Q2 | P-MOSFET, ≥60 V | **DMP6023LE-13**, SOT-223 | Reverse polarity on the 24 V input. **Drain (and tab) to J14, source to the load** — see *Q2 — the reverse-polarity FET is wired backwards on purpose*. **Not** a 30 V part |
 | R38 | Resistor 0805 | 470 kΩ | Q2 gate → GND. Turns the FET on **and** limits D10's current — the two are a pair |
@@ -1365,11 +1374,13 @@ Split in two, because the board is no longer the whole design: parts on the
 | D9 | TVS unidirectional | **SMBJ33A** (33 V standoff, 600 W) | Across the 24 V input, **after Q2** — that is what lets it be unidirectional |
 | F1 | Fuse, **time-lag (T)**, 5×20 mm cartridge preferred | 2 A, **I²t ≥ 0.5 A²s** | 24 V input. Sized by I²t, not amps: hot-plug inrush through Q2's body diode is ~0.1 A²s and will nuisance-blow a low-I²t 1206 |
 | C11 | Electrolytic / polymer | 100 µF, **≥63 V** | 24 V bulk, before the modules. **63 V, not 50 V** — D9 clamps as high as 53.3 V |
-| **Power — the buck module (§5)** ||||
-| U7 | Buck module, **fixed 3.3 V** | Traco **TSR 1-2433**, SIP-3 through-hole | 4.75–36 V in, 1 A, ±2 %. **The only regulator on the board:** MCU (J8) + `VSENS` + everything on it. Pins **1 = +V_in, 2 = GND, 3 = +V_out** (datasheet rev. 2026-07-02); **no traces under the module**. **Fixed output only** — never an adjustable module with a trim pot; CN6-4 and the STM32WL die at 3.6 V |
-| C19 | Ceramic X7R 1210, or small electrolytic | **22 µF, 50 V** | `C_IN`, **directly across pins 1 and 2**, ≤5 mm. **22 µF is Traco's requirement, not a choice** — the datasheet demands an external 22 µF/50 V input capacitor for V_in > 32 V |
-| C21 | Ceramic X7R | 22 µF, 16 V | `C_OUT`. **Optional** — the module needs none; fitted for the LoRa TX and SCD41 current steps. DNP without consequence |
-| — | LED + series resistor | ×1 | **DNP.** Rail indicator for bring-up only — ~0.5 Wh/day if left fitted, which is more than half this node's entire budget |
+| **Power — the two buck modules (§5)** ||||
+| U6 | Buck module, **fixed 5 V** | Traco **TSR 1-2450**, SIP-3 through-hole | 6.5–36 V in, 1 A, ±2 %, continuous short-circuit protection. **Ungated** → J12 (S88). Pins **1 = +V_in, 2 = GND, 3 = +V_out** (datasheet rev. 2026-07-02); **no traces under the module** |
+| U7 | Buck module, **fixed 3.3 V** | Traco **TSR 1-2433**, SIP-3 through-hole | 4.75–36 V in, 1 A, ±2 %. MCU (J8) + `VSENS`. **Fixed output only** — never an adjustable module with a trim pot; CN6-4 and the STM32WL die at 3.6 V |
+| C12 / C19 | Ceramic X7R 1210, or small electrolytic | **22 µF, 50 V** | `C_IN`, one per module, **directly across pins 1 and 2**, ≤5 mm. **22 µF is Traco's requirement, not a choice** — the datasheet demands an external 22 µF/50 V input capacitor for V_in > 32 V |
+| C14 / C21 | Ceramic X7R | 22 µF, 16 V | `C_OUT`, one per module. **Optional** — the modules need none; fitted for the LoRa TX and S88 current steps. DNP without consequence |
+| C15 | Polymer / electrolytic | 100 µF, 16 V | **U6 only** — bulk for the S88's 300 mA steps down 5 m of cable |
+| — | LED + series resistor | ×2 | **DNP.** Rail indicators for bring-up only — ~0.5 Wh/day if left fitted |
 | **Supply telemetry** ||||
 | R24 | Resistor 0805, 1 % | 300 kΩ | `VBAT_SENSE` divider high side |
 | R25 | Resistor 0805, 1 % | 30 kΩ | Divider low side — 11:1, so 32 V → 2.9 V |
@@ -1383,9 +1394,9 @@ Split in two, because the board is no longer the whole design: parts on the
 | — | 1×8 socket + 2-core lead | 2.54 mm | CN6 tap, positions 4/6/7 wired |
 | — | M3 nylon standoffs + screws | ×8 | Both boards |
 | — | Cable ties / strain relief | ×11 | Within 30 mm of every entry |
-| TP1–14 | Test pads | — | `VSENS`, all six DQ, `SENS_GATE`, **`24V_PROT`**, `VBAT_SENSE`, `GND`, upstream SDA/SCL |
-| TP15–22 | Test pads | — | The **four** downstream SDA/SCL pairs. Without these, a dead sensor and a dead mux channel look identical |
-| TP23, TP24 | Test pads | — | **V_in and V_out of U7.** With `24V_PROT` at TP1 they tell a dead module from a dead input in one measurement, and TP23 is where the no-load current gets measured |
+| TP1–14 | Test pads | — | `VSENS`, all six DQ, `SENS_GATE`, `V5_S88`, **`24V_PROT`**, `VBAT_SENSE`, `GND`, upstream SDA/SCL |
+| TP15–20 | Test pads | — | The three downstream SDA/SCL pairs. Without these, a dead SHT45 and a dead mux channel look identical |
+| TP21–24 | Test pads | — | **V_in and V_out of each module** (U6: TP21/22, U7: TP23/24). With `24V_PROT` at TP1 they tell a dead module from a dead input in one measurement, and TP21/23 are where the no-load current gets measured |
 | TP25, TP26 | Test pads | — | **`24V_RAW`** (J14 side of Q2) and **Q2's gate**. With `24V_PROT` at TP1 these three tell a blown F1, a dead Q2 and a missing gate clamp apart in one measurement |
 
 **Deleted from the previous revision:** U2 (SCD41), C3 (its 10 µF local bulk), C7
@@ -1404,11 +1415,11 @@ thirty parts. All of it is still documented in
 | Each probe ×6 | **100 nF** | Across that probe's VDD/GND at the **far** end |
 | Each SHT45 ×3 | **SHT45-AD1B** + **100 nF** | Cap across VDD/VSS at the sensor. Small vented housing |
 | SHT45 #2 only | **Radiation shield** | Louvered/Stevenson type, sensor below, north-facing. Without it the ambient reference reads 10–15 °C high in sun |
-| CO2 head | **Sensirion `SEK-SCD41-SENSOR`** breakout (recommended), or a bare **`SCD41-D-R2`** on a small head PCB | Vented, splash-protected housing, **diffusion opening facing down**, PTFE/Gore membrane, **never sealed**, and **not in a misting nozzle's path**. **No radiation shield** — a mushroom house is dark |
-| CO2 head | **100 µF + 100 nF** | Across VDD/GND at the sensor. Not optional: this is what keeps the 205 mA bursts off 5 m of cable |
-| CO2 head | **2.2 kΩ ×2** | Channel 3's pull-up pair, if not already on the breakout |
-| CO2 head | **Heater resistor pad — DNP** | ~220 Ω across the branch 3.3 V (~50 mW). **Lay out the pad, fit nothing.** The SCD41 self-heats ~1.5 mW where the S88 gave 90 mW, so condensation protection is gone; whether it must come back is a question for the SHT45 logs. See *Condensation* in §3 |
-| CO2 head | **VDD and VDDH bridged** | Mandatory, both from the same rail. Already done on the breakout; easy to miss on a bare LGA |
+| S88 head | **Senseair S88 LP** (004-1-0101), or the pin-header **LP PH** (004-1-0103), or the **S88 GH** (004-1-0102) — the SHT45 logs decide (§3 *The alternative part*) | Ventilated radiation shield, **diffusion area facing down**, PTFE/Gore membrane. `bCAL_in`, `PWM`, `Alarm_OC` **left unconnected** — `bCAL_in` shorted to G0 for 4 s recalibrates the sensor |
+| S88 head | **3.3 V RS-485 transceiver** — THVD1450 / MAX3485E / SP3485, **never a 5 V MAX485** | `DE`+`!RE` tied to the S88's `UART_R/T`. The S88's `UART_RxD` absolute maximum is `DVCC_out` + 0.5 V = 3.8 V; a 5 V `RO` exceeds it |
+| S88 head | **3.3 V LDO**, 100 mA | Powers the transceiver off the 5 V rail. **Do not** load `DVCC_out` |
+| S88 head | 100 µF + 100 nF | Bulk for the 300 mA peaks, close to `G+` |
+| S88 head | Reverse-polarity FET + TVS | The S88 is *unprotected against surges and reverse connection* |
 
 ---
 
@@ -1416,9 +1427,8 @@ thirty parts. All of it is still documented in
 
 **This replaced the battery entirely in 2026-08.** The node is fed from a **24 V
 battery bank behind a charge controller**, not from cells, and that change
-propagates further than anything else in that revision: it is what broke
-`battery_read_mv()`, and it is why the parts after J14 are rated for 60 V rather
-than for the 5 mA the node actually draws.
+propagates further than anything else in this revision: it is what makes the S88
+affordable to run continuously, and it is what broke `battery_read_mv()`.
 
 ### What the node must survive
 
@@ -1427,7 +1437,7 @@ than for the 5 mA the node actually draws.
 | Nominal | 24 V | 2× 12 V lead-acid, or 8S LiFePO4 |
 | Normal range | **21–29 V** | discharged → absorb/equalise |
 | **Design range** | **18–32 V continuous** | margin both ways |
-| **Part rating** | Input chain (Q2, D9, C11) **≥60 V** as before; U7 **36 V max** | the module is the ceiling now. A controller fault, a disconnected battery, or a cold-morning panel V_oc can put far more than 29 V on the wire, and **nothing on this board stops that** — see *What the input chain no longer covers* in *The buck modules* |
+| **Part rating** | Input chain (Q2, D9, C11) **≥60 V** as before; U6/U7 **36 V max** | the modules are the ceiling now. A controller fault, a disconnected battery, or a cold-morning panel V_oc can put far more than 29 V on the wire, and **nothing on this board stops that** — see *What the input chain no longer covers* in *The buck modules* |
 
 Fit **F1 (2 A time-lag) → Q2 (reverse-polarity P-FET) → D9 (SMBJ33A TVS) →
 C11 (100 µF)** in that **physical order along the trace** from J14 — F1 and Q2 are
@@ -1455,10 +1465,10 @@ MOSFET in **SOT-223** (3 pins + tab). The numbers that matter:
 | **Tab / case** | **DRAIN** | Sits at the *raw, unprotected* input. Layout consequence below |
 
 Like Q1, this part is **chosen for its voltage rating, not its current rating**.
-The node draws well under **1 mA average and ~30 mA peak** at 24 V (the LoRa TX's
-150 mA and the SCD41's 205 mA are reflected through the module, so they arrive
-here divided by roughly 24/3.3). Every current axis is over-specified by more than
-two orders of magnitude.
+The node draws about **5 mA average and 100 mA peak** at 24 V (the S88's 300 mA and
+the LoRa TX's 150 mA are both reflected through the modules, so they arrive here
+divided by roughly 24/5 and 24/3.3). Every current axis is over-specified by more
+than an order of magnitude.
 
 #### The circuit
 
@@ -1477,7 +1487,7 @@ two orders of magnitude.
       │                        │
       ●──── 24V_PROT ── TP1    ├──[ D10  12 V ]──── to S   (cathode at S)
       │                        │
-      ├──► D9, C11, U7         └──[ R38  470 k ]─── GND
+      ├──► D9, C11, U6, U7     └──[ R38  470 k ]─── GND
       │    (all in PARALLEL — see the next section)
       │
    J14 (−) ─────────────────────────────────────── GND
@@ -1488,7 +1498,7 @@ Reading it as a netlist, because the drawing above is the part people get wrong:
 | Terminal | Net | Note |
 |---|---|---|
 | **Drain** (and tab) | `24V_RAW` — the J14 side, after F1 | Yes, the drain faces the supply |
-| **Source** | `24V_PROT` — the load side, feeding D9/C11/U7 | |
+| **Source** | `24V_PROT` — the load side, feeding D9/C11/U6/U7 | |
 | **Gate** | junction of `R38` (to GND) and `D10`'s anode | |
 | `D10` cathode | **Source**, i.e. `24V_PROT` | Zener sits gate-to-source, physically at the FET |
 
@@ -1576,7 +1586,7 @@ the assumption that they overlap:
 - **D9** — positive transients: switching on the charge controller, nearby
   lightning, a long DC run acting as an antenna.
 - **C11** — bulk, and damping the resonance between the input cable's inductance
-  and the module's ceramic input capacitor.
+  and the modules' ceramic input capacitors.
 
 > **Q2 is not an ideal diode and does not block reverse *current*.** Once enhanced,
 > the channel conducts both ways. If the bank voltage ever falls below `24V_PROT`,
@@ -1587,7 +1597,7 @@ the assumption that they overlap:
 
 **1. Hot-plug inrush goes through the body diode, not through the channel — so the
 1.2 ms gate ramp is not a soft-start.** Connecting a charged bank to a discharged
-board dumps ~2.6 mC into `C11` plus the module's 22 µF of local input capacitance,
+board dumps ~2.6 mC into `C11` plus the modules' ~44 µF of local input capacitance,
 through the body diode, limited only by cable resistance. Estimate ~0.1 A²s of
 I²t. **Specify F1 by I²t, not just by amps**: a 5×20 mm **T2A** cartridge has ample
 margin; some 1206 SMD "slow-blow" 2 A parts are rated near 0.1 A²s and will
@@ -1603,7 +1613,7 @@ Keep the drain pour minimal, keep clearance to the GND pour and the enclosure
 appropriate for a 60 V part on a long outdoor cable, and put the heat-sinking
 effort where it is actually needed, which is nowhere on this board.
 
-### The `24V_PROT` node — D9, C11 and the module are all in parallel
+### The `24V_PROT` node — D9, C11 and both modules are all in parallel
 
 **"F1 → Q2 → D9 → C11" describes physical order along the trace, not an electrical
 chain**, and the shorthand has caused enough confusion to be worth replacing with a
@@ -1613,20 +1623,20 @@ single node:
 ```
    Q2 source
        │
-       ●━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━  24V_PROT
-       │      │        │            │          │
-      TP1   ══╪══     ═╪═         ══╪══     [R24 300k]
-              │        │            │          │
-            [D9]     [C11]       [C19]         ●──── VBAT_SENSE
-           SMBJ33A   100 µF        22 µF       │      → PB3
-          cathode ↑   + ↑         50 V     [R25 30k]
-              │        │            │          │
-              │        │        U7 V_in        │
-              │        │        (TSR 1)        │
-       ───────┴────────┴────────────┴──────────┴──── GND
-              ↑        ↑            ↑
-          at J14   next to it   ≤5 mm from
-                                 U7's pins
+       ●━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━  24V_PROT
+       │      │        │            │            │          │
+      TP1   ══╪══     ═╪═         ══╪══        ══╪══     [R24 300k]
+              │        │            │            │          │
+            [D9]     [C11]       [C12]        [C19]         ●──── VBAT_SENSE
+           SMBJ33A   100 µF        22 µF        22 µF         │      → PB3
+          cathode ↑   + ↑         50 V         50 V      [R25 30k]
+              │        │            │            │          │
+              │        │        U6 V_in      U7 V_in        │
+              │        │        (TSR 1)      (TSR 1)        │
+       ───────┴────────┴────────────┴────────────┴──────────┴──── GND
+              ↑        ↑            ↑            ↑
+          at J14   next to it   ≤5 mm from   ≤5 mm from
+                                 U6's pins    U7's pins
 ```
 
 Read as a netlist, since polarity is where this node gets destroyed:
@@ -1637,16 +1647,16 @@ Read as a netlist, since polarity is where this node gets destroyed:
 | | anode | `GND`, straight back to J14's ground pin |
 | **C11** 100 µF ≥63 V | **`+`** | `24V_PROT` |
 | | `−` | `GND` |
+| **C12** 22 µF/50 V | — | across **U6's** pins 1 (+V_in) and 2 (GND) |
 | **C19** 22 µF/50 V | — | across **U7's** pins 1 (+V_in) and 2 (GND) |
+| **U6** V_in (pin 1) | — | `24V_PROT` |
 | **U7** V_in (pin 1) | — | `24V_PROT` |
 | **R24** 300 kΩ | — | `24V_PROT` (top of the `VBAT_SENSE` divider) |
 
-**Revision 2.0 removed one of the two branches from this node.** The S88's 5 V
-module used to hang here beside U7, which is why the previous revision spent a
-paragraph explaining that "independent rails" meant independent *outputs*, not
-independent *inputs*. With one module the distinction is moot — but the layout
-rules below are not, because D9's surge current and R24's analog tap still share
-this copper.
+**Both modules tap the same node independently**, which is the whole point of §5's
+*Two rails, deliberately independent* — "independent" means independent *rails*,
+not independent *inputs*. They share this node and the 24 V bank behind it; what
+they do not share is any path from one output to the other.
 
 **`VBAT_SENSE` is measured here, not at `24V_RAW`**, and that is deliberate: the
 divider then sits inside D9's clamp and behind Q2, so it never sees a raw
@@ -1665,11 +1675,11 @@ along the trace is a real specification:
    downstream of C11 and that current takes a tour of your board on the way.
 2. **C11 immediately after it**, so the electrolytic sits inside the clamp rather
    than being the first thing a transient meets.
-3. **The module's `C_IN` within 5 mm of its V_in/GND pins.** C11 cannot do
+3. **Each module's own `C_IN` within 5 mm of its own V_in/GND pins.** C11 cannot do
    this job — see *The buck modules*, layout rule 1. The converse also applies: a
    module fed through more than a few centimetres of trace, or any length of cable,
    wants bulk capacitance upstream — which is what C11 is for.
-4. **R24/R25 last**, farthest from the module. It is a 27 kΩ analog source; it
+4. **R24/R25 last**, farthest from both modules. It is a 27 kΩ analog source; it
    has no business near switching copper.
 
 **Trace width is set by the surge, not by the load.** The DC current here is 100 mA
@@ -1693,7 +1703,7 @@ board*. Q2 protects against a reversed *supply*, nothing else.
 
 **3. Choosing a low-ESR polymer for C11 because low ESR sounds better.** It is not
 better here. The input cable's inductance (~5 µH for a 5 m run) resonates with the
-module's 22 µF of local input capacitance at roughly **15 kHz**, and connecting a
+modules' ~44 µF of local input capacitance at roughly **11 kHz**, and connecting a
 charged bank rings that circuit. Cable resistance alone (~0.2 Ω for 5 m of 18 AWG,
 round trip) already supplies most of the damping, and D9 backstops whatever is
 left — so this is margin, not a crisis. But **C11's job here is damping, not ripple
@@ -1701,222 +1711,241 @@ current** (the local ceramics carry the 500 kHz ripple), so its ESR is a feature
 Prefer the **aluminium electrolytic** over the polymer, and read the "≥63 V"
 requirement as covering both D9's 53.3 V clamp *and* this ring.
 
-### One rail, and why the second one went away
+### Two rails, deliberately independent
 
 ```
-  24 V ──[F1]──[Q2 rev]──[D9 TVS]──┬──[U7 TSR1-2433]── 3.3 V ──┬── J8 ─> Nucleo CN6-4
-                                   │                           │
-                                   │                           └──[Q1 gate]── VSENS
-                                   │                               (probes, SHT45s,
-                                   │                                mux, SCD41)
+  24 V ──[F1]──[Q2 rev]──[D9 TVS]──┬──[U6 TSR1]── 5.0 V ── J12 ══ 5 m ══> S88
+                                   │              UNGATED, always on
+                                   │
+                                   ├──[U7 TSR1]── 3.3 V ──┬── J8 ─> Nucleo CN6-4
+                                   │                      │
+                                   │                      └──[Q1 gate]── VSENS
+                                   │                          (probes, SHT45s, mux)
                                    └──[R24/R25]── VBAT_SENSE ─> PB3 (ADC1_IN2)
 ```
 
-**Revision 1.0 had two modules; revision 2.0 has one.** The second existed for
-exactly one reason: the Senseair S88 wanted 4.5–5.25 V, and a 5 m cable to a
-300 mA load could not be fed from the 3.3 V rail the rest of the board runs on.
-Deleting the sensor deleted the rail, `U6`, its two capacitors, `C15`, the 5 V pin
-on `J12`, two test pads and a section of this document.
-
-The old argument for keeping them separate — *"an S88 fault must not brown out the
-LoRa transmitter"* — went with it. It does not simply get dropped; it gets
-re-examined:
-
-- **The fault current is ten times smaller.** A shorted CO2 branch is no longer a
-  300 mA load on 5 m of cable but a 205 mA one, and the TSR 1-2433 current-limits
-  at 250 % of 1 A and recovers by itself.
-- **The exposure was never unique to CO2.** Three SHT45 branches, each 5 m of
-  unshielded cable in the same building, have always been on the 3.3 V rail. A
-  fourth branch of the same kind is not a new class of risk.
-- **It is now gate-recoverable, which it was not before.** The S88's rail was
-  ungated — a short there could only be fixed by a visit. The SCD41 sits behind
-  `SENS_GATE` like everything else, so firmware can drop the rail and retry.
+**Why two modules and not a cascade.** A 24→5 V stage feeding a 5→3.3 V stage would
+put the radio downstream of the CO2 sensor's 300 mA peaks. Independent rails mean
+an S88 fault — or a shorted 5 m cable — cannot brown out the LoRa transmitter or
+the MCU. Both modules are 1 A parts against loads of **300 mA peak / 18 mA average
+on U6** and **~150 mA LoRa TX peak on U7** — the second module buys isolation, not
+current, and a cascade would save nothing since it still needs two converters.
 
 > **U7's output must never exceed 3.6 V.** CN6-4 is rated **3.0–3.6 V** (UM2592
 > Table 9) and the STM32WL's absolute maximum VDD is 3.6 V. Use a fixed 3.3 V part,
 > not an adjustable one with a trim pot somebody can turn.
 
-### The buck module — U7
+### The buck modules — U6 and U7
 
-Revision 1.0 replaced two discrete **LM5164** converters with off-the-shelf
-**Traco TSR 1** modules; revision 2.0 deleted one of the two along with the S88.
-What is left is a single part:
+Revision 1.0 replaces the two discrete **LM5164** converters with two **off-the-shelf
+Traco TSR 1 modules**. The LM5164 design was correct, and it is kept intact in
+[`hardware-interface-back.md`](hardware-interface-back.md) — but it was also ~30
+passives, a hand-tuned Type-3 ripple-injection network that needs a scope to verify,
+and a failure mode (COT bursting) that looks exactly like a dead chip. For a first
+board that is too much surface area for things to go wrong that have nothing to do
+with the sensors. A module puts the whole converter behind three pins.
 
-| | **U7** |
-|---|---|
-| Part | Traco **TSR 1-2433** |
-| Output | **3.3 V ±2 %** (3.23–3.37 V) |
-| Input range | 4.75–36 V |
-| Output current | 1 A |
-| Load here | MCU + radio (~150 mA peak) and all of `VSENS` (SCD41 205 mA peak, probes ~9 mA) — **never simultaneously**, see below |
-| Short-circuit | continuous, auto-recovery; current limit **250 %** of I_out typ |
-| Over-temperature | 150 °C internal, auto-recovery |
-| No-load input current | **1 mA typ** |
-| Output ripple | 50 mV_pp typ (20 MHz BW) |
-| Switching frequency | 500 kHz typ (400–600) |
-| Max capacitive load | 470 µF |
-| Package | SIP-3 through-hole, 78xx pin layout, 11.7 × 7.5 × 10.1 mm |
-| Operating temperature | −40…+85 °C |
-| Price / source (2026-09-02) | ฿206.49, Digi-Key TH |
-
-**The two big loads never coincide, and that is by construction.** `main.cpp`
-closes the gate — which removes the SCD41 and the probes from the rail entirely —
-*before* the radio is powered for the uplink. So the module sees ~205 mA while
-sensing and ~150 mA while transmitting, not 355 mA. A 1 A part has room either
-way, but the sequencing is load-bearing and §7 tests it.
+| | **U6** | **U7** |
+|---|---|---|
+| Part | Traco **TSR 1-2450** | Traco **TSR 1-2433** |
+| Output | **5.0 V ±2 %** (4.90–5.10 V) | **3.3 V ±2 %** (3.23–3.37 V) |
+| Input range | 6.5–36 V | 4.75–36 V |
+| Output current | 1 A | 1 A |
+| Load here | S88: 300 mA peak, 18 mA average | MCU + radio + `VSENS`: ~150 mA peak, ~1 mA average |
+| Short-circuit | continuous, auto-recovery; current limit **250 %** of I_out typ | same |
+| Over-temperature | 150 °C internal, auto-recovery | same |
+| No-load input current | **1 mA typ** | same |
+| Output ripple | 50 mV_pp typ (20 MHz BW) | same |
+| Switching frequency | 500 kHz typ (400–600) | same |
+| Max capacitive load | 470 µF | same |
+| Size | 11.7 × 7.5 × 10.1 mm, 2.54 mm pitch | same |
+| Package | SIP-3 through-hole, 78xx pin layout | same |
+| Operating temperature | −40…+85 °C | same |
+| Price / source (2026-09-02) | ฿206.49, Digi-Key TH, 26 k in stock | ฿206.49, Digi-Key TH, 10 k in stock |
 
 **U7's worst case is 3.37 V, under the 3.6 V ceiling of CN6-4 and the STM32WL.**
 That is why it must be the fixed-output part and never an adjustable module: the
-number that protects the MCU is a factory trim, not something a pot can be turned
-to.
+number that protects the MCU is the ±2 % of a factory trim, not something a pot can
+be turned to.
+
+#### Why these and not the cheap 28 V modules
+
+The obvious substitutes — DFRobot DFR0570/DFR0571, every MP1584 and LM2596
+breakout on Lazada — are rated **28 V maximum input**. A 24 V lead-acid bank sits
+at **28.8 V on absorb**; an 8S LiFePO4 bank reaches **29.2 V** full. That is not a
+fault case, it is every sunny afternoon, and *What the node must survive* puts the
+design range at 18–32 V. The TSR 1's **36 V** input is the lowest rating that
+clears it with any margin at all, and it is why a 200 ฿ module was chosen over a
+100 ฿ one.
+
+What it does **not** clear is the ≥60 V rule the LM5164 revision was built around —
+see *What the input chain no longer covers* below. That margin was traded for
+simplicity, deliberately, and this document says so rather than hiding it.
 
 #### Pins
 
-Three pins in 78xx order, confirmed from the TSR 1 datasheet (rev. 2026-07-02,
-*Pinout* table). Traco adds one layout instruction of its own: *"avoid routing PCB
+Three pins in 78xx order, **confirmed from the TSR 1 datasheet (rev. 2026-07-02,
+*Pinout* table)**. Traco adds one layout instruction of its own: *"avoid routing PCB
 traces under the converter."*
 
 | Pin | Name | Connect to |
 |---|---|---|
 | 1 | `+V_in` | `24V_PROT`. **`C_IN` (22 µF / 50 V) directly across pins 1 and 2** |
 | 2 | `GND` | Ground plane, with its own wide copper back toward J14's ground pin |
-| 3 | `+V_out` | The 3.3 V rail: C21, J8, and Q1's source |
+| 3 | `+V_out` | The rail. U6 → C14, C15, J12. U7 → C21, J8, Q1's source |
 
-There is no enable, no power-good and no feedback pin — nothing to tune, nothing
-to scope, and no COT ripple network to get wrong. That was the point of revision
-1.0 and it still holds.
+There is no enable, no power-good and no feedback pin. What that costs is tabulated
+below; what it saves is every other row of the old BOM.
 
 ```
                         ┌───────────────┐
-   24V_PROT ────┬───────┤1 +Vin  +Vout 3├───────┬─────────── 3.3 V
+   24V_PROT ────┬───────┤1 +Vin  +Vout 3├───────┬─────────── V_OUT
                 │       │               │       │
-            [ C_IN ]    │  TSR 1-2433   │   [ C_OUT ]
-           22 µF/50 V   │      U7       │    22 µF
+            [ C_IN ]    │  TSR 1-24xx   │   [ C_OUT ]   (+ C15 on U6)
+           22 µF/50 V   │   U6 / U7     │    22 µF
                 │       │    2 GND      │       │
                GND      └───────┬───────┘      GND
                                GND
 ```
 
+#### What the module lacks, and where each function went
+
+| LM5164 feature | In revision 1.0 |
+|---|---|
+| **EN/UVLO** — R30/R31, 16.1 V on / 15.1 V off | **Gone, deliberately.** The modules run down to 6.5 V / 4.6 V. The 15 V threshold was never a battery-protection number — a 24 V lead-acid bank at 15 V is already destroyed — it was a backstop *below* any controller's LVD so the node kept reporting `VBAT_SENSE` to the end. Without it the node simply reports further down. Bank protection is the charge controller's job and, at ~3.8 Wh/day, this node cannot flatten a bank in any realistic outage (*The energy budget*). Connect to the **battery terminal**, as *Three traps* §3 says |
+| **`PGOOD`** | Gone. It only ever reached a test pad; TP21–24 now carry V_in/V_out of each module instead |
+| **10.5 µA quiescent current** | **Traded away.** TSR 1 no-load input current is **1 mA typ** per module (datasheet, 9/12 V_in models): 2 × 1 mA × 24 V ≈ 48 mW ≈ **1.15 Wh/day**, about half the S88's own consumption. Affordable on solar — *The energy budget* has the new totals |
+| **100 V input rating** | **Traded down to 36 V.** *What the input chain no longer covers* |
+| Type-3 ripple injection, `R_RON`, `C_BST`, inductor selection, layout of `SW`/`RON` | Inside the module. Nothing to tune, nothing to scope |
+| Short-circuit fold-back on the 5 V rail | **Kept.** TSR 1 has continuous short-circuit protection, so bring-up step 2 (short J12, watch 3.3 V not move) still proves the two-rail argument |
+
 #### Capacitors
 
-- **`C19` — 22 µF / 50 V, across pins 1–2 within 5 mm.** The value is Traco's, not
-  ours: the datasheet requires *"an external input capacitor 22 µF / 50 V for input
-  voltage higher than 32 VDC"*, and 32 V is the top of the design range. Either a
-  1210 X7R (accept ~40 % DC-bias loss at 32 V) or a small aluminium electrolytic.
-- **`C21` — 22 µF / 16 V, optional.** The module is internally compensated and
-  needs no output capacitor. Fitted because it is cheap and takes the edge off the
-  LoRa TX and SCD41 current steps; DNP it without consequence.
-- **`C11` — 100 µF / ≥63 V electrolytic, keep, and keep the voltage rating.** It
+- **`C_IN` — 22 µF / 50 V, one per module, across pins 1–2 within 5 mm.** The
+  value is Traco's, not ours: the datasheet requires *"an external input capacitor
+  22 µF / 50 V for input voltage higher than 32 VDC"*, and 32 V is the top of the
+  design range. Either a 1210 X7R (accept ~40 % DC-bias loss at 32 V — still more
+  than the 8.8 µF the LM5164 rails had) or a small aluminium electrolytic; the
+  module has its own internal filter capacitor, so ESR is not critical. 50 V is
+  enough: it only has to outlive the module it protects, and the module is a 36 V
+  part. C11 upstream still does the bulk and cable-damping job (*The `24V_PROT`
+  node*).
+- **`C_OUT` — 22 µF / 16 V X7R, one per module, optional.** The modules are
+  internally compensated and Traco requires no output capacitor. It is fitted
+  because it is cheap and takes the edge off the LoRa TX and S88 current steps;
+  DNP it without consequence if you are trimming the BOM.
+- **C15 — 100 µF on the 5 V rail, keep.** Its job is the S88's 300 mA steps
+  through 5 m of cable inductance, which has nothing to do with which regulator is
+  upstream. The head carries its own 100 µF (§4b) — both are needed, at opposite
+  ends. Total on the 5 V rail is ~222 µF, inside Traco's **470 µF** capacitive-load
+  limit; do not add bulk beyond that without checking the limit again.
+- **C11 — 100 µF / ≥63 V electrolytic, keep, and keep the voltage rating.** It
   sits on the clamped side of D9, which reaches 53.3 V during a surge. That the
-  module is a 36 V part does not lower what C11 sees.
-- **`C15` is deleted.** Its only job was the S88's 300 mA steps down 5 m of cable.
-  The SCD41's equivalent reservoir is the **100 µF at the head**, on the far side
-  of the cable where it actually belongs (§3, *The 205 mA problem*).
+  modules are 36 V parts does not lower what C11 sees.
 
 #### Layout — four rules
 
 1. **`C_IN` across pins 1 and 2, within 5 mm.** The switching loop is inside the
    module, but its on-board input decoupling is small and the 500 kHz input ripple
    current still has to come from somewhere close.
-2. **The module in one corner, with the 24 V input, far from J1–J12.** Six
-   bit-banged 1-Wire lines, four unshielded 5 m I2C branches, a 27 kΩ ADC divider
-   and a 923 MHz radio all live on this board.
-3. **Give pin 2 its own wide GND return to J14.** It is the only ground pin the
-   module has; do not let it share a thin trace with the analog ground or R25.
-4. **Nothing routed under the module** — Traco's own instruction. The body sits
+2. **Both modules in one corner, with the 24 V input, far from J1–J12.** Six
+   bit-banged 1-Wire lines, three unshielded 5 m I2C branches, a 27 kΩ ADC divider
+   and a 923 MHz radio all live on this board. The modules switch at 500 kHz; give
+   them their own corner.
+3. **Give each module's pin 2 its own wide GND return to J14.** It is the only
+   ground pin the module has; do not let it share a thin trace with the analog
+   ground or R25.
+4. **Nothing routed under the modules** — Traco's own instruction. The body sits
    0.5 mm off the board; keep that footprint area copper-free on the top layer.
+
+The LM5164 rules about `SW` copper and the `RON` node have no equivalent — those
+nets are now inside the module.
 
 #### What the input chain no longer covers
 
 The LM5164 revision demanded **≥60 V** on every part after F1 because *"a
 controller fault, a disconnected battery, or a cold-morning panel V_oc can put far
-more than 29 V on the wire"*. That is still true, and the module is a **36 V
-part**. Be clear about what F1/Q2/D9/C11 do and do not do for it:
+more than 29 V on the wire"*. That is still true, and the modules are now **36 V
+parts**. Be clear about what F1/Q2/D9/C11 do and do not do for them:
 
 - **D9 (SMBJ33A) handles surge *energy*, not overvoltage.** It stands off 33 V and
-  clamps at up to **53.3 V** while doing so — above the module's rating. No TVS
+  clamps at up to **53.3 V** while doing so — above the modules' rating. No TVS
   that stays off at 32 V clamps below ~45 V; that is TVS physics, not a wrong part
   number. D9 keeps a lightning-induced or switching transient from destroying the
-  board; it does not keep the module inside its rating during one. The datasheet
-  publishes no absolute maximum beyond the 36 V operating limit, so treat 36 V as
-  the ceiling.
+  board; it does not keep the module inside its rating during one. Expect the
+  modules to survive brief clamp events — but the datasheet publishes no absolute
+  maximum beyond the 36 V operating limit, so treat 36 V as the ceiling and do not
+  design on anything above it.
 - **A charge controller that fails and passes panel V_oc (~44 V for a "24 V"
-  panel) through kills the module.** Nothing passive on this board prevents that,
-  and adding an active OVP disconnect would put back the kind of circuit
-  revision 1.0 exists to remove. **This is a known limitation.** The mitigation is
-  procedural and free: before the board is ever connected to the real system,
-  measure the panel's V_oc and confirm the controller does not pass it through
-  with the battery disconnected (§7, *before step 1*).
+  panel) through kills both modules.** Nothing passive on this board prevents that,
+  and adding an active OVP disconnect would put back the kind of circuit this
+  revision exists to remove. **This is a known limitation of revision 1.0.** The
+  mitigation is procedural and free: before the board is ever connected to the
+  real system, measure the panel's V_oc and confirm the controller does not pass it
+  through with the battery disconnected (§7, *before step 1*).
 - **Everything else the chain does is unchanged:** F1 sized by I²t for hot-plug
-  inrush, Q2 for reverse polarity, C11 for damping the cable resonance.
+  inrush, Q2 for reverse polarity, C11 for damping the cable resonance. None of
+  those parts is wrong because the regulator changed; only the ceiling of what they
+  protect *against* has come down.
 
-#### Two traps specific to this module
+#### Three traps specific to these modules
 
-**1. Do not substitute a 28 V module.** DFRobot DFR0570/0571, MP1584 and LM2596
-boards are all rated 28 V maximum input. A 24 V lead-acid bank sits at **28.8 V on
-absorb**; an 8S LiFePO4 bank reaches **29.2 V** full. That is not a fault case, it
-is every sunny afternoon. The failure is slow: the module survives 24.0 V on the
-bench and dies the first time the bank hits absorb.
+**1. Do not substitute a 28 V module "because it is the same thing".** It is not —
+*Why these and not the cheap 28 V modules*. The failure is slow: the module
+survives 24.0 V on the bench and dies the first afternoon the bank reaches absorb.
 
-**2. The pin order is 78xx — 1 = +V_in, 2 = GND, 3 = +V_out — confirmed, but buzz
-the footprint out before the module is soldered anyway.** A reversed footprint
-puts 24 V on the output pin, and the Nucleo is downstream of it.
+**2. The pin order is 78xx — 1 = +V_in, 2 = GND, 3 = +V_out — confirmed, but
+buzz the footprint out before the modules are soldered anyway.** A reversed
+footprint puts 24 V on the output pin, and the S88 or the Nucleo is downstream of
+it. It is a thirty-second check against a dead Nucleo.
 
-### 3.3 V goes down the CO2 cable, and the wire gauge is part of the spec
+**3. No-load current is the number that moved the most.** The LM5164 drew 10.5 µA;
+the TSR 1 draws **1 mA typ** per module (datasheet). The energy table below uses
+that figure — but it is a *typical*, with no maximum published, so bring-up step 1
+still measures it with both outputs unloaded and writes the real number in.
 
-The S88 revision sent **5 V** to the CO2 head because the sensor needed it. The
-SCD41 runs from the same 3.3 V as the rest of the front-end, so the branch is
-electrically identical to the three SHT45 branches — with one exception that is
-worth a paragraph, because it is the only place on this board where wire gauge is
-a specification rather than a preference.
+### 5 V goes down the cable, not 24 V
 
-**The SCD41 draws 175 mA typ / 205 mA max in bursts.** Over 5 m:
+At 300 mA over 5 m of 24 AWG (0.84 Ω round trip) the drop is **250 mV**. The
+LM5164 revision absorbed that by regulating U6 to 5.1 V; the TSR 1-2450 is a fixed
+5.0 V part with a **4.90 V** worst case, which would land **4.65 V** at the S88 —
+legal against its 4.5 V minimum, but with only 150 mV to spare. **Specify the S88
+cable as 22 AWG** (0.5 Ω, **150 mV**): worst case at the head becomes 4.75 V. The
+margin that used to live in the regulator's trim now lives in the copper.
 
-| Gauge | Ω/km | Round-trip R over 5 m | Drop at 205 mA | VDD at the head |
-|---|---|---|---|---|
-| 24 AWG (as used for the SHT45s) | 84.22 | 0.84 Ω | 173 mV | 3.06 V |
-| **22 AWG — specified** | **52.96** | **0.53 Ω** | **109 mV** | **3.12 V** |
-| 20 AWG | 33.31 | 0.33 Ω | 68 mV | 3.16 V |
+The alternative — sending 24 V and bucking at the head — is worse despite the
+lower current. It puts a switching converter, an inductor and a bulk electrolytic
+**inside the humid greenhouse enclosure**: more parts to corrode, more heat next to
+a sensor whose accuracy you care about, and switching EMI at the measurement point.
+For a 5 m run it buys nothing.
 
-(VDD at the head is U7's ±2 % worst case, 3.23 V, minus the drop.)
-
-All three clear the SCD41's **2.4 V** minimum with enormous margin, so this is not
-about the sensor browning out. It is about the datasheet's request that the supply
-*"not vary by more than 30 mV (e.g. ripples or drops caused by other loads)"* and
-its recommendation of a dedicated LDO. We give it neither an LDO nor 30 mV — we
-give it **22 AWG, a 100 µF reservoir at the head, and a measurement window in
-which nothing else on the rail is working**. Together those are enough; any one of
-them alone would not be.
-
-**Why not send 5 V and regulate at the head, as the S88 did?** Because it would
-resurrect `U6` — a second regulator, its two capacitors, and half of this node's
-idle current — to solve a 109 mV problem that a thicker wire already solves. The
-S88 needed 5 V at the sensor; the SCD41 does not.
-
-### The energy budget, and why it is now genuinely uninteresting
+### The energy budget, and why it stopped being interesting
 
 | Load | Draw | Per day |
 |---|---|---|
-| **U7 no-load input current** | 1 mA typ × 24 V = 24 mW | **0.58 Wh** |
+| **S88 LP, continuous** | 18 mA @ 5 V = 90 mW | **2.16 Wh** |
+| Module conversion loss (~85 % at these loads) | | ~0.4 Wh |
+| **Module no-load current, ×2** | 1 mA typ each × 24 V ≈ 48 mW | **~1.15 Wh** |
 | MCU + LoRa + probes + SHT45s | ~1 mA avg @ 3.3 V | <0.1 Wh |
-| Module conversion loss | | ~0.1 Wh |
-| **SCD41** — 2 single shots × 96 wakes | 0.45 mA per shot-cycle @ 3.3 V | **0.024 Wh** |
-| TCA9548A standby | 0.1 µA typ | ~0 |
 | ST-LINK, **if** you power it | ~5 mA @ 3.3 V | ~0.4 Wh |
-| **Total** | | **≈0.8 Wh/day** |
+| **Total** | | **≈3.8 Wh/day** (≈2.5 with the LM5164s) |
 
-Against ~80 Wh/day from a 20 W panel at four peak-sun hours, the whole node is
-**~1 %** of the yield. Overnight carry is 12 h × ~33 mW ≈ **0.4 Wh**; three cloudy
-days is ~2.4 Wh, against a 20 Ah 24 V bank's 480 Wh.
+Against ~80 Wh/day from a 20 W panel at four peak-sun hours, the whole node — CO2
+sensor and regulators included — is **~5 %** of the yield. Overnight carry is 12 h ×
+~155 mW ≈ **1.9 Wh**; three cloudy days is ~11.5 Wh. Size the bank for the
+cloudy-day case, not for the node: a 20 Ah bank holds 480 Wh, well over a hundred
+sunless days of this. The regulators' no-load current is now the second-largest
+line in the table, which is the price of revision 1.0; it is a datasheet *typical*,
+so bring-up step 1 measures it.
 
-**Read the trend, because it is the story of three revisions.** The battery
-design worried about microamps. The S88 revision spent 3.8 Wh/day and argued that
-the budget had "stopped being interesting". This one spends 0.8 Wh/day, of which
-**72 % is a regulator doing nothing** and the CO2 sensor — the part that dominated
-every previous version — is **3 %**. There is no longer a load on this node worth
-optimising. The next watt-hour, if one is ever spent, should go on the head heater
-(§3, *Condensation*), which would take the total to ~2.0 Wh/day and still leave it
-below what the S88 revision consumed while measuring nothing extra.
+**Consequences of that table**, all of which simplify the design:
+
+- CO2 duty-cycling is **deleted** — see *The CO2 sensor* in §3.
+- The AO3401A's 5 µA I_DSS leakage budget is **no longer a constraint**. Keep the
+  gate for fault recovery, not for energy. *On the P-FET* below is retained because
+  R_DS(on) and the 300 mA question still matter, but read its leakage arithmetic as
+  history.
+- Stop2 sleep current no longer needs to be single-digit µA to be acceptable.
 
 ### Three traps
 
@@ -1930,7 +1959,7 @@ instant; 300 k‖30 k is 27 kΩ, which needs a long ADC sampling time.
 
 > **VREFINT is still needed — for a different job.** Read it to recover the *actual*
 > VDDA, then scale the divider reading against that. Otherwise the module's 2 % tolerance
-> becomes 2 % of error on every bank-voltage report. The firmware keeps VREFINT and
+> becomes 3 % of error on every bank-voltage report. The firmware keeps VREFINT and
 > gains a second channel; it does not drop the first.
 
 **2. The ST-LINK is unpowered, so the VCP is dead.** Feeding 3V3 directly at CN6-4
@@ -1946,7 +1975,7 @@ controllers have a LOAD terminal that disconnects around 11.5 V/cell to protect 
 bank. A node on that terminal goes silent exactly when you most want telemetry
 about a failing solar system. **Connect to the battery terminal**, with F1/Q2/D9 as
 your own protection — and accept that the node is then responsible for not flattening
-the bank, which at ~0.8 Wh/day it emphatically will not: a 20 Ah bank outlasts a year of sunless
+the bank, which at ~3.8 Wh/day it will not: a 20 Ah bank outlasts a hundred sunless
 days. The LM5164 revision kept a 15 V UVLO under this as a last backstop; the TSR 1
 has none and runs down to 6.5 V, so the node now reports right down to the bank's
 death — which, for a node whose job includes measuring the bank, is the behaviour
@@ -1965,21 +1994,11 @@ holding both PCBs, and **four sensor locations** on cables:
 | 7 | SHT45 #0 — **หัวโรงเรือน** | ≤5 m | `V / SDA / SCL / G` |
 | 8 | SHT45 #1 — **ท้ายโรงเรือน** | ≤5 m | `V / SDA / SCL / G` |
 | 9 | SHT45 #2 — **นอกโรงเรือน** | ≤5 m | `V / SDA / SCL / G` |
-| 10 | **SCD41 — กลางโรงเรือน, at crop level** | 5 m, **22 AWG** | `V / SDA / SCL / G` |
+| 10 | S88 LP — **กลางโรงเรือน** | 5 m | `5V / GND / A / B` |
 | 11 | Solar input | — | 24 V + GND from the charge controller |
 
-**Eleven cable entries**, and **four of them are now the same cable with the same
-connector**: `V / SDA / SCL / G` on a 4-pin pluggable terminal, J9 through J12.
-Revision 2.0's CO2 branch is not a special case any more — it is the fourth I2C
-branch, differing only in wire gauge. That, not the PCBs, sets the enclosure size,
-the same lesson this document already learned once when the probe count went to six.
-
-**The building is a mushroom house (โรงเรือนเพาะเห็ด), not a plant greenhouse**,
-and three things follow that are easy to get wrong if you inherit text from the
-previous revision: it is **dark** (no radiation shields inside, no solar load),
-it is **misted** (liquid water lands on surfaces as a matter of routine, not as an
-accident), and it is **CO2-rich by design** (nothing in it ever approaches outdoor
-air, which is what §3's ASC section is about).
+**Eleven cable entries.** That, not the PCBs, now sets the enclosure size — the same
+lesson this document already learned once when the probe count went to six.
 
 - **Probes:** 3-pin pluggable screw terminals, six of them. Field re-termination
   with cold hands is the design case; JST crimps will not survive it. Silkscreen
@@ -1991,42 +2010,34 @@ air, which is what §3's ASC section is about).
 - **Probe cable:** one twisted pair = **DQ + GND**, VDD on a separate conductor.
   Cat5 is ideal. Prefer **plain UTP over shielded** — shielded roughly doubles
   capacitance per metre, the one cable property these values depend on.
-- **I2C branches: ≤5 m, all four, and this is a hard number.** At 5 m with 2.2 kΩ
-  the rise time is 0.60 µs against a 1000 ns budget. At 10 m it fails. If a run
-  must be longer, fit a P82B715 on that branch (§3) — do not simply lengthen the
-  cable. Twist **SDA with GND**; run SCL in the second pair. One Cat5 per branch.
-- **The CO2 branch is 22 AWG on `V`/`G`, and that is a specification.** It is the
-  only branch carrying a 205 mA burst; at 24 AWG the IR drop is 172 mV instead of
-  109 mV. See §5, *3.3 V goes down the CO2 cable*. Cat5 is 24 AWG — for this one
-  branch either use a heavier 4-core cable, or double up conductors on `V` and `G`.
-- **Label both ends of every branch.** Four identical connectors and four
-  near-identical cables. A swapped J10/J11 silently exchanges "inside the house"
-  for "ambient reference" and the data still looks plausible; a swapped J12 puts
-  the CO2 sensor's 205 mA burst down a 24 AWG cable and nothing complains at all.
+- **SHT45 branches: ≤5 m, and this is a hard number.** At 5 m with 2.2 kΩ the I2C
+  rise time is 0.60 µs against a 1000 ns budget. At 10 m it fails. If a run must be
+  longer, fit a P82B715 on that branch (§3) — do not simply lengthen the cable.
+  Twist **SDA with GND**; run SCL in the second pair. One Cat5 per branch.
+- **Label both ends of every branch.** Three identical connectors, three identical
+  cables, three identical sensors. A swapped J10/J11 silently exchanges "inside the
+  greenhouse" for "ambient reference" and the data still looks plausible.
 - **Sensor housings — each location needs its own.** Small, vented, sensor facing
   down. The SHT45s tolerate 100 %RH and recover from condensation, so they need
   protection from *liquid* water and sun, not hermetic sealing.
-- **SHT45 #2 needs a radiation shield, not an enclosure** — it is the only sensor
-  that sees sun. Louvered or Stevenson-type, sensor below the shield, north-facing.
-  An unshielded sensor in Thai sun reads **10–15 °C above true air temperature** and
-  the ambient reference becomes worse than useless — it becomes misleading. **The
-  three sensors inside the house need no shield**; it is dark in there.
-- **The CO2 head is the demanding one.** Vented, splash-protected housing with the
-  **diffusion opening facing downward** so condensate drips away rather than
-  pooling on the optical path, a **PTFE/Gore membrane**, **never sealed**, and
-  **not in the direct path of a misting nozzle**. No radiation shield. The SCD41 is
-  rated 0–95 %RH non-condensing and this building will sit against that limit —
-  see *Condensation* in §3 for the heater pad that may have to be fitted.
-- **The front-end enclosure does not need venting.** Nothing in it measures air.
-  It should be **IP65 and as sealed as the glands allow**. Keep the desiccant habit
+- **SHT45 #2 needs a radiation shield, not an enclosure.** Louvered or
+  Stevenson-type, sensor below the shield, north-facing. An unshielded sensor in
+  Thai sun reads **10–15 °C above true air temperature** and the ambient reference
+  becomes worse than useless — it becomes misleading.
+- **The S88 head is the demanding one.** Ventilated radiation shield, **diffusion
+  area facing downward** so condensate drips away rather than pooling on the optical
+  window, PTFE/Gore membrane, never sealed. See *The deployment risk* in §3 — this
+  sensor is rated 0–85 %RH non-condensing and the greenhouse will test that.
+- **The front-end enclosure no longer needs venting.** Nothing in it measures air
+  any more. It should be **IP65 and as sealed as the glands allow** — a change from
+  the previous revision, where the SCD41 forced a vent. Keep the desiccant habit
   anyway if the box is opened often in humid weather.
 - **RF:** keep the antenna clear of metal, and keep the ribbon away from the RF
   section and the CN12 SMA. A 30 cm ribbon draped over the antenna is a real
   antenna-detuning problem — and there are now eleven cables competing for the same
   space, so plan the routing rather than discovering it.
-- **Test points:** the ones in the BOM — and note that TP15–22 are now **four**
-  downstream SDA/SCL pairs, one per branch. With six probes and four I2C branches,
-  "which one?" is the first question of every field failure.
+- **Test points:** the twenty in the BOM. With six probes, three I2C branches and a
+  Modbus link, "which one?" is now the first question of every field failure.
 
 ---
 
@@ -2042,29 +2053,25 @@ everything else:
 > **Before step 1 — once, at the real installation, with a meter.** Measure the
 > panel's open-circuit voltage at the controller's PV terminals, then disconnect
 > the battery and check that the controller's battery/load terminals do **not**
-> follow it. A "24 V" panel's V_oc is ~44 V; U7 is a 36 V part and nothing on
+> follow it. A "24 V" panel's V_oc is ~44 V; U6/U7 are 36 V parts and nothing on
 > this board stops a controller that passes V_oc through. Five minutes, and it is
 > the only defence there is — *What the input chain no longer covers*.
 
 1. **Bring up the 24 V front end with no PCB loads.** F1 → Q2 → D9 → C11, then
-   confirm **U7 = 3.3 V ±2 %** on a bench supply swept **18 → 32 V**. It must never
-   read above **3.6 V** at any input voltage; if it does, stop — CN6-4 and the
-   STM32WL are both absolute-max 3.6 V. A DMM is enough for the rail; a scope on
-   the output should show **≈50 mV_pp** of ripple (datasheet typical) at ~500 kHz
-   and nothing slower. There is no `SW` node to inspect and no COT bursting to
-   catch — the converter is inside the module.
+   confirm **U6 = 5.0 V ±2 %** and **U7 = 3.3 V ±2 %** on a bench supply swept
+   **18 → 32 V**. U7 must never read above **3.6 V** at any input voltage; if it
+   does, stop — CN6-4 and the STM32WL are both absolute-max 3.6 V. A DMM is enough
+   for the rails; a scope on each output should show **≈50 mV_pp** of ripple
+   (datasheet typical) at ~500 kHz and nothing slower. There is no `SW` node to inspect and no COT
+   bursting to catch — the converter is inside the module.
    **Measure and record the no-load input current** here, from the bench supply's
-   readout with the output unloaded: §5's energy table uses the datasheet typical
-   of 1 mA and no maximum is published, and that single line is **72 % of this
-   node's entire budget**. Write the measured number into that table.
-2. **Deliberately short `VSENS` at J12.** U7 should current-limit and recover when
-   the short is removed. Revision 1.0 tested this at the 5 V rail to prove an S88
-   fault could not brown out the radio; with one rail that argument is gone, and
-   what this step now proves is narrower but still worth having: **a shorted sensor
-   branch does not destroy the module**, and `SENS_GATE` clears it. Drop the gate
-   with the short still applied and confirm the rail recovers — that is the
-   recovery path firmware depends on, and it is the reason the CO2 sensor was
-   brought back behind the gate.
+   readout with both rails unloaded: §5's energy table uses the datasheet typical
+   of 1 mA per module, 2 mA total, and no maximum is published. Write the measured
+   number into that table.
+2. **Deliberately short the 5 V output at J12.** U6 should current-limit, run warm
+   and recover when the short is removed; **U7 and the 3.3 V rail must not move at
+   all.** This is the one test that proves §5's "an S88 fault cannot brown out the
+   LoRa transmitter" — do it once, on the bench, with the boards not yet on a pole.
 3. **Read the input chain at TP25 / TP1 / TP26, all referenced to the `GND` pad,
    before anything else.** Three DMM readings at 24.0 V in, correct polarity,
    separate every way this chain gets built wrong:
@@ -2109,9 +2116,7 @@ exist:
 
 8. Pull `SENS_GATE` high → `VSENS` = 0 V. Pull it low → `VSENS` = 3.3 V, and all
    eight switched signal lines (six DQ, upstream SDA, SCL) idle high through their
-   pull-ups. **Everything must go to 0 V** — there is no ungated sensor rail in
-   this revision, and anything still alive with the gate high is a pull-up that
-   landed on permanent 3V3.
+   pull-ups. **`V5_S88` must be 5 V in both states** — it is not gated.
 9. **Pin-probe every DQ line** → `pull-up=1 pull-down=1` on all six (proves each
    pull-up is really on `VSENS`, not GND). Steps 6 and 7 catch the
    resistor-to-GND class of fault — all-zero scratchpads that pass CRC and decode
@@ -2133,11 +2138,10 @@ exist:
 13. All six fitted → six plausible, **independent** temperatures, CRC OK. Two
     channels that track each other exactly are two connectors wired to one MCU pin.
 14. **I2C scan with every mux channel closed** → exactly **`0x70` and nothing
-    else**. No `0x44` and no `0x62`: either one answering here is a sensor wired
-    upstream of the switch, which will collide (0x44) or permanently load the bus
-    with 5 m of cable (0x62) the moment a channel opens.
-15. **Scan again with each channel open in turn** → exactly one `0x44` on channels
-    0, 1 and 2, and exactly one **`0x62` on channel 3**.
+    else**. No `0x44` (an SHT45 wired upstream, which will collide the moment a
+    channel opens) and no `0x62` — the SCD41 is gone; if something answers there,
+    you are looking at the wrong board.
+15. **Scan again with each channel open in turn** → exactly one `0x44` each time.
     Two at once means more than one channel is open; none means that channel's
     pull-ups or its sensor are missing. Do this before trying to read anything: an
     address that does not appear is a wiring or pull-up fault, while an address that
@@ -2149,44 +2153,28 @@ exist:
     series should move. If two move, two channels are bridged; if the wrong one
     moves, the channel-to-location mapping is off and every reading is mislabelled
     from then on. Verify against the silkscreen: `CH0 หัว`, `CH1 ท้าย`, `CH2 นอก`.
-17. **Read the SCD41's serial number on channel 3, with the real 22 AWG cable
-    fitted.** `get_serial_number` (0x3682) is the proof-of-life check and
-    `scd41_init()` already does it. This separates "the branch works" from "the
-    sensor measures", which are different faults with different fixes — and it is
-    the step that catches a CO2 branch accidentally built with 24 AWG Cat5 like the
-    other three.
-18. **Read CO2, and check the three settings the firmware is responsible for.**
-    The debug log prints `co2=… asc=0 t=… rh=…`:
-    - **`asc=0`.** If it reads 1, `scd41_ensure_asc()` did not take, and the sensor
-      will slowly calibrate itself into uselessness in a house that never sees
-      400 ppm. This is the single most important number in the whole bring-up.
-    - **Altitude** — read it back with `get_sensor_altitude` (0x2322) and expect
-      `SCD41_SITE_ALTITUDE_M` (330). Set before any FRC, never after.
-    - **The value itself.** Outdoor air is **~420 ppm**. A mushroom house runs
-      *higher* than outdoors at all times and highest when closed up — the opposite
-      of a plant greenhouse, so do not use the old intuition. During spawn run it
-      will read past 5000 ppm, which is outside the specified accuracy but on
-      scale; see §3.
-    - **The SCD41's own temperature** against the nearest SHT45. It reads high by
-      design (it self-heats), but *far* high means the head is not ventilating.
-    A failed CRC is a wiring problem; a valid reading that is implausible is a
-    calibration problem, and the answer to that is the FRC procedure in §3 — not
-    turning ASC back on.
+17. **Modbus link, before the S88 is fitted.** Loop `A`/`B` at the far end of the
+    5 m cable and confirm the MCU receives its own transmission. That separates
+    "the RS-485 path works" from "the sensor answers", which are different faults
+    with different fixes.
+18. **Read the S88** (once fitted — see the staged plan in §3). Send Senseair's own
+    frame `FE 04 00 00 00 04 E5 C6` and expect `FE 04 08 …` back; the debug log
+    prints `co2=… st=0x0000`. `st=0x0080` is `WarmUp` (the first 10 s only);
+    anything else non-zero is a real fault code (PSP14281 Table 7). Outdoor air is
+    **~420 ppm**; a greenhouse in daylight runs lower as the crop draws it down, and
+    higher at night. A CRC failure on the Modbus frame is a wiring or termination
+    problem; a valid frame with an implausible number is a sensor or calibration
+    problem. Then confirm the one-time writes took: read **HR27** (`FE 03 00 1A 00
+    01 …`) and see the site pressure, read **HR32** and see 180 (ABC on) — and read
+    **IR7**, the S88's own measurement of its supply, which should be **≥4750 mV**
+    with the head at the far end of the 22 AWG run. Under 4500 mV is below the
+    S88's minimum and means cable or connector resistance.
 19. **Wiggle test.** With everything reading, flex the ribbon and tug each of the
     eleven cable entries. Nothing should glitch. This is the test that finds a
     marginal IDC crimp before the pole does.
 20. Full cycle → wake, read, TX, sleep. Confirm the gateway logs `6/6 probes and
-    3/3 air sensors reading` plus a CO2 value, and confirm `VSENS` actually goes
-    off **during** the sleep rather than at the next wake. Time the gated window
-    while you are there: it should be **~11 s**, dominated by the SCD41's two 5 s
-    single shots. Much shorter means the warm-up shot is being skipped; much
-    longer means something is retrying.
-21. **Scope `VSENS` through one full wake, with the CO2 branch connected.** This is
-    the one measurement that is new in revision 2.0 and has no equivalent in the
-    previous revisions: the SCD41's **205 mA bursts** are now on the same rail as
-    everything else. Confirm they land *after* the DS18B20 conversions and the
-    SHT45 reads have finished — if they overlap, the ordering in `main.cpp` has
-    been changed and the probes are being sampled through a disturbed supply.
+    3/3 air sensors reading`, and confirm the sensor rail actually goes off
+    **during** the sleep rather than at the next wake — while `V5_S88` stays up.
 
 ---
 
@@ -2198,25 +2186,11 @@ exist:
   connectors pinout") for the CN6 power tap; **Table 9** ("External power sources:
   3V3") for the CN6-4 battery input; §6.6.5 and the solder-bridge tables cover the
   VCP/D0-D1 arrangement.
-- Sensirion **SCD4x** datasheet, **v1.7 (April 2025)** — the CO2 sensor. §1.1
-  accuracy bands, §2.1 the 175/205 mA peak and the single-shot average, §2.2 the
-  −10…60 °C / 0–95 %RH envelope, §2.3 the VDD/VDDH tie and the 30 mV supply-quiet
-  request, §3.8 **ASC and its weekly-400-ppm assumption** plus the FRC procedure,
-  §3.11 single-shot mode and the note that **ASC is unavailable when power-cycled**,
-  and §3.12 the CRC-8 that `src/sensirion_i2c.cpp` implements.
-- Traco Power **TSR 1 series** datasheet, rev. 2026-07-02 — U7 (TSR 1-2433):
-  input range, ±2 % set accuracy, 250 % current limit, 1 mA typ no-load input
-  current, the SIP-3 pinout (1 = +V_in, 2 = GND, 3 = +V_out), the 470 µF
-  capacitive-load limit, the **22 µF / 50 V input capacitor required above
+- Traco Power **TSR 1 series** datasheet, rev. 2026-07-02 — U6/U7 (TSR 1-2450,
+  TSR 1-2433): input ranges, ±2 % set accuracy, 250 % current limit, 1 mA typ
+  no-load input current, the SIP-3 pinout (1 = +V_in, 2 = GND, 3 = +V_out), the
+  470 µF capacitive-load limit, the **22 µF / 50 V input capacitor required above
   32 V_in**, and *"avoid routing PCB traces under the converter"*.
-- TI **TCA9548A** datasheet (SCPS207H) — the bus switch. §5.5: standby I_CC of
-  **0.1 µA typ / 2 µA max**, which is why putting four branches behind it costs
-  nothing.
-- Senseair **PSP14281 / TDE14367 / TDE15154 / PSP14808** — the S88 family, used by
-  the previous revision and retained in
-  [`hardware-interface-s88.md`](hardware-interface-s88.md). Not used by this build,
-  but the **S88 GH** (0–20 000 ppm, 0–95 %RH) is the documented fallback if the CO2
-  range requirement ever outgrows the SCD41.
 - TI **LM5164** datasheet (SNVSAU4) and **AN-1481** — the discrete bucks of the
   previous revision, retained in
   [`hardware-interface-back.md`](hardware-interface-back.md). Not used by this build.
@@ -2224,11 +2198,9 @@ exist:
 - DS18B20 datasheet — **VDD 3.0–5.5 V** is the constraint driving battery choice.
 - Sensirion **SHT4x** datasheet — command set, timing, and the transfer functions
   ported in [`src/sht45.cpp`](../src/sht45.cpp).
-- Sensirion **SHT4x** and **SCD4x** command sets are both ported by hand onto the
-  shared word protocol in [`src/sensirion_i2c.cpp`](../src/sensirion_i2c.cpp) —
-  16-bit big-endian words, each followed by CRC-8 (poly 0x31, init 0xFF). That is
-  **not** the frame's `lora_crc8` (poly 0x07, init 0x00); the codebase carries two
-  distinct CRCs and mixing them is a silent-corruption bug.
+- Sensirion **SCD4x** datasheet — command set, the 1 s power-up time, the 5 s
+  single-shot duration, and the peak-current figure that sizes Q1. Ported in
+  [`src/scd41.cpp`](../src/scd41.cpp).
 
 ---
 

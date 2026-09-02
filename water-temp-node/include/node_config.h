@@ -48,8 +48,11 @@
  *   DQ_P1  PA4   CN10-17      DQ_P4  PB8   CN10-27   <-- moved off PC1 (2026-08)
  *   DQ_P2  PA9   CN10-19      DQ_P5  PB10  CN10-25
  *
- * DQ_P4 moved from PC1 to PB8 because PC1 is now LPUART1_TX for the S88 CO2
- * sensor -- see S88_* below. PB8 was spare and sits at CN10-27, flanked by the
+ * DQ_P4 moved from PC1 to PB8 in 2026-08 because PC1 was then LPUART1_TX for
+ * the Senseair S88 CO2 sensor. That sensor is gone (2026-09: the CO2 part is an
+ * SCD41 on I2C) and PC1 is free again -- but DQ_P4 STAYS on PB8. Moving it back
+ * would churn the connector contract, the front-end layout and this table for
+ * no gain. PB8 sits at CN10-27, flanked by the
  * two LED positions (26/28) which the front-end leaves open, so it keeps the
  * "every DQ has a guard neighbour" rule from docs/hardware-interface.md.
  *
@@ -91,7 +94,13 @@
  * leakage mattering; on 24 V solar that is irrelevant. It is kept because it is
  * the only reliable way to recover a hung I2C bus -- three unshielded 5 m
  * branches in a greenhouse WILL latch SDA low eventually. On a failed
- * transaction: gate off, wait, gate on, retry. The S88 is NOT behind it. */
+ * transaction: gate off, wait, gate on, retry.
+ *
+ * 2026-09: EVERYTHING the front-end reads is behind this gate again, including
+ * the CO2 sensor. The S88 had to sit outside it (5 V, and ABC that needed
+ * continuous power); the SCD41 does not -- it takes on-demand single shots and
+ * is happiest power-cycled. So the gate covers all four 5 m branches, and there
+ * is no always-on sensor rail left to reason about. */
 #define DS_PWR_PORT             GPIOA
 #define DS_PWR_PIN              GPIO_PIN_8
 #define DS_PWR_GPIO_CLK()       __HAL_RCC_GPIOA_CLK_ENABLE()
@@ -110,11 +119,12 @@
  * probe) and I2C3 (PB10/PB11 -- PB10 is a probe and PB11 is the Nucleo's LED3,
  * which would sit on SDA).
  *
- * 2026-08: the SCD41 LEFT this bus. CO2 is now a Senseair S88 LP on Modbus/RS-485
- * (see S88_* below), so the ONLY things on I2C are the TCA9548A and the three
- * SHT45s behind it. The SHT45s are no longer on the board either -- each sits at
- * the far end of its own <=5 m cable, which is why the downstream pull-ups are
- * 2.2k rather than 4.7k. Still on the gated VSENS rail. */
+ * 2026-09: the SCD41 is BACK on this bus (it left for a Senseair S88 on
+ * RS-485 in 2026-08, and that whole subsystem is now deleted). On the bus:
+ * the TCA9548A, three SHT45s on channels 0-2, and the SCD41 on channel 3.
+ * None of them are on the board -- each sits at the far end of its own <=5 m
+ * cable, which is why the downstream pull-ups are 2.2k rather than 4.7k.
+ * All on the gated VSENS rail. */
 #define I2C_SDA_PIN             PA11
 #define I2C_SCL_PIN             PA12
 #define I2C_CLOCK_HZ            100000   /* 100 kHz: kind to three 5 m branches */
@@ -127,10 +137,14 @@
  * and phantom-powers itself to ~2.7 V, where it happily answers at 0x44.
  *
  * So the three sit behind a TCA9548A bus switch, one channel connected at a
- * time. Nothing else is on this bus any more -- the SCD41 that used to sit
- * upstream at 0x62 has been replaced by the S88 LP on RS-485. With every channel
- * closed, an I2C scan should now find 0x70 and nothing else. See src/tca9548a.h
- * and docs/hardware-interface.md.
+ * time. The SCD41 (0x62) does not collide with 0x44 and could in principle hang
+ * upstream of the switch -- but it must NOT, because it is 5 m away: an
+ * unswitched branch puts its ~320 pF on the bus permanently, which is the exact
+ * load-stacking the mux exists to prevent. It gets channel 3 instead.
+ *
+ * With every channel closed an I2C scan should find 0x70 and nothing else;
+ * 0x44 on channels 0-2 and 0x62 on channel 3. See src/tca9548a.h and
+ * docs/hardware-interface.md.
  */
 #define SHT45_COUNT             3
 #define SHT45_ADDR              0x44   /* all three -- factory-fixed */
@@ -152,70 +166,66 @@
 #define I2C_MUX_ADDR            0x70
 #define I2C_MUX_CHANNELS        { 0, 1, 2 }
 
-/* ---- CO2: Senseair S88 LP on Modbus RTU / RS-485 -------------------------- *
- * REPLACED THE SCD41 (2026-08). This is not a drop-in:
- *   - UART/Modbus, NOT I2C. It is not on the I2C bus at all.
- *   - 4.5-5.25 V, so it has its own buck rail, not VSENS.
- *   - It runs CONTINUOUSLY and is NOT gated by SENS_GATE. Its ABC (Automatic
- *     Baseline Correction) has an 8-day period and the datasheet specifies
- *     accuracy at continuous operation; at the old 0.28% duty cycle eight days
- *     of powered time would have taken 7.8 years and ABC would never complete.
- *     On 24 V solar its 18 mA average (~2.2 Wh/day) is ~3% of a 20 W panel.
+/* ---- CO2: Sensirion SCD41 on I2C, behind the mux ------------------------- *
+ * 2026-09: replaces the Senseair S88 LP, and takes the entire RS-485 subsystem
+ * with it -- U4, U5, the head LDO, the A/B TVS pairs, the 5 V rail and its buck
+ * module, and three signals off the board-to-board connector (S88_TX on PC1,
+ * S88_RX on PC0, S88_DE on PA7), which is why the contract dropped from
+ * eighteen signals to fifteen.
  *
- * So CO2_ENABLED / CO2_EVERY_N_WAKES / CO2_SINGLE_SHOT_WARMUP are GONE: there is
- * nothing to pace and nothing to warm up. Each wake just reads the latest value.
+ * Why it is a better fit than the part it replaces:
+ *   - 2.4-5.5 V, so it runs from the same 3.3 V as everything else. The S88's
+ *     4.5-5.25 V is what forced a second regulator onto the board.
+ *   - I2C with a CRC-8 on EVERY 16-bit word (sensirion_i2c.cpp), so dropping
+ *     Modbus costs no data integrity -- a corrupted reply is still detected and
+ *     retried rather than published as a plausible wrong number.
+ *   - measure_single_shot: on-demand measurement, so it lives behind SENS_GATE
+ *     like everything else instead of needing an always-on rail.
+ *   - -10..60 C, 0-95 %RH, against the S88 LP's 0..50 C, 0..85 %RH. The
+ *     mushroom house is the reason this mattered enough to change parts.
  *
- * LPUART1 on PC1/PC0 (CN10-23 / CN10-14). USART1 is not available (its TX pins
- * are PA9 = DQ_P2 and PB6 = the debug header), and USART2 exists only on PA2/PA3.
- * Freeing PC1 is why DQ_P4 moved to PB8.
+ * The cost is current: 175 mA typ / 205 mA max peak, against the S88's 300 mA
+ * but ten times the SCD41's own average. Two consequences, both handled:
+ *   - the 5 m branch is 22 AWG with 100 uF + 100 nF at the head, so the ~109 mV
+ *     IR drop lands well above the 2.4 V minimum;
+ *   - main.cpp reads it LAST inside the gated window, after the DS18B20
+ *     conversions have finished, so its bursts never overlap theirs.
+ */
+#define SCD41_ADDR              0x62
+#define SCD41_MUX_CHANNEL       3        /* SHT45s hold 0..2 -- see above */
+
+/* ASC (Automatic Self-Calibration) is ENABLED at the factory and is WRONG here.
+ * It assumes weekly exposure to 400 ppm outdoor air and calibrates the lowest
+ * reading it has seen toward SCD41_ASC_TARGET. A mushroom house never reaches
+ * 400 ppm, so ASC would drag every reading down, the controller would believe
+ * the air is fine, and it would under-ventilate -- the exact failure this
+ * sensor is fitted to prevent, and invisible on the dashboard.
  *
- * Register map: TDE14367 "Modbus on Senseair S88" rev 5 (2024-09-04), NOT the
- * product spec. Verified 2026-09-02:
- *   - CO2 is INPUT register IR4, address 0x0003, read with FUNCTION 0x04. It is
- *     not a holding register; HR4 at the same address is the pressure setting.
- *   - Sensor default is 9600 8N1 only; it REPLIES with 2 stop bits (harmless).
- *   - Response time-out is 180 ms max; silent interval 3.5 chars (~4 ms).
- *   - Address 0xFE is "any sensor": every S88 answers it regardless of its own
- *     address. Senseair says production/test only because it violates Modbus
- *     on a multi-drop bus -- this link is point-to-point with ONE slave, so it
- *     is the right choice here and survives a sensor swap. HR20 holds the
- *     individual address (1..254) if a second device ever shares the pair. */
-#define S88_UART_TX_PIN         PC1
-#define S88_UART_RX_PIN         PC0
-#define S88_UART_BAUD           9600     /* 8N1, Modbus RTU framing + CRC16 */
-/* RS-485 driver enable. DE and !RE are tied together on the transceiver, so
- * HIGH = transmitting, LOW = listening. s88.cpp raises it, writes, then calls
- * flush() -- which blocks until the last stop bit has actually left the shift
- * register -- before dropping it. Dropping DE on a delay instead of on the
- * transmit-complete flag truncates the frame; that is the classic RS-485 bug.
- * An auto-direction transceiver would remove this pin, but the common ones
- * (MAX13487E) are 5 V parts whose RO would drive 5 V into a non-5V-tolerant
- * STM32WL pin. PA7 was spare; use it. */
-#define S88_DE_PIN              PA7
-#define S88_MODBUS_ADDR         0xFE     /* "any sensor" -- see above */
-#define S88_IR_STATUS           0x0000   /* IR1 MeterStatus; IR4 CO2 = +3, read
-                                          * together with FC 0x04, count 4 */
-#define S88_HR_PRESSURE         0x0003   /* HR4, live, RAM, LSB 0.1 hPa */
-#define S88_HR_DEFAULT_PRESSURE 0x001A   /* HR27, EEPROM, loaded into HR4 at
-                                          * power-up. 0 = compensation off */
-#define S88_RESPONSE_TIMEOUT_MS 200      /* >= the sensor's 180 ms maximum */
-#define S88_RETRIES             2        /* Modbus has CRC16: a bad frame is
-                                          * detectable, so retry rather than
-                                          * publish a corrupted reading. */
-/* Site pressure for the S88's built-in compensation, in 0.1 hPa. The sensor
- * reads 1.6 % low per kPa below 1013.25 hPa -- ~5 % low at 330 m (Maejo) and
- * ~9 % at 500 m -- so this is NOT a cosmetic setting. Standard atmosphere:
- * 0 m 10132, 100 m 10012, 200 m 9894, 300 m 9777, 400 m 9661, 500 m 9546.
- * 0 leaves the sensor untouched (factory default: compensation disabled).
- * Written to HR27 (EEPROM) only when it differs -- see s88_apply_site_pressure. */
-#define S88_SITE_PRESSURE_DHPA  0
+ * So: OFF, enforced on every wake (a 1 ms read; EEPROM is only written when the
+ * sensor actually disagrees), and recalibrated by hand with FRC in outdoor air
+ * at each crop changeover. See src/scd41.h and docs/hardware-interface.md §3. */
+#define SCD41_ASC_ENABLED       0
+#define SCD41_FRC_TARGET_PPM    420      /* outdoor air, for the service FRC */
+
+/* Altitude for the sensor's own density compensation, in metres.
+ * set_ambient_pressure lives in RAM and would be lost every time the gate drops;
+ * the altitude setting is EEPROM-backed, so it is written once and survives the
+ * power cycling. Maejo is ~330 m. 0 disables the compensation. */
+#define SCD41_SITE_ALTITUDE_M   330
 
 /* ---- Sensor rail settle time for the I2C parts --------------------------- */
-/* Was 1000 ms for the SCD41's power-up, which dominated every wake and had to be
- * overlapped with the 750 ms DS18B20 conversion to avoid paying it twice. With
- * the SCD41 gone the only I2C parts are the SHT45s (~1 ms) and the mux, so this
- * collapses to the same 10 ms as the probes. Rail-on time is now set purely by
- * DS_CONVERT_MS. The S88 needs no settle window: it is never powered down. */
+/* This was 1000 ms for years, on the strength of an SCD41 power-up figure the
+ * datasheet does not actually give -- SCD4x v1.7 Table 7 says 30 ms max. The
+ * sequencing built around overlapping that 1 s with the 750 ms DS18B20 conversion
+ * survives anyway, because it is the right shape and now costs nothing. Every I2C
+ * part here settles in single-digit ms: the SHT45s ~1 ms, the mux immediately,
+ * the SCD41 30 ms. Rail-on time is set by DS_CONVERT_MS.
+ *
+ * 2026-09: the SCD41 needs a settle window again (SCD41_POWER_UP_MS), but it
+ * costs nothing -- it is addressed last, by which time the rail has been up for
+ * the whole 750 ms conversion plus three SHT45 reads, against the datasheet's
+ * 30 ms power-up. (The driver carried 1000 ms until 2026-09; nothing in SCD4x
+ * v1.7 supports that figure -- see src/scd41.h.) */
 #define I2C_POWER_SETTLE_MS     10
 
 /* ---- Supply telemetry: 24 V bank via a divider ---------------------------- *
