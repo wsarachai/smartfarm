@@ -16,8 +16,8 @@ RS-485 run.
 The probes and SHT45s sit on the **one gated rail**, so that part of the front-end
 is dead between wakes; each probe owns its own pin, so all six convert **in
 parallel** and rail-on time is one 750 ms conversion no matter how many are fitted.
-**The S88 is not gated** — it runs continuously, because its ABC needs it and solar
-can afford it. See [CO2 on a solar node](#co2-on-a-solar-node).
+**The S88 is not gated** — it runs continuously: it has no sleep mode, its warm-up
+and IIR filter assume it, and solar can afford it. See [CO2 on a solar node](#co2-on-a-solar-node).
 
 It does **not** talk to the web-server directly (that server only speaks HTTP on
 the WiFi LAN). The uplink is received by [`../lora-gateway`](../lora-gateway),
@@ -255,13 +255,19 @@ and it runs **continuously**.
 
 ### Why it cannot be duty-cycled
 
-The S88's **ABC (Automatic Baseline Correction)** has an **8-day period**, and the
-datasheet states accuracy "is defined at continuous operation (at least three (3)
-ABC periods … with ABC turned on)". Under the old pacing the sensor was powered
-~10 s per hour — a **0.28 % duty cycle** — at which **eight days of powered time
-takes 7.8 years**. ABC would never complete once, and CO2 drift would go
-permanently uncorrected. Duty-cycling this part does not save energy so much as it
-quietly destroys the measurement.
+The S88 has **no sleep mode** — "LP" just means a 4 s lamp period — and three
+things assume it is always on: the `WarmUp` status bit (set for <10 s after every
+power-up), the IIR filter that needs measurement history, and the self-heating that
+keeps the optics off the dew point. A fourth, **ABC (Automatic Baseline
+Correction)**, has an **8-day period** with accuracy "defined at continuous
+operation (at least three (3) ABC periods … with ABC turned on)"; under the old
+pacing — ~10 s per hour, a **0.28 % duty cycle** — eight days of powered time would
+have taken **7.8 years**. Whether ABC should even be *on* in a greenhouse (it
+assumes the 8-day minimum is 400 ppm fresh air, and a closed greenhouse can
+photosynthesise below that) is a separate decision recorded in
+[`docs/hardware-interface.md`](docs/hardware-interface.md) §3 *ABC in a greenhouse*;
+continuous operation is right either way. Duty-cycling this part does not save
+energy so much as it quietly destroys the measurement.
 
 ### Why that is affordable
 
@@ -290,7 +296,7 @@ Modbus exchange by re-sending the last good value rather than dropping the metri
 
 | Item | Status |
 |---|---|
-| `S88_MODBUS_ADDR`, `S88_CO2_REG` | **Placeholders.** The register map is not in the product spec (PSP14281) — it is in **TDE14367, "Modbus on Senseair S88"**. Check both before trusting a reading |
+| `S88_SITE_PRESSURE_DHPA` | **Set it for the site.** The S88 reads 1.6 % low per kPa below sea-level pressure (~6 % at Maejo's ~330 m) and compensates itself once HR27 holds the site pressure; the firmware writes it on the first wake. 0 = leave the sensor at factory default (uncompensated) |
 | Environmental fit | The S88 is rated **0–50 °C, 0–85 %RH non-condensing**, which a Thai greenhouse plausibly violates daily. See below |
 
 ### Staged deployment
@@ -345,8 +351,10 @@ SWDIO=PA13, SWCLK=PA14, NRST, GND, 3V3 and remove the onboard ST-LINK jumpers.
 - `I2C_SDA_PIN` / `I2C_SCL_PIN` / `I2C_CLOCK_HZ`, `SHT45_ADDR`,
   `I2C_MUX_ADDR` / `I2C_MUX_CHANNELS` (channel = greenhouse location = frame slot).
 - `I2C_POWER_SETTLE_MS` — **now 10 ms**, was 1000 ms for the SCD41's power-up.
-- `S88_UART_TX_PIN` / `S88_UART_RX_PIN` / `S88_UART_BAUD`, and
-  **`S88_MODBUS_ADDR` / `S88_CO2_REG` — placeholders, verify against TDE14367.**
+- `S88_UART_TX_PIN` / `S88_UART_RX_PIN` / `S88_UART_BAUD`, `S88_MODBUS_ADDR`
+  (`0xFE`, "any sensor" — a point-to-point link), the register addresses
+  (`S88_IR_STATUS`, `S88_HR_PRESSURE`, `S88_HR_DEFAULT_PRESSURE`, all verified
+  against TDE14367 rev 5), `S88_SITE_PRESSURE_DHPA`,
   `S88_RESPONSE_TIMEOUT_MS`, `S88_RETRIES`. See
   [CO2 on a solar node](#co2-on-a-solar-node).
 - `VBAT_SENSE_PIN` / `VBAT_SENSE_NUM` / `VBAT_SENSE_DEN` — the 24 V divider.

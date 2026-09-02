@@ -82,6 +82,10 @@ static int sht45_select(int i)
  */
 static uint16_t co2_last   = 0;
 static uint8_t  co2_valid  = 0;
+/* Site pressure (S88_SITE_PRESSURE_DHPA) is pushed into the sensor's EEPROM
+ * once; this remembers that it succeeded so we do not re-read HR27 every wake.
+ * Retried on each wake until the sensor has answered once. */
+static uint8_t  co2_site_ok = (S88_SITE_PRESSURE_DHPA == 0);
 
 /* -------------------------------------------------------------------------- */
 static void dbgf(const char *fmt, ...)
@@ -267,13 +271,16 @@ void loop(void)
     gate_off();
     sensor_pins_park();
 
-    /* --- CO2 (S88 LP), AFTER the gate closes ---
+    /* --- CO2 (S88), AFTER the gate closes ---
      * Deliberately outside the gated section: the S88 has its own always-on
-     * 5.1 V rail and its own UART, so it shares nothing with the I2C parts.
+     * 5 V rail and its own UART, so it shares nothing with the I2C parts.
      * Reading it here makes that independence obvious, and keeps the gated rail
      * on for the shortest possible time. */
+    if (!co2_site_ok)
+        co2_site_ok = (uint8_t)s88_apply_site_pressure(S88_SITE_PRESSURE_DHPA);
     uint16_t co2        = 0;
-    int      okco2      = s88_read_co2(&co2);
+    uint16_t co2_status = 0xFFFF;     /* 0xFFFF = no valid frame at all */
+    int      okco2      = s88_read_co2(&co2, &co2_status);
     const int co2_fresh = okco2;      /* for the log line, below */
     if (okco2) {
         co2_last  = co2;
@@ -336,8 +343,11 @@ void loop(void)
             dbgf("         air%d=%d/%d rh%d=%u\r\n",
                  i, (int)air[i], oksh[i], i, (unsigned)hum[i]);
         }
-        dbgf("         co2=%u/%d%s\r\n", (unsigned)co2, okco2,
-             co2_fresh ? "" : " (cached - S88 did not answer)");
+        dbgf("         co2=%u/%d st=0x%04X%s\r\n", (unsigned)co2, okco2,
+             (unsigned)co2_status,
+             co2_fresh ? "" : (co2_status == 0xFFFF
+                                   ? " (cached - S88 did not answer)"
+                                   : " (cached - S88 status not OK)"));
         subghz_lora_sleep();
     } else {
         dbgf("radio init FAILED\r\n");

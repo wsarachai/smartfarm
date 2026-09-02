@@ -169,9 +169,17 @@
  * are PA9 = DQ_P2 and PB6 = the debug header), and USART2 exists only on PA2/PA3.
  * Freeing PC1 is why DQ_P4 moved to PB8.
  *
- * The register map is NOT in the product spec (PSP14281) -- it is in TDE14367,
- * "Modbus on Senseair S88". Confirm the slave address and the CO2 holding
- * register against that document before trusting S88_CO2_REG below. */
+ * Register map: TDE14367 "Modbus on Senseair S88" rev 5 (2024-09-04), NOT the
+ * product spec. Verified 2026-09-02:
+ *   - CO2 is INPUT register IR4, address 0x0003, read with FUNCTION 0x04. It is
+ *     not a holding register; HR4 at the same address is the pressure setting.
+ *   - Sensor default is 9600 8N1 only; it REPLIES with 2 stop bits (harmless).
+ *   - Response time-out is 180 ms max; silent interval 3.5 chars (~4 ms).
+ *   - Address 0xFE is "any sensor": every S88 answers it regardless of its own
+ *     address. Senseair says production/test only because it violates Modbus
+ *     on a multi-drop bus -- this link is point-to-point with ONE slave, so it
+ *     is the right choice here and survives a sensor swap. HR20 holds the
+ *     individual address (1..254) if a second device ever shares the pair. */
 #define S88_UART_TX_PIN         PC1
 #define S88_UART_RX_PIN         PC0
 #define S88_UART_BAUD           9600     /* 8N1, Modbus RTU framing + CRC16 */
@@ -184,12 +192,23 @@
  * (MAX13487E) are 5 V parts whose RO would drive 5 V into a non-5V-tolerant
  * STM32WL pin. PA7 was spare; use it. */
 #define S88_DE_PIN              PA7
-#define S88_MODBUS_ADDR         0x68     /* VERIFY against TDE14367 */
-#define S88_CO2_REG             0x0003   /* VERIFY against TDE14367 */
-#define S88_RESPONSE_TIMEOUT_MS 200
+#define S88_MODBUS_ADDR         0xFE     /* "any sensor" -- see above */
+#define S88_IR_STATUS           0x0000   /* IR1 MeterStatus; IR4 CO2 = +3, read
+                                          * together with FC 0x04, count 4 */
+#define S88_HR_PRESSURE         0x0003   /* HR4, live, RAM, LSB 0.1 hPa */
+#define S88_HR_DEFAULT_PRESSURE 0x001A   /* HR27, EEPROM, loaded into HR4 at
+                                          * power-up. 0 = compensation off */
+#define S88_RESPONSE_TIMEOUT_MS 200      /* >= the sensor's 180 ms maximum */
 #define S88_RETRIES             2        /* Modbus has CRC16: a bad frame is
                                           * detectable, so retry rather than
                                           * publish a corrupted reading. */
+/* Site pressure for the S88's built-in compensation, in 0.1 hPa. The sensor
+ * reads 1.6 % low per kPa below 1013.25 hPa -- ~5 % low at 330 m (Maejo) and
+ * ~9 % at 500 m -- so this is NOT a cosmetic setting. Standard atmosphere:
+ * 0 m 10132, 100 m 10012, 200 m 9894, 300 m 9777, 400 m 9661, 500 m 9546.
+ * 0 leaves the sensor untouched (factory default: compensation disabled).
+ * Written to HR27 (EEPROM) only when it differs -- see s88_apply_site_pressure. */
+#define S88_SITE_PRESSURE_DHPA  0
 
 /* ---- Sensor rail settle time for the I2C parts --------------------------- */
 /* Was 1000 ms for the SCD41's power-up, which dominated every wake and had to be

@@ -807,48 +807,144 @@ gate FET's copper — nothing on this PCB measures air any more. What replaces t
 
 ### The CO2 sensor — Senseair S88 LP, on RS-485
 
-**This replaced the SCD41 in 2026-08 and it is not a drop-in.** Three things about
-the S88 LP drive the whole rest of this document (PSP14281 Rev 7):
+**This replaced the SCD41 in 2026-08 and it is not a drop-in.** The numbers below
+are from Senseair's own documents, all read in full on 2026-09-02: **PSP14281**
+rev 4 (S88 LP product spec), **TDE14367** rev 5 (*Modbus on Senseair S88*),
+**TDE15154** rev 1 (*Customer Integration Guidelines*), and **PSP15075** rev 3
+(S88 LP **PH**, the pin-header variant). Anything marked *measured* is from the
+oscilloscope captures in TDE15154, not the spec table.
 
-| Spec | S88 LP | SCD41 it replaced | Consequence |
+| Spec | S88 LP (004-1-0101) | SCD41 it replaced | Consequence |
 |---|---|---|---|
 | Interface | **UART, Modbus RTU** — no I2C at all | I2C `0x62` | Leaves the I2C bus entirely; needs LPUART1 + RS-485 |
-| Supply | **4.5–5.25 V** | 3.3 V | Forces a second buck rail (§5) |
-| Peak current | ≤300 mA | ~205 mA | Sized at the 5 V rail, not `V3V3_MCU` |
-| Average current | ≤18 mA | — | 90 mW continuous — affordable on solar |
-| Warm-up | <10 s | 5 s/shot ×2 | — |
-| Operating range | **0–50 °C, 0–85 %RH, non-condensing** | −10–60 °C, 0–95 %RH | **The main deployment risk — see below** |
-| ABC | 8-day period, **specified at continuous operation** | ASC, tolerant of single-shot | Forces continuous power |
+| Supply | **4.5–5.25 V**, abs-max 5.5 V | 3.3 V | Forces a second rail (§5) |
+| Peak current | ≤300 mA (measured 240–290 mA, each 4 s lamp pulse) | ~205 mA | Sized at the 5 V rail, not `V3V3_MCU` |
+| Average current | ≤18 mA spec; **measured 5–8 mA at 25 °C, ~10 mA at 50 °C** | — | 90 mW is the worst case the budget uses; reality is about half |
+| Measurement interval | **4 s** (LP); 2 s on the Residential part | 5 s/shot | The sensor has no sleep mode — this is how "LP" saves power |
+| Warm-up / response | <10 s / τ63 <40 s | 5 s ×2 | Nothing to wait for at a 15 min wake |
+| Accuracy | ±40 ppm ±3 % of reading (400–3000 ppm); ±10 % to 10 000 ppm | ±(40 ppm + 5 %) | Comparable |
+| Operating range | **0–50 °C, 0–85 %RH, dew point ≤35 °C**; RH limit *derates* from 85 % at 38 °C to 45 % at 50 °C | −10–60 °C, 0–95 %RH | **The main deployment risk — see below, and the GH variant** |
+| ABC | 8-day period, on by default, tuning ≤30–50 ppm per period | ASC | Continuous power required *if* ABC is used — see *ABC in a greenhouse* |
+| Pressure | 1.6 % of reading per kPa; **compensation built in but off** (HR27) | external value | Fixable in one register write — see below |
 | Protection | **unprotected against surges and reverse connection** | — | Needs external protection on a 5 m outdoor run |
+| Size | 33.9 × 19.8 × 8.7 mm, <5 g; castellated pads, or 2.54 mm headers on the **PH** variant | — | Buy the **PH (004-1-0103)** for a hand-built head board |
 
-#### Why it runs continuously, and why that was not optional
+#### Why it runs continuously
 
-The datasheet's ABC (Automatic Baseline Correction) has an **8-day period**, and
-states accuracy "is defined at continuous operation (at least three (3) ABC
-periods … with ABC turned on)". At the old `CO2_EVERY_N_WAKES = 4` pacing the
-sensor was powered ~10 s per hour — a **0.28 % duty cycle**, at which eight days of
-*powered* time takes **7.8 years**. ABC would never complete once, and CO2 drift
-would go permanently uncorrected.
+The S88 has **no sleep mode** (TDE15154: *"does not use any sleep feature"*); its
+low-power trick is simply a 4 s lamp period. Four things want it powered all the
+time, and only the last is negotiable:
 
-Solar dissolves this. At 18 mA average on 5 V the S88 costs **90 mW ≈ 2.16 Wh/day**
-(~2.4 Wh after buck losses), against ~80 Wh/day from a 20 W panel at four peak-sun
-hours. Running it **24/7 costs about 3 %** of the daily yield, and the overnight
-carry is ~1.1 Wh. So:
+1. **Warm-up.** The `WarmUp` status bit stays set until the first unfiltered
+   reading (<10 s). A node that powered the sensor for one Modbus read per wake
+   would spend every wake inside warm-up.
+2. **The IIR filter.** Readings are filtered across multiple measurement periods
+   with dynamic adjustment; a cold-started sensor has no history and returns a
+   settling value.
+3. **Self-heating keeps the optics dry.** Even at the measured 5–8 mA the module
+   sits above ambient, which is what keeps local humidity off the dew point in a
+   greenhouse. Duty-cycling it would have made condensation **worse**.
+4. **ABC**, if enabled: an 8-day period with accuracy *"defined at continuous
+   operation (at least three ABC periods)"*. At the old `CO2_EVERY_N_WAKES = 4`
+   pacing — ~10 s per hour, a 0.28 % duty cycle — eight days of *powered* time
+   would have taken **7.8 years**.
 
-- `CO2_ENABLED`, `CO2_EVERY_N_WAKES` and `CO2_SINGLE_SHOT_WARMUP` are **deleted**.
-- The S88 is **not** on `SENS_GATE`. Its rail is ungated and always live.
-- The firmware simply reads the latest value over Modbus each wake.
+Solar makes all of this affordable: at the spec 18 mA the S88 is **90 mW ≈
+2.16 Wh/day**, ~3 % of a 20 W panel's ~80 Wh/day, and the measured average is
+about half that. So `CO2_ENABLED`, `CO2_EVERY_N_WAKES` and `CO2_SINGLE_SHOT_WARMUP`
+are **deleted**, the S88 is **not** on `SENS_GATE`, and the firmware reads the
+latest value every wake.
 
-> **A second, unplanned benefit.** 90 mW dissipated continuously holds the module a
-> degree or two above ambient, and a degree above ambient is what keeps local
-> humidity off the dew point. Duty-cycling this sensor in a greenhouse would have
-> made condensation **worse**, not better.
+#### ABC in a greenhouse — a decision, not a default
+
+PSP14281 Note 1: *"Exposure to concentrations below 400 ppm may result in incorrect
+operation of ABC algorithm and shall be avoided for model with ABC ON."* ABC works
+by assuming the **lowest** reading in each 8-day window is fresh air at 400 ppm
+(HR33 `ABC Target`) and slowly pulling the calibration toward it. A ventilated
+greenhouse at night sits above 400 ppm from plant respiration and ABC is fine. A
+**closed** greenhouse in the afternoon can be *drawn down* below 400 ppm by
+photosynthesis — and ABC would then recalibrate a real 300 ppm to read 400,
+biasing every reading for the next eight days.
+
+Which case this greenhouse is cannot be known from the desk, so:
+
+- **Ship with ABC on** (factory default, HR32 = 180 h) and **log the daily
+  minimum for the first two weeks.** If it stays ≥ ~420 ppm, ABC is safe; leave it.
+- If the daily minimum drops toward 400, **disable ABC** — write HR32 = 0 once (it
+  suspends ABC without erasing its history) — and instead do a **background
+  calibration in outdoor air** (HR2 = 0x7C06) at install and every ~6 months. That
+  is the maintenance Senseair's own S88 **GH** part assumes (below).
+- Do **not** raise HR33 to "typical greenhouse minimum": that number changes with
+  crop stage and ventilation and is exactly what you are trying to measure.
+
+> This weakens one argument in the previous revision — "ABC forces continuous
+> operation" — without changing the conclusion: the first three reasons above are
+> enough on their own.
+
+#### The alternative part — Senseair S88 GH (004-1-0102)
+
+Senseair sells a greenhouse variant on the same platform, and Digi-Key TH stocks
+it next to the LP (PSP14808 rev 2; ฿896.64, 307 in stock on 2026-09-02, against
+฿628.99 / 427 for the LP):
+
+| | **S88 LP** 004-1-0101 | **S88 GH** 004-1-0102 |
+|---|---|---|
+| Humidity | 0–85 %RH, derating above 38 °C | **0–95 %RH** non-condensing |
+| Range / accuracy | 400–10 000 ppm; ±40 ppm ±3 % | **0–20 000 ppm**; ±50 ppm ±5 % |
+| Measurement interval | 4 s | **1 s** |
+| Average current | ≤18 mA (measured 5–8) | **≤60 mA** — ~300 mW, ~7 Wh/day |
+| Warm-up | <10 s | <3 s |
+| ABC | on by default | **off by default**; "requires periodic calibration" |
+| Life expectancy | >15 years, maintenance-free | >5 years |
+| Footprint, pinout, Modbus map, 5 V supply | identical | identical |
+
+It is a **drop-in for the head board and the firmware**: same nine pads in the same
+places, same `UART_R/T`, same TDE14367 registers. What it changes is the *system*:
+the deployment risk in the next section largely disappears, and in exchange the
+node's energy budget roughly doubles (~7 Wh/day for the sensor alone — still under
+10 % of the panel, but no longer "uninteresting"), the sensor needs a background
+calibration every few months, and the 5 V rail's average load rises to ~60 mA
+(TSR 1-2450 is a 1 A part; unaffected). **The staged deployment below defers the
+S88 purchase anyway, so this decision can wait for the SHT45 logs** — if they show
+RH above 85 % for hours every night, buy the GH.
+
+#### The pins, electrically
+
+PSP14281 Table 2. Every logic pin is referenced to **`DVCC_out`, the S88's internal
+3.3 V**, and none has any protection.
+
+| Pin | Direction | Electrical | What this design does with it |
+|---|---|---|---|
+| `G+` / `G0` | power | 4.5–5.25 V, abs-max **5.5 V**, no reverse protection | 5 V from U6 over 22 AWG; reverse-polarity FET at the head |
+| `DVCC_out` | out | 3.3 V ±3 %, **6 mA max**, no protection; "external series resistor strongly recommended" | **Unloaded.** U5 gets its own LDO |
+| `UART_TxD` | out | high 2.4 V @ 2 mA, low ≤0.5 V @ 8 mA; 120 kΩ pull-up to `DVCC_out`; **abs-max `DVCC_out` + 0.5 V** | → U5 `DI` |
+| `UART_RxD` | in | V_IH 2.3 V … `DVCC_out` + 0.3 V; 120 kΩ pull-up; **abs-max `DVCC_out` + 0.5 V = 3.8 V** | ← U5 `RO`. **A 5 V transceiver's RO destroys this pin** |
+| `UART_R/T` | out | high 2.4 V @ 2 mA; 120 kΩ pull-**down** (receive at reset); "for half-duplex RS485 transceiver like MAX485" | → U5 `DE` + `!RE`. 2.4 V clears a 3.3 V transceiver's 2.0 V V_IH |
+| `bCAL_in` | in | 120 kΩ pull-up to `DVCC_out`; **closed to `G0` for 4–8 s = background calibration to 400 ppm; ≥16 s = zero calibration** | **Not routed, not padded.** See the trap below |
+| `PWM 1kHz` | out | 3.3 V CMOS, 0–2000 ppm | Unused, leave open |
+| `Alarm_OC` | out | open collector, **10 kΩ pull-up to `G+` (5 V)**, 100 mA sink | Unused, leave open — and never tie it to a 3.3 V input |
+
+Three consequences that were not written down before:
+
+- **The head transceiver must be a 3.3 V part. Full stop.** `sourcing-th.md`
+  used to say a MAX485 "works if you power it from 5 V and accept 5 V logic". It
+  does not: a 5 V `RO` into `UART_RxD` exceeds the pin's absolute maximum by
+  1.2 V. THVD1450 / MAX3485 / SP3485 at 3.3 V, or nothing.
+- **`bCAL_in` is a live calibration button with no debounce and no confirmation.**
+  In a head enclosure at 95 %RH, a film of condensate bridging an exposed
+  `bCAL_in` pad to ground for four seconds silently recalibrates the sensor to
+  400 ppm; sixteen seconds and it zero-calibrates to 0 ppm. On the castellated
+  part leave the pad unsoldered and un-routed; on the PH part clip the pin.
+  Calibration is done over Modbus (HR2), deliberately, from the bench.
+- **The 120 kΩ internal pulls are weak.** TDE15154 warns that long or capacitive
+  TxD/RxD/R/T wiring may need external pull-up/down. On the head board these
+  three lines are a few millimetres long, so nothing is added; do not run them
+  off-board.
 
 #### The link — RS-485, and who drives the direction pin
 
-The S88 has a **`UART_R/T` direction-control output**, documented as being for
-"direct connection to RS485 receiver integrated circuit like MAX485". So at the
-sensor end the S88 drives its own transceiver with no firmware involvement:
+The S88 drives its own transceiver's direction from `UART_R/T`; the front-end
+drives its transceiver from `PA7`. No firmware knows about the head end.
 
 ```
   FRONT-END PCB (dry box)                 SENSOR HEAD (greenhouse, 5 m)
@@ -861,9 +957,10 @@ sensor end the S88 drives its own transceiver with no firmware involvement:
   U4.A ========== twisted pair A =========== U5.A
   U4.B ========== twisted pair B =========== U5.B
 
-  V5_S88 ======== 5.0 V ==================== S88.G+   + 100uF + 100nF
+  V5_S88 ======== 5.0 V, 22 AWG ============ S88.G+   + 100uF + 100nF
   GND    ======== GND   ==================== S88.G0
                                              U5.VCC <- local 3V3 LDO off 5 V
+                                             S88.bCAL_in, PWM, Alarm_OC: open
 ```
 
 Three decisions are embedded there:
@@ -879,16 +976,16 @@ Three decisions are embedded there:
    > would have saved this signal and removed the bug class entirely. It does not
    > survive contact with the supply rails: the common auto-direction parts
    > (MAX13487E/MAX13488E) are **5 V** devices, and their `RO` output would drive
-   > 5 V into an STM32WL pin that is **not 5 V tolerant**. Level-shifting one pin to
-   > save one pin is not a trade worth making. A plain 3.3 V transceiver plus one
-   > GPIO is the honest answer, and `PA7` was spare.
+   > 5 V into an STM32WL pin that is **not 5 V tolerant** — and, at the head end,
+   > into the S88's 3.8 V-absolute-maximum `UART_RxD`. Level-shifting to save one
+   > pin is not a trade worth making. A plain 3.3 V transceiver plus one GPIO is
+   > the honest answer, and `PA7` was spare.
 
 2. **Do not power the head transceiver from `DVCC_out`.** It is tempting: the S88
-   offers a 3.3 V output right there. But the datasheet rates it at **6 mA max**
-   and warns that "induced noise or excessive current drawn may affect sensor
-   performance. External series resistor is strongly recommended if this pin is
-   used." Use a small 3.3 V LDO off the 5 V rail instead and leave `DVCC_out`
-   unloaded — as a logic reference only, if at all.
+   offers a 3.3 V output right there. But it is rated **6 mA max** with a warning
+   that *"induced noise or excessive current drawn may affect sensor performance"*,
+   and a THVD1450 alone idles at ~1 mA and drives the pair at far more. Use a small
+   3.3 V LDO off the 5 V rail and leave `DVCC_out` unloaded.
 3. **No termination resistors at 5 m.** At 9600 baud the edges are microseconds and
    5 m is electrically nothing; a 120 Ω terminator would only waste current. Do
    choose a **true-failsafe** receiver (THVD1450, MAX3485E) so an idle undriven bus
@@ -905,52 +1002,103 @@ Three decisions are embedded there:
 **Protection is not optional here.** The datasheet states the part is unprotected
 against surges and reverse connection, and this is 5 m of cable in a wet building.
 Fit a **reverse-polarity FET on `G+` at the head**, and TVS on A/B at both ends.
+`G+` absolute maximum is 5.5 V: the 5.0 V ±2 % rail is inside it, but nothing else
+may ever reach that pin.
 
-#### Modbus — what is still unknown
+#### Modbus — what the sensor actually speaks
 
-The register map is **not** in PSP14281. Note 7 points to a separate document,
-**TDE14367 "Modbus on Senseair S88"**, and that is what the driver must be written
-from. What is fixed: **9600 baud, 8 data bits, 1 stop bit, no parity**, Modbus RTU
-framing with CRC16. Confirm the slave address and the CO2 holding-register number
-against TDE14367 before writing `src/s88.cpp` — do not assume the older S8 map
-carries over.
+TDE14367 rev 5, in full, as far as this node needs it. **The previous revision of
+this document guessed a holding register; that guess was wrong** — CO2 is an
+*input* register, read with function `0x04`, and function `0x03` at the same
+address returns the pressure setting. `src/s88.cpp` was corrected on 2026-09-02.
+
+| | Value | Note |
+|---|---|---|
+| Framing | RTU only, **9600 baud only**, 8 data, no parity | 19200 is not supported |
+| Stop bits | Sensor accepts 1; **sensor replies with 2** | An 8N1 receiver sees the second as idle — harmless |
+| Silent interval | 3.5 characters ≈ **4 ms** at 9600 (11-bit chars) | Between frames; inter-byte gap <1.5 chars |
+| Response time-out | **180 ms max** | `S88_RESPONSE_TIMEOUT_MS` is 200 |
+| Address | 1–247 individual; **`0xFE` = "any sensor"**; 0 = broadcast | Factory individual address is in HR20 and not stated in the docs. This is a point-to-point link with one slave, so the node uses **`0xFE`** — every S88 answers it and a swapped sensor needs no reconfiguration. Senseair notes it violates Modbus on a shared bus; there is no shared bus here |
+| CO2 | **IR4**, address `0x0003`, function **`0x04`**, ppm | Pressure-compensated when HR4 ≠ 0 |
+| Status | **IR1**, address `0x0000`: bit0 Fatal, bit2 Algorithm, bit3 Output, bit4 Self-diag, bit5 Out-of-range, bit6 Memory, **bit7 Warm-Up** | Read with the CO2 in one frame; any of Fatal/Algorithm/Self-diag/Out-of-range/Memory/Warm-Up invalidates the CO2 |
+| Also readable | IR5 board temperature (°C × 100), IR7 supply mV, IR24/25 elapsed hours, IR29 FW rev, IR30/31 serial | Bring-up diagnostics; not in the LoRa frame |
+| Pressure | **HR4** (RAM, live) and **HR27** (EEPROM, loaded into HR4 at power-up), LSB 0.1 hPa, 0 = off | Function `0x06`. HR27 is the one to set at install |
+| Calibration | HR1 acknowledge (clear with 0), **HR2 = `0x7C06` background (400 ppm)**, `0x7C05` target (ppm in HR3), `0x7C07` zero, `0x7C03` force ABC | Wait ≥2 lamp cycles, then read HR1 bit 5 (CI6) = 1 |
+| ABC | **HR32** period in hours (180 = 7.5 d default; 0 suspends), **HR33** target ppm (400) | EEPROM |
+| EEPROM | HR1–HR4 and HR22 are RAM; **everything else is EEPROM, 10 000 writes total**; wait ≥180 ms after a write before power-down | Read before write; never write per wake |
+
+The node's one recurring transaction, byte for byte (Senseair example §8.3):
+
+```
+  Master:  FE 04 00 00 00 04 E5 C6
+           │  │  └──┬──┘ └──┬──┘ └─┬─┘
+           │  │  IR1..    4 regs  CRC16 (low byte first)
+           │  read input registers
+           "any sensor"
+
+  Sensor:  FE 04 08 00 00 00 00 00 00 01 90 16 E6
+                 │  └─┬──┘ └─┬──┘ └─┬──┘ └─┬──┘ └─┬─┘
+                 8   status  alarm  output CO2=400 CRC
+```
+
+The firmware rejects the CO2 when `status & 0x00F5` is non-zero and keeps its
+cached value, which is how the debug log distinguishes *"S88 status not OK"*
+(warming up, out of range) from *"S88 did not answer"* (cable).
 
 > **Modbus CRC16 is a real advantage over what it replaced.** A corrupted I2C
 > transaction produces a plausible wrong number; a corrupted Modbus frame fails its
 > CRC and is simply retried. On a 5 m run through a greenhouse full of pump
-> contactors, that difference matters more than the accuracy spec does.
+> contactors, that difference matters more than the accuracy spec does. Senseair
+> quotes a 7 × 10⁻⁶ chance of a response time-out under normal conditions and asks
+> that the host retry — `S88_RETRIES` is 2.
+
+#### Pressure — the 9 % nobody would look for
+
+The S88 reads **1.6 % of reading per kPa** away from 1013.25 hPa. The previous
+revision called this "~1 % at 500 m", which is wrong by an order of magnitude:
+500 m is ≈ −5.8 kPa, so **≈ −9 %**; Maejo at ~330 m is ≈ −3.9 kPa, **≈ −6 %**,
+i.e. 1000 ppm reads as ~940. The old design fed the SCD41 a live BME280 value;
+there is no barometer on this node, and there does not need to be:
+
+**Write the site's mean pressure once into HR27 (0.1 hPa)** — 9777 for 300 m,
+9661 for 400 m — and the sensor compensates every reading itself, forever, from
+EEPROM. `S88_SITE_PRESSURE_DHPA` in `node_config.h` holds the value; on the first
+wake the firmware reads HR27, writes it (and HR4, so it takes effect immediately)
+only if it differs, and never touches EEPROM again. 0 leaves the sensor at the
+factory default. Weather moves pressure by ±1 kPa, i.e. ±1.6 %, which is below the
+sensor's own accuracy; altitude is the term that matters, and it is now handled.
 
 #### The deployment risk, and the staged answer
 
-The S88 is rated **0–50 °C and 0–85 %RH, non-condensing, dew point ≤35 °C**. A Thai
-โรงเรือน routinely sits at 90–100 %RH overnight with visible condensation at dawn,
-and a closed greenhouse in afternoon sun can pass 50 °C at canopy height. **Both
-limits are plausibly violated daily.** An NDIR sensor with a fogged optical path
-does not fail loudly — it drifts, and returns plausible wrong numbers.
+The S88 LP is rated **0–50 °C and 0–85 %RH, non-condensing, dew point ≤35 °C** — and
+the RH limit is not flat: PSP14281 Figure 3 derates it linearly above 38 °C down
+to **45 %RH at 50 °C**. A Thai โรงเรือน routinely sits at 90–100 %RH overnight with
+visible condensation at dawn, and a closed greenhouse in afternoon sun can pass
+50 °C at canopy height. **Both limits are plausibly violated daily.** An NDIR
+sensor with a fogged optical path does not fail loudly — it drifts, and returns
+plausible wrong numbers; the `Out of range` and `Self-diagnostic` bits are the only
+warning you get, which is another reason the firmware now reads them.
 
 The SHT45s are fine here (0–100 %RH, and they recover from condensation). This is
 an S88-specific problem, and the agreed answer is **staged deployment**:
 
 1. **Build the full board and all cabling now**, S88 branch included — connector,
-   transceiver, 5 V rail, protection. Nothing needs rework later.
+   transceiver, 5 V rail, protection. Nothing needs rework later, and nothing in it
+   depends on LP versus GH.
 2. **Deploy with the three SHT45s only.** Log T/RH for a few weeks, including at the
-   midpoint where the S88 will go.
-3. **Fit the S88 once the logs show you are inside 0–50 °C and ≤85 %RH.** If dawn
-   condensation turns out to be persistent, add a small heater resistor at the head
-   before fitting the sensor.
+   midpoint where the S88 will go. Compute the dew point; that is the S88's real
+   enemy, not RH by itself.
+3. **Then buy the sensor the logs call for.** Inside 0–50 °C, ≤85 %RH and below
+   the derating line → the **LP**, with ABC per the decision above. Above it for
+   hours every night → the **GH**, and budget ~7 Wh/day and a six-monthly
+   background calibration for it. If dawn condensation is persistent with either,
+   add a small heater resistor at the head before fitting the sensor.
 
 Mount it in a **ventilated radiation shield with the diffusion area facing
 downward**, so condensate drips away instead of pooling on the optical window,
 behind a **PTFE/Gore membrane** that passes CO2 but not liquid water. Do not seal
 it: a sealed enclosure measures the CO2 of its own interior, which is a number that
 means nothing.
-
-> **Pressure dependence is now unhandled.** The S88 drifts **1.6 % of reading per
-> kPa** from normal pressure. The old design fed the SCD41 a pressure value from the
-> BME280 via `scd41_set_ambient_pressure()`. There is no BME280 on the WL55 node, so
-> at a fixed installation altitude this is a constant offset — acceptable, but write
-> the altitude down, because a node moved from sea level to 500 m gains a ~1 %
-> error that nobody will think to look for.
 
 ### The rail gate — now a recovery mechanism, not an energy measure
 
@@ -1258,8 +1406,8 @@ thirty parts. All of it is still documented in
 | Each probe ×6 | **100 nF** | Across that probe's VDD/GND at the **far** end |
 | Each SHT45 ×3 | **SHT45-AD1B** + **100 nF** | Cap across VDD/VSS at the sensor. Small vented housing |
 | SHT45 #2 only | **Radiation shield** | Louvered/Stevenson type, sensor below, north-facing. Without it the ambient reference reads 10–15 °C high in sun |
-| S88 head | **Senseair S88 LP** (004-1-0101) | Ventilated radiation shield, **diffusion area facing down**, PTFE/Gore membrane |
-| S88 head | **MAX485** (or 3.3 V equiv) | `DE`+`RE` tied to the S88's `UART_R/T` |
+| S88 head | **Senseair S88 LP** (004-1-0101), or the pin-header **LP PH** (004-1-0103), or the **S88 GH** (004-1-0102) — the SHT45 logs decide (§3 *The alternative part*) | Ventilated radiation shield, **diffusion area facing down**, PTFE/Gore membrane. `bCAL_in`, `PWM`, `Alarm_OC` **left unconnected** — `bCAL_in` shorted to G0 for 4 s recalibrates the sensor |
+| S88 head | **3.3 V RS-485 transceiver** — THVD1450 / MAX3485E / SP3485, **never a 5 V MAX485** | `DE`+`!RE` tied to the S88's `UART_R/T`. The S88's `UART_RxD` absolute maximum is `DVCC_out` + 0.5 V = 3.8 V; a 5 V `RO` exceeds it |
 | S88 head | **3.3 V LDO**, 100 mA | Powers the transceiver off the 5 V rail. **Do not** load `DVCC_out` |
 | S88 head | 100 µF + 100 nF | Bulk for the 300 mA peaks, close to `G+` |
 | S88 head | Reverse-polarity FET + TVS | The S88 is *unprotected against surges and reverse connection* |
@@ -2000,11 +2148,18 @@ exist:
     5 m cable and confirm the MCU receives its own transmission. That separates
     "the RS-485 path works" from "the sensor answers", which are different faults
     with different fixes.
-18. **Read the S88** (once fitted — see the staged plan in §3). Outdoor air is
+18. **Read the S88** (once fitted — see the staged plan in §3). Send Senseair's own
+    frame `FE 04 00 00 00 04 E5 C6` and expect `FE 04 08 …` back; the debug log
+    prints `co2=… st=0x0000`. `st=0x0080` is `WarmUp` (the first 10 s only);
+    anything else non-zero is a real fault code (PSP14281 Table 7). Outdoor air is
     **~420 ppm**; a greenhouse in daylight runs lower as the crop draws it down, and
     higher at night. A CRC failure on the Modbus frame is a wiring or termination
     problem; a valid frame with an implausible number is a sensor or calibration
-    problem.
+    problem. Then confirm the one-time writes took: read **HR27** (`FE 03 00 1A 00
+    01 …`) and see the site pressure, read **HR32** and see 180 (ABC on) — and read
+    **IR7**, the S88's own measurement of its supply, which should be **≥4750 mV**
+    with the head at the far end of the 22 AWG run. Under 4500 mV is below the
+    S88's minimum and means cable or connector resistance.
 19. **Wiggle test.** With everything reading, flex the ribbon and tug each of the
     eleven cable entries. Nothing should glitch. This is the test that finds a
     marginal IDC crimp before the pole does.

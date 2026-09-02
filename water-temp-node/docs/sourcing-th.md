@@ -12,11 +12,11 @@ Digi-Key TH ships from US stock with THB pricing and DDP customs.
 
 | Ref | MPN | What to check when substituting |
 |---|---|---|
-| **CO2** | Senseair **S88 LP, art. 004-1-0101** | This is the part the design is built around. UART/Modbus, 4.5–5.25 V, 300 mA peak. Senseair also sells the **S8 LP** (004-0-0053) — similar interface, different register map and footprint, **not** a drop-in |
+| **CO2** | Senseair **S88 LP, art. 004-1-0101** (Digi-Key TH ฿628.99, 427 in stock 2026-09-02) — or the pin-header **S88 LP PH, 004-1-0103** (PSP15075), electrically identical and far easier to hand-solder | This is the part the design is built around. UART/Modbus RTU (TDE14367), 4.5–5.25 V, 300 mA peak, 0–85 %RH. **Decide LP vs GH from the SHT45 logs before buying** (`hardware-interface.md` §3 *The alternative part*): the **S88 GH, 004-1-0102** (Digi-Key TH ฿896.64, 307 in stock) is the same footprint/pinout/Modbus map rated **0–95 %RH, 0–20 000 ppm**, at ≤60 mA average and with ABC off by default. Senseair also sells the **S8 LP** (004-0-0053) — similar interface, different register map and footprint, **not** a drop-in |
 | **U1a–c** | Sensirion **SHT45-AD1B** | `-AD1B` is the **0x44** order code. `-BD1B` is 0x45 and would break `SHT45_ADDR`. DFN-4, 1.5×1.5 mm — hand-solderable but not pleasant |
 | **U3** | TI **TCA9548APWR** (TSSOP-24) | Or **PCA9548APW**. Pin *numbers* differ between TSSOP and QFN — take them from the datasheet for the package you buy |
 | **U4** | TI **THVD1450DR** (SOIC-8) | 3.3 V, true-failsafe, ±18 kV ESD. Alternates: **MAX3485ESA+**, **SP3485EN-L**, **SN65HVD3082EDR**. **Do not** substitute an auto-direction part without checking its supply voltage — MAX13487E is 5 V and its `RO` would drive 5 V into a non-5V-tolerant STM32WL pin |
-| **U5** (head) | same as U4 | `DE`+`!RE` tied to the S88's `UART_R/T`. Classic **MAX485CSA+** works here too *if* you power it from 5 V and accept 5 V logic — but the S88's UART is 3.3 V-referenced, so a 3.3 V part is the cleaner choice |
+| **U5** (head) | same as U4 — **3.3 V part only** | `DE`+`!RE` tied to the S88's `UART_R/T`. **A 5 V MAX485CSA+ is NOT acceptable here** (this row used to say it was): the S88's `UART_RxD` absolute maximum is `DVCC_out` + 0.5 V = **3.8 V** (PSP14281 Table 2/3), and a 5 V `RO` exceeds it. Power U5 from a small 3.3 V LDO off the 5 V rail, not from the S88's 6 mA `DVCC_out` |
 | **U6** | Traco Power **TSR 1-2450** | **Revision 1.0 (2026-09): a module, not a chip.** 6.5–36 V in, 5 V ±2 %, 1 A, SIP-3 (78xx footprint: 1 = +V_in, 2 = GND, 3 = +V_out), 1 mA typ no-load, Digi-Key TH ฿206.49 / 26 k in stock (2026-09-02). Fixed output only. **Needs a 22 µF/50 V input capacitor** (Traco requirement above 32 V_in) — that is C12/C19. **Any substitute must be rated ≥36 V input**: a 24 V bank hits 28.8 V on absorb (29.2 V for 8S LiFePO4), so the popular 28 V modules — DFRobot DFR0571, MP1584, LM2596 boards — are out. Same-class alternates: Pololu **D36V6F5** (50 V, 600 mA, ±4 % — check the S88's 4.5 V minimum after cable drop), Murata **OKI-78SR-5/1.5-W36-C** |
 | **U7** | Traco Power **TSR 1-2433** | Same series, **3.3 V ±2 %** (3.23–3.37 V worst case, under the 3.6 V ceiling of CN6-4). 4.75–36 V in, 1 A. Digi-Key TH ฿206.49 / 10 k in stock (2026-09-02). Alternates: Pololu **D36V6F3**, Murata **OKI-78SR-3.3/1.5-W36-C**. **Never an adjustable module** — the ±2 % factory trim is what protects the MCU |
 | ~~L1, L2~~ | — | **Deleted in revision 1.0** together with the LM5164 network (C13, C16–C18, C20, C22–C25, R26–R37). The inductors and every COT value live on in `hardware-interface-back.md` |
@@ -68,6 +68,9 @@ The S88 is fitted **last**, after the SHT45 logs prove the greenhouse is inside
 2. **After the logs:** the S88 LP, U5, the head LDO, the radiation shield and the
    PTFE/Gore membrane.
 
-Also get **TDE14367 "Modbus on Senseair S88"** from Senseair before wave 2 — it has
-the register map, which is **not** in the product spec, and `S88_MODBUS_ADDR` /
-`S88_CO2_REG` in `node_config.h` are placeholders until you have it.
+The register map is in **TDE14367 "Modbus on Senseair S88"** (rev 5), not in the
+product spec — it has been read and `src/s88.cpp` now matches it (CO2 = input
+register IR4 via function 0x04, address 0xFE "any sensor", status word checked).
+Nothing in `node_config.h` is a placeholder any more; set `S88_SITE_PRESSURE_DHPA`
+to the site's mean pressure before wave 2 (see `hardware-interface.md` §3
+*Pressure*).
