@@ -18,7 +18,7 @@ The probes and SHT45s sit on the **one gated rail**, so that part of the front-e
 is dead between wakes; each probe owns its own pin, so all six convert **in
 parallel** and rail-on time is one 750 ms conversion no matter how many are fitted.
 **Everything is gated, including CO2** — the SCD41 takes on-demand single shots, so
-unlike the Senseair S88 it replaced it needs no always-on rail. See
+so nothing on this board needs an always-on rail. See
 [CO2 on a solar node](#co2-on-a-solar-node).
 
 It does **not** talk to the web-server directly (that server only speaks HTTP on
@@ -157,8 +157,8 @@ there is no always-on sensor rail in this revision:
 ```
 
 The buck is a single **off-the-shelf module** — Traco **TSR 1-2433**, 36 V input,
-1 A, three pins, no external network. The 5 V module went with the S88 in revision
-2.0. It
+1 A, three pins, no external network. A second module supplied 5 V until revision
+2.0; nothing on the current BOM needs it. It
 replaced two discrete TI LM5164 converters in revision 1.0 (2026-09) because ~30
 hand-tuned passives were too much to get right on a first board; the price is a
 36 V ceiling instead of 100 V and ~1.15 Wh/day of module no-load current. Why a
@@ -254,15 +254,16 @@ numbers mean.
 ## CO2 on a solar node
 
 **This section has been rewritten twice, and the direction is the point.** It was
-about rationing an SCD41; then about why a Senseair S88 could not be rationed at
+about rationing an SCD41; then about a Senseair S88 that could not be rationed at
 all; it is now about a CO2 sensor that costs **0.024 Wh/day** and is no longer
 worth arguing about. The sensor is a **Sensirion SCD41** on I2C at `0x62`, on mux
 channel 3, at mid-house crop level, and it is **power-cycled with everything else**.
 
 ### Why it goes back behind the gate
 
-The S88 it replaced had to run continuously — warm-up, an IIR filter needing
-history, and an 8-day ABC period. None of those bind on the SCD41:
+An NDIR CO2 sensor usually has to run continuously — warm-up, a filter needing
+measurement history, a self-calibration period measured in days. None of those
+bind here:
 
 - **Warm-up** is handled per wake by a **throwaway first shot**. The first
   single-shot after the rail comes up reads low, so `scd41_read_single_shot(1)`
@@ -308,11 +309,12 @@ sensor is 3 %. There is no load left on this node worth optimising.
 
 ### The one thing the SCD41 is worse at
 
-The S88 dissipated 90 mW and, by accident, that kept its optics a degree above
-ambient and off the dew point. The SCD41 dissipates ~1.5 mW averaged — **that
-protection is gone, in a wetter building.** A **heater resistor pad is laid out at
-the head and left DNP**: ~220 Ω / ~50 mW would add ~1.2 Wh/day, taking the node to
-~2.0 Wh/day, still less than the S88 revision consumed. Whether to fit it is a
+The SCD41 dissipates ~1.5 mW averaged, nowhere near enough to hold itself above
+the dew point — and a sensor that runs a degree or two warm gets that protection
+for free. **This board has no passive answer to condensation**, in a house that is
+misted daily. A **heater resistor pad is laid out at the head and left DNP**:
+~220 Ω / ~50 mW would add ~1.2 Wh/day, taking the node to ~2.0 Wh/day, still less
+than this board drew before the 5 V rail was deleted. Whether to fit it is a
 question for the SHT45 dew-point logs, not for the schematic.
 
 ### Staged deployment
@@ -329,9 +331,9 @@ Mount it in a vented, splash-protected housing with the **diffusion opening faci
 downward**, behind a PTFE/Gore membrane, **never sealed**, and **not in a misting
 nozzle's path**. **No radiation shield** — a mushroom house is dark.
 
-**Why the F103 prototype also uses an SCD41:** it always did. The 2026-08 S88
-detour applied to the WL55 node only, and revision 2.0 brings the two back into
-line — the same `src/scd41.{h,cpp}` driver now serves both.
+**Why the F103 prototype also uses an SCD41:** it always did. The 2026-08 detour to
+a Senseair part applied to the WL55 node only, and revision 2.0 brings the two back
+into line — the same `src/scd41.{h,cpp}` driver now serves both.
 
 ## Build / flash
 

@@ -199,8 +199,9 @@ connector width.
 | `GND` (signal) | — | **CN10-9**, **CN10-20** | — | one net (GND); wire **both** — see *Returns vs guards* | — |
 | `VSENS` | — | — | front-end internal | **gated** 3.3 V to probes, **all four** I2C branches, mux **and** all pull-ups | `main.cpp` `gate_on()` |
 
-**There is exactly one internal rail now.** `V5_S88` is gone with the sensor that
-needed it, so the front-end generates `VSENS` and nothing else.
+**The front-end generates exactly one internal rail: `VSENS`.** If you meet a
+second one in an older drawing or an older board, that board is not this design —
+see the note above.
 
 **Sizing `V3V3_MCU`:** the largest single draw is still the **LoRa TX's ~150 mA**,
 but the SCD41 is now on this rail too and bursts to **175 mA typ / 205 mA max**
@@ -870,15 +871,15 @@ never going to hold.
 | Response τ63 | <40 s | 60 s |
 | On the board it costs | 2nd regulator, U4, U5, head LDO, A/B TVS, 3 signals | **one mux channel** |
 
-What that table is really saying: **the S88 cost this board a whole subsystem, and
-the SCD41 costs it a connector.** §5's second rail, §4's RS-485 parts and three of
-the eighteen signals in §2 all existed to carry one sensor 5 m. They are gone.
+What that table is really saying: **this sensor costs the board a connector.** It
+needs no regulator of its own, no transceiver at either end, and no signal across
+the joint — it is the fourth branch on a bus switch that was already there.
 
-> **Dropping Modbus costs no data integrity.** That was the one real argument for
-> the S88 — a corrupted Modbus frame fails CRC16 and is retried, while a
-> corrupted I2C transaction hands back a plausible wrong number. The SCD41 closes
-> that hole itself: **every 16-bit word carries a CRC-8** (poly 0x31, init 0xFF),
-> which `src/sensirion_i2c.cpp` already verifies for the SHT45s. A bad read never
+> **I2C here loses no data integrity.** The usual objection is that a corrupted
+> I2C transaction hands back a plausible wrong number, where a framed protocol
+> would fail its checksum and be retried. That does not apply to a Sensirion part:
+> **every 16-bit word carries its own CRC-8** (poly 0x31, init 0xFF), which
+> `src/sensirion_i2c.cpp` already verifies for the SHT45s. A bad read never
 > reaches the cache in `main.cpp`.
 
 #### Where it goes, and why there
@@ -907,19 +908,20 @@ the **S88 GH** (0–20 000 ppm, 0–95 %RH) in
 [`hardware-interface-s88.md`](hardware-interface-s88.md) comes back — and it
 brings the 5 V rail and RS-485 back with it.
 
-#### Why it sits behind the gate, unlike its predecessor
+#### Why it sits behind the gate
 
-The S88 had to run continuously: warm-up, an IIR filter that needed history, and
-an ABC period measured in days. Take those one at a time against the SCD41:
+An NDIR CO2 sensor usually wants continuous power, for four reasons. Check each
+against this one, because if any of them held, the board would need an always-on
+rail and `SENS_GATE` would have a hole in it:
 
-| Reason the S88 needed continuous power | SCD41 |
+| Usual reason to leave a CO2 sensor powered | Does it bind here? |
 |---|---|
-| Warm-up | Handled per wake by a **throwaway first shot** — see below |
-| Filter history | Not needed: τ63 is 60 s and the node samples every 15 min |
-| Self-heating kept the optics dry | Lost either way — see *Condensation* below |
-| ABC period of 8 days | **ASC is switched off here anyway** — see *ASC* below |
+| Warm-up after power-up | **No** — handled per wake by a **throwaway first shot**, below |
+| A filter that needs measurement history | **No** — τ63 is 60 s and the node samples every 15 min |
+| Self-heating keeps the optics above the dew point | **Not available** at 1.5 mW — see *Condensation* below |
+| A self-calibration period measured in days | **No** — **ASC is switched off here**, see *ASC* below |
 
-So the CO2 sensor goes back on `VSENS` with the probes and the SHT45s, and this
+So the CO2 sensor sits on `VSENS` with the probes and the SHT45s, and this
 board has **no always-on sensor rail at all**. `SENS_GATE` recovers a latched CO2
 branch exactly as it recovers a latched SHT45 branch.
 
@@ -1057,20 +1059,21 @@ pull-up pair, and the **DNP heater pad** below.
 
 #### Condensation, and the heater that is not fitted yet
 
-The S88 dissipated 90 mW continuously, and the previous revision noted the
-accidental benefit: a module a degree or two above ambient keeps local humidity
-off the dew point. **The SCD41 dissipates ~1.5 mW averaged** — that benefit is
-gone, in a wetter building. On this axis the new part is a regression, and it is
-worth being blunt about it.
+**The SCD41 dissipates ~1.5 mW averaged** (0.45 mA × 3.3 V), which is nowhere near
+enough to hold itself above ambient. A sensor that runs a degree or two warm keeps
+local humidity off its own dew point for free; this one does not, and it is going
+into a house that is misted daily and sits at 90–95 %RH. Be blunt about it: **this
+is the one axis on which this design has no passive answer**, and the previous
+revision of this board had the protection by accident because its sensor burned
+90 mW.
 
 The answer is a **heater resistor pad at the head, laid out now and left DNP**:
 
 - ~**220 Ω across the branch's 3.3 V**, i.e. ~50 mW, ~15 mA — enough to hold a
   small housing a degree or so above ambient.
-- It would add **~1.2 Wh/day**, taking the node from ~0.8 to ~2.0 Wh/day. That is
-  still **less than the S88 revision consumed doing nothing special**, and 2.5 %
-  of the panel. The energy freed by deleting the 5 V rail pays for it several
-  times over.
+- It would add **~1.2 Wh/day**, taking the node from ~0.8 to ~2.0 Wh/day — **2.5 %
+  of the panel**, and still less than this board drew before the 5 V rail was
+  deleted. The energy that deletion freed pays for the heater several times over.
 - **Whether it is needed is a question for the logs, not for this document.**
   Deploy with the SHT45s first, log T/RH at mid-house, compute the dew point, and
   fit the resistor if condensation is real. Laying the pad out now is what makes
@@ -1108,11 +1111,11 @@ Power-cycling the rail is the one recovery that always works. The gate is the
 node's **I2C and 1-Wire reset button**, and firmware should use it that way: on a
 failed transaction, gate off, wait, gate on, retry.
 
-> **Revision 2.0 put the CO2 sensor back behind the gate.** The S88 could not be:
-> it wanted 5 V and its ABC needed continuous operation, so it sat on its own
-> ungated rail and was the one thing `SENS_GATE` could not rescue. The SCD41 takes
-> on-demand single shots, so **everything the front-end reads is now switched**,
-> and there is no always-on sensor rail left to reason about.
+> **Everything the front-end reads is switched, including CO2.** That is worth
+> stating plainly because it is what makes the gate a complete recovery mechanism
+> rather than a partial one: there is no sensor on this board that `SENS_GATE`
+> cannot power-cycle, and no always-on rail to reason about. It was not true
+> before revision 2.0 — see *The CO2 sensor*.
 
 Upstream of the six probes, all four I2C branches and the bus switch that fans
 them out — which is now everything:
@@ -1407,7 +1410,7 @@ thirty parts. All of it is still documented in
 | CO2 head | **Sensirion `SEK-SCD41-SENSOR`** breakout (recommended), or a bare **`SCD41-D-R2`** on a small head PCB | Vented, splash-protected housing, **diffusion opening facing down**, PTFE/Gore membrane, **never sealed**, and **not in a misting nozzle's path**. **No radiation shield** — a mushroom house is dark |
 | CO2 head | **100 µF + 100 nF** | Across VDD/GND at the sensor. Not optional: this is what keeps the 205 mA bursts off 5 m of cable |
 | CO2 head | **2.2 kΩ ×2** | Channel 3's pull-up pair, if not already on the breakout |
-| CO2 head | **Heater resistor pad — DNP** | ~220 Ω across the branch 3.3 V (~50 mW). **Lay out the pad, fit nothing.** The SCD41 self-heats ~1.5 mW where the S88 gave 90 mW, so condensation protection is gone; whether it must come back is a question for the SHT45 logs. See *Condensation* in §3 |
+| CO2 head | **Heater resistor pad — DNP** | ~220 Ω across the branch 3.3 V (~50 mW). **Lay out the pad, fit nothing.** The SCD41 self-heats only ~1.5 mW, so it cannot hold itself above the dew point; whether it needs help is a question for the SHT45 logs. See *Condensation* in §3 |
 | CO2 head | **VDD and VDDH bridged** | Mandatory, both from the same rail. Already done on the breakout; easy to miss on a bare LGA |
 
 ---
@@ -1641,12 +1644,11 @@ Read as a netlist, since polarity is where this node gets destroyed:
 | **U7** V_in (pin 1) | — | `24V_PROT` |
 | **R24** 300 kΩ | — | `24V_PROT` (top of the `VBAT_SENSE` divider) |
 
-**Revision 2.0 removed one of the two branches from this node.** The S88's 5 V
-module used to hang here beside U7, which is why the previous revision spent a
-paragraph explaining that "independent rails" meant independent *outputs*, not
-independent *inputs*. With one module the distinction is moot — but the layout
-rules below are not, because D9's surge current and R24's analog tap still share
-this copper.
+**One module taps this node, and the layout rules below still matter.** With a
+single converter there is no question of rails sharing an input — but D9's surge
+current and R24's high-impedance analog tap share this copper, and that is what
+the ordering rules are actually about. (An older revision had a second module
+hanging here beside U7; a board with two is not this design.)
 
 **`VBAT_SENSE` is measured here, not at `24V_RAW`**, and that is deliberate: the
 divider then sits inside D9's clamp and behind Q2, so it never sees a raw
@@ -1712,25 +1714,23 @@ requirement as covering both D9's 53.3 V clamp *and* this ring.
                                    └──[R24/R25]── VBAT_SENSE ─> PB3 (ADC1_IN2)
 ```
 
-**Revision 1.0 had two modules; revision 2.0 has one.** The second existed for
-exactly one reason: the Senseair S88 wanted 4.5–5.25 V, and a 5 m cable to a
-300 mA load could not be fed from the 3.3 V rail the rest of the board runs on.
-Deleting the sensor deleted the rail, `U6`, its two capacitors, `C15`, the 5 V pin
-on `J12`, two test pads and a section of this document.
+**Every load on this board runs from 3.3 V, so the board makes 3.3 V and nothing
+else.** That is the whole of the power architecture. A second rail existed until
+revision 2.0 only because the CO2 sensor of the day needed 4.5–5.25 V; nothing on
+the current BOM does.
 
-The old argument for keeping them separate — *"an S88 fault must not brown out the
-LoRa transmitter"* — went with it. It does not simply get dropped; it gets
-re-examined:
+An earlier revision also argued that a separate rail protected the radio from a
+faulty CO2 branch. That argument does not survive the change, and it is worth
+saying why rather than letting it lapse quietly:
 
-- **The fault current is ten times smaller.** A shorted CO2 branch is no longer a
-  300 mA load on 5 m of cable but a 205 mA one, and the TSR 1-2433 current-limits
-  at 250 % of 1 A and recovers by itself.
+- **The fault current is ten times smaller.** A shorted CO2 branch is a 205 mA
+  load, and the TSR 1-2433 current-limits at 250 % of 1 A and recovers by itself.
 - **The exposure was never unique to CO2.** Three SHT45 branches, each 5 m of
   unshielded cable in the same building, have always been on the 3.3 V rail. A
   fourth branch of the same kind is not a new class of risk.
-- **It is now gate-recoverable, which it was not before.** The S88's rail was
-  ungated — a short there could only be fixed by a visit. The SCD41 sits behind
-  `SENS_GATE` like everything else, so firmware can drop the rail and retry.
+- **It is gate-recoverable.** Everything on `VSENS` can be power-cycled by
+  firmware. A rail the gate cannot reach is the case that needs a site visit, and
+  this design no longer has one.
 
 > **U7's output must never exceed 3.6 V.** CN6-4 is rated **3.0–3.6 V** (UM2592
 > Table 9) and the STM32WL's absolute maximum VDD is 3.6 V. Use a fixed 3.3 V part,
@@ -1738,9 +1738,9 @@ re-examined:
 
 ### The buck module — U7
 
-Revision 1.0 replaced two discrete **LM5164** converters with off-the-shelf
-**Traco TSR 1** modules; revision 2.0 deleted one of the two along with the S88.
-What is left is a single part:
+One off-the-shelf **Traco TSR 1** module supplies the whole board. (Two earlier
+revisions got here: rev 1.0 replaced a pair of discrete LM5164 converters with a
+pair of modules, and rev 2.0 dropped one of the pair.)
 
 | | **U7** |
 |---|---|
@@ -1809,9 +1809,11 @@ to scope, and no COT ripple network to get wrong. That was the point of revision
 - **`C11` — 100 µF / ≥63 V electrolytic, keep, and keep the voltage rating.** It
   sits on the clamped side of D9, which reaches 53.3 V during a surge. That the
   module is a 36 V part does not lower what C11 sees.
-- **`C15` is deleted.** Its only job was the S88's 300 mA steps down 5 m of cable.
-  The SCD41's equivalent reservoir is the **100 µF at the head**, on the far side
-  of the cable where it actually belongs (§3, *The 205 mA problem*).
+- **There is no bulk capacitor on the board for the CO2 sensor, and that is
+  deliberate.** Its reservoir is the **100 µF at the head** — on the far side of
+  the cable, which is the only side that can actually keep a 205 mA burst off it
+  (§3, *The 205 mA problem*). An earlier revision carried a `C15` here for the
+  same job and it was on the wrong end of 5 m of wire.
 
 #### Layout — four rules
 
@@ -1864,11 +1866,10 @@ puts 24 V on the output pin, and the Nucleo is downstream of it.
 
 ### 3.3 V goes down the CO2 cable, and the wire gauge is part of the spec
 
-The S88 revision sent **5 V** to the CO2 head because the sensor needed it. The
-SCD41 runs from the same 3.3 V as the rest of the front-end, so the branch is
-electrically identical to the three SHT45 branches — with one exception that is
-worth a paragraph, because it is the only place on this board where wire gauge is
-a specification rather than a preference.
+The CO2 branch carries the same 3.3 V as the three SHT45 branches and is
+electrically identical to them — with one exception worth a paragraph, because it
+is the only place on this board where wire gauge is a specification rather than a
+preference.
 
 **The SCD41 draws 175 mA typ / 205 mA max in bursts.** Over 5 m:
 
@@ -1888,10 +1889,11 @@ give it **22 AWG, a 100 µF reservoir at the head, and a measurement window in
 which nothing else on the rail is working**. Together those are enough; any one of
 them alone would not be.
 
-**Why not send 5 V and regulate at the head, as the S88 did?** Because it would
-resurrect `U6` — a second regulator, its two capacitors, and half of this node's
-idle current — to solve a 109 mV problem that a thicker wire already solves. The
-S88 needed 5 V at the sensor; the SCD41 does not.
+**Why not send a higher voltage and regulate at the head?** Because it would put a
+second regulator on the board — its capacitors, and half of this node's idle
+current — to solve a 109 mV problem that a thicker wire already solves. The
+textbook answer is right when the sensor needs a voltage the board does not
+generate. This one does not.
 
 ### The energy budget, and why it is now genuinely uninteresting
 
@@ -1909,14 +1911,13 @@ Against ~80 Wh/day from a 20 W panel at four peak-sun hours, the whole node is
 **~1 %** of the yield. Overnight carry is 12 h × ~33 mW ≈ **0.4 Wh**; three cloudy
 days is ~2.4 Wh, against a 20 Ah 24 V bank's 480 Wh.
 
-**Read the trend, because it is the story of three revisions.** The battery
-design worried about microamps. The S88 revision spent 3.8 Wh/day and argued that
-the budget had "stopped being interesting". This one spends 0.8 Wh/day, of which
-**72 % is a regulator doing nothing** and the CO2 sensor — the part that dominated
-every previous version — is **3 %**. There is no longer a load on this node worth
-optimising. The next watt-hour, if one is ever spent, should go on the head heater
-(§3, *Condensation*), which would take the total to ~2.0 Wh/day and still leave it
-below what the S88 revision consumed while measuring nothing extra.
+**Read the shape of that table, not just the total.** **72 % of the budget is a
+regulator doing nothing**, and the CO2 sensor — which dominated every earlier
+version of this design, at 2.16 Wh/day — is **3 %**. There is no load left here
+worth optimising: halving the sensor would buy 0.012 Wh/day against a panel that
+makes eighty. The next watt-hour, if one is ever spent, should go on the head
+heater (§3, *Condensation*), which takes the total to ~2.0 Wh/day and is still
+less than this board drew before the 5 V rail was deleted.
 
 ### Three traps
 
@@ -2058,10 +2059,11 @@ everything else:
    of 1 mA and no maximum is published, and that single line is **72 % of this
    node's entire budget**. Write the measured number into that table.
 2. **Deliberately short `VSENS` at J12.** U7 should current-limit and recover when
-   the short is removed. Revision 1.0 tested this at the 5 V rail to prove an S88
-   fault could not brown out the radio; with one rail that argument is gone, and
-   what this step now proves is narrower but still worth having: **a shorted sensor
-   branch does not destroy the module**, and `SENS_GATE` clears it. Drop the gate
+   the short is removed. What this proves is narrow but worth having: **a shorted
+   sensor branch does not destroy the module**, and `SENS_GATE` clears it. (An
+   earlier revision ran this test at a 5 V rail, to show that a CO2 fault could not
+   brown out the radio. With one rail that framing is gone; the recovery path is
+   what matters.) Drop the gate
    with the short still applied and confirm the rail recovers — that is the
    recovery path firmware depends on, and it is the reason the CO2 sensor was
    brought back behind the gate.
