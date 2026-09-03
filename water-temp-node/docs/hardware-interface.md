@@ -761,9 +761,11 @@ net and everything on it.
           ├─ R19 2k2 ── SD1   │  because each pair drives 5 m of cable.
           ├─ R20 2k2 ── SC1   │  The mux passes signals, NOT pull-ups: a
           ├─ R21 2k2 ── SD2   │  channel with no pair of its own floats
-          ├─ R22 2k2 ── SC2   ┘  and that SHT45 never answers.
+          ├─ R22 2k2 ── SC2   │  and that sensor never answers.
+          ├─ R39 2k2 ── SD3   │  Channel 3 is the CO2 branch and is no
+          ├─ R40 2k2 ── SC3   ┘  exception: same value, same reason.
           ├─ U3.VCC     + C8 100nF to GND     TCA9548A
-          └─ J9/J10/J11 pin V                 3V3 out to the three branches
+          └─ J9/J10/J11/J12 pin V             3V3 out to the four branches
 
   SDA_UP ─┬─ PA11  (CN10-5)             SCL_UP ─┬─ PA12  (CN10-3)
           └─ U3.SDA                             └─ U3.SCL
@@ -774,21 +776,35 @@ net and everything on it.
           └─ J10.SDA                            └─ J10.SCL     -> ท้ายโรงเรือน
   SD2    ─┬─ U3.SD2                     SC2    ─┬─ U3.SC2
           └─ J11.SDA                            └─ J11.SCL     -> นอกโรงเรือน
+  SD3    ─┬─ U3.SD3                     SC3    ─┬─ U3.SC3
+          └─ J12.SDA                            └─ J12.SCL     -> CO2 กลางโรงเรือน
 
-  ACROSS EACH BRANCH  (4 conductors, <=5 m; SDA twisted with GND)
+  ACROSS AN SHT45 BRANCH  (4 conductors, <=5 m, 24 AWG; SDA twisted with GND)
      VSENS  ───────────  SHT45 VDD
      SDn    ───────────  SHT45 SDA
      SCn    ───────────  SHT45 SCL
      GND    ───────────  SHT45 VSS
 
-  AT EACH SENSOR  (far end of the branch)
+  ACROSS THE CO2 BRANCH  (same 4 conductors, but 22 AWG -- see the 205 mA problem)
+     VSENS  ───────────  SCD41 VDD + VDDH      <-- BOTH, tied at the sensor
+     SD3    ───────────  SCD41 SDA
+     SC3    ───────────  SCD41 SCL
+     GND    ───────────  SCD41 GND
+
+  AT EACH SHT45  (far end of the branch)
      SHT45 VDD --[100nF]-- SHT45 VSS      <-- at the SENSOR, not on the PCB
 
-  GND    ─┬─ U3.GND, J9/J10/J11 pin G
+  AT THE CO2 HEAD  (far end of channel 3)
+     SCD41 VDD --[100uF]-- SCD41 GND      <-- low-ESR; the burst reservoir
+     SCD41 VDD --[100nF]-- SCD41 GND      <-- ceramic, right at the pads
+     SCD41 VDD -- VDDH                    <-- short link, AT the sensor
+     heater resistor pad ..............   <-- DNP, see "Condensation"
+
+  GND    ─┬─ U3.GND, J9/J10/J11/J12 pin G
           ├─ U3.A0, U3.A1, U3.A2      all three LOW = address 0x70
           └─ C8 low side
 
-  open   ─── U3.SD3..SD7, U3.SC3..SC7   five unused channels, leave unconnected
+  open   ─── U3.SD4..SD7, U3.SC4..SC7   four unused channels, leave unconnected
 ```
 
 Pin **names** above are what to wire to; pin **numbers** differ between the
@@ -801,27 +817,30 @@ all three sensors share it and a mirrored footprint is three mistakes, not one.
 
 1. **`RESET` left floating.** It is active-LOW with no internal pull-up, so a
    floating pin means the switch may sit in reset and *nothing* downstream ever
-   answers. With the SCD41 gone there is now **nothing** upstream to still work
-   and reassure you, so the symptom is a total I2C blackout. R23 to `VSENS` fixes it; a direct tie to `VSENS` is acceptable
-   if you never want to reset it from firmware.
+   answers. Every I2C device on this node is behind the switch — there is nothing
+   upstream left to still work and reassure you — so the symptom is a total I2C
+   blackout, including CO2. R23 to `VSENS` fixes it; a direct tie to `VSENS` is
+   acceptable if you never want to reset it from firmware.
 2. **`A0`/`A1`/`A2` left floating.** The address is then undefined and the switch
    answers at something other than 0x70, or intermittently. Tie all three to GND.
 3. **Missing downstream pull-ups.** The single most likely fault on this board.
    The mux is a set of analog switches: it passes SDA and SCL through, but the
    pull-ups do not propagate. A channel wired with sensor but no resistors scans
    as empty, exactly like a dead sensor.
-4. **An SHT45 accidentally wired upstream.** It then collides with the other two
-   the moment a channel opens. Bring-up step 8 catches this: with all channels
-   closed you must see **`0x70` and nothing else** — no `0x44`, and no `0x62`
-   either, because the SCD41 is gone.
+4. **A sensor accidentally wired upstream.** An SHT45 there collides with the
+   other two the moment a channel opens; the SCD41 there puts ~320 pF permanently
+   on the bus (§ *Why there is a bus switch*). Bring-up step 8 catches both: with
+   all channels closed you must see **`0x70` and nothing else** — no `0x44`, and
+   no `0x62`.
 5. **Any of it on permanent 3V3 instead of `VSENS`.** Same rule as everything else
-   on this board — including R17–R22, which are easy to forget because they sit
-   on the far side of the switch.
+   on this board — including R17–R22 and R39/R40, which are easy to forget because
+   they sit on the far side of the switch.
 6. **A branch wired with 4.7 kΩ instead of 2.2 kΩ.** This is the new one, and it is
    nasty because it *mostly* works: 4.7 kΩ over 5 m gives a 1.27 µs rise against a
    1000 ns budget, so the bus passes on the bench with a short lead and starts
-   throwing intermittent NACKs once the real cable is fitted. R17–R22 are **2.2 kΩ**;
-   R15/R16 upstream stay 4.7 kΩ because they only drive 30 mm of trace.
+   throwing intermittent NACKs once the real cable is fitted. R17–R22 and R39/R40
+   are **2.2 kΩ**; R15/R16 upstream stay 4.7 kΩ because they only drive 30 mm of
+   trace.
 
 
 > **Which sensor is which is decided by the channel, not by the part.** Sensor
@@ -925,15 +944,58 @@ So the CO2 sensor sits on `VSENS` with the probes and the SHT45s, and this
 board has **no always-on sensor rail at all**. `SENS_GATE` recovers a latched CO2
 branch exactly as it recovers a latched SHT45 branch.
 
-**The cost is the throwaway shot.** The first single shot after the rail comes up
-reads low — the photoacoustic cell needs one cycle to settle — so
-`scd41_read_single_shot(warmup=1)` takes two and discards the first. That is
-**~10 s of sensor-on time per wake**, and it is not optional on a node that
-power-cycles the sensor 96 times a day. Datasheet §3.11; the caveat is written
-into `src/scd41.h` where the next person will meet it.
+**The cost is the throwaway shot**, and Sensirion names this mode and this cost
+explicitly. Cutting the supply between measurements is *power-cycled single shot
+operation*, and the rule for it is unambiguous: *"Because the sensor requires one
+single shot measurement to stabilize after power cycling, the CO2 reading of the
+initial single shot after startup should always be discarded."* So
+`scd41_read_single_shot(warmup=1)` takes two and discards the first — **~10 s of
+sensor-on time per wake**, not optional on a node that power-cycles the sensor 96
+times a day.
 
-Energy: 2 shots × 96 wakes/day ≈ **0.024 Wh/day**, against a node budget of
-~0.8 Wh/day and a panel yield of ~80 Wh/day. It is the smallest line in §5's table.
+> **This one has a genuine documentation conflict behind it, and the next person
+> to read the datasheet will find the opposite of what this section says.** Get
+> it from here rather than rediscovering it:
+>
+> | Document | Says |
+> |---|---|
+> | Datasheet **v1.3–v1.6** | *"After a power cycle, the initial single shot reading should be discarded to maximize accuracy."* Plus a second, separate note saying to discard the first reading after `wake_up` |
+> | Datasheet **v1.7** (Apr 2025) | **Both statements removed.** The revision history is explicit: *"removed recommendation to discard initial single shot measurement after power cycle (Section 3.11)"* |
+> | App note *SCD4x Low Power Operation* v1.0 (Jul 2022) §2.4 | Still says it, and more strongly — *"the CO2 reading of the initial single shot after startup should always be discarded"* |
+>
+> Sensirion does not say **why** it was removed, and a deletion from a revision
+> history is not an affirmative statement that the first reading is now good.
+> Note also that the app note is demonstrably stale on another point — its
+> flowcharts still show the 1000 ms power-up that the datasheet corrected to
+> 30 ms in v1.4 — so it cannot simply be treated as the surviving authority
+> either.
+>
+> **This build keeps the throwaway shot**, and the reasoning is asymmetric rather
+> than bibliographic:
+>
+> - **If it is unnecessary, it costs 0.007 Wh/day** — on a node spending 0.8 of an
+>   available 80. Nothing.
+> - **If it is necessary and skipped, the sensor reads low.** That is the same
+>   failure the ASC section is about: the controller believes the air is fine, the
+>   house is under-ventilated, and **nothing on the dashboard looks wrong.**
+>
+> Pay 0.007 Wh/day for that. Revisit only if Sensirion states positively that the
+> first shot is valid — not merely if a future datasheet is silent again.
+
+The app note is on firmer ground about the mode itself, and it confirms the
+choice: power-cycled single shot beats leaving the sensor idle between shots
+**once the sampling period is above 380 s**, and this node wakes every **900 s**. Below that threshold the sensor's 200 µA idle
+current is cheaper than paying for a stabilisation shot every time; above it, the
+gate wins. This design is comfortably on the right side of the line — but it is a
+line, and a future decision to sample every 5 minutes would cross back over it.
+
+Energy, from the app note's own figure for this mode (Equation 2: **154 mC per
+useful single shot at 3.3 V**, which already includes the discarded one):
+
+`154 mC × 96 wakes/day × 3.3 V = 48.8 J ≈` **0.0136 Wh/day**
+
+against a node budget of ~0.8 Wh/day and a panel yield of ~80 Wh/day. It is the
+smallest line in §5's table by an order of magnitude.
 
 #### ASC — turn it off, and understand why before you turn it back on
 
@@ -954,6 +1016,19 @@ caps. That is precisely the outcome the sensor was fitted to prevent, and
 **nothing on the dashboard looks wrong while it happens.** This is the single
 most dangerous default in this design.
 
+And there is a second, blunter reason that does not depend on the mushroom house
+at all: **ASC is not available in power-cycled single shot operation at all.**
+The datasheet is unambiguous — *"for power-cycled single shot operation, ASC
+functionality is not available in either case"* (§3.11, and it means either
+cutting VDD or using `power_down`/`wake_up`). Its bookkeeping counts readings
+across a history that does not survive the rail going away. Leaving ASC enabled
+here would not give a badly-calibrated sensor so much as an undefined one.
+
+That makes the ASC-off decision doubly determined: wrong for this building, and
+unavailable in this mode. It is still written explicitly rather than left to the
+sensor, because `persist_settings` state is what a *replacement* sensor arrives
+with, and a replacement arrives with ASC on.
+
 So:
 
 - **ASC off.** `set_automatic_self_calibration_enabled` (0x2416) with 0, then
@@ -970,9 +1045,13 @@ So:
 **The FRC procedure**, and its preconditions are strict (datasheet §3.8.1):
 
 1. Take the head **outdoors**, into open air away from people and exhausts.
-2. Let it run **>3 minutes in stable, homogeneous CO2** — in single-shot terms,
-   **more than three shots at 1-minute intervals**. FRC on a sensor that has not
-   been measuring returns `0xFFFF` and does nothing.
+2. Let it run in stable, homogeneous CO2 first. The datasheet says >3 minutes;
+   the app note (§5.1) is more specific for the mode this node actually uses, and
+   its instruction is the one to follow: **run up for 5 minutes at a 1-minute
+   sampling period** — five single shots, one minute apart — *"the same procedure
+   also applies to performing FRC if the sensor is to be operated in power-cycled
+   single shot mode in the field."* FRC on a sensor that has not been measuring
+   returns `0xFFFF` and does nothing.
 3. Altitude compensation must already be set (below). Supply must be the normal
    3.3 V, not a bench 5 V.
 4. `perform_forced_recalibration` (0x362f, 400 ms) with the reference value —
@@ -1028,8 +1107,59 @@ Three mitigations, and together they are enough:
    the whole 750 ms conversion, so `SCD41_POWER_UP_MS` costs nothing.
 
 > **`VDD` and `VDDH` must be tied together** at the sensor, and the datasheet is
-> explicit that both are supplied from the same rail. On a breakout board this is
-> already done; on a bare LGA it is a mistake that is easy to make once.
+> explicit that both are supplied from the same rail — *"VDD and VDDH must be
+> connected to each other close to the sensor on the customer PCB"* (§2.3). On a
+> breakout board this is already done; on a bare LGA it is a mistake that is easy
+> to make once, and the 5 m of cable is emphatically not "close to the sensor".
+
+#### The 30 mV question — a switcher against an LDO requirement
+
+The clause quoted above deserves its own answer rather than a hand-wave, because
+**taken at the regulator this board fails it**:
+
+| | |
+|---|---|
+| SCD41 asks for (§2.3, unloaded) | **≤ 30 mV p-p**, and *"operating the sensor with a separate LDO is recommended"* |
+| U7 delivers (TSR 1, 24 V input models, 20 MHz BW) | **75 mV p-p typ** at **400–600 kHz** (500 kHz typ) |
+
+There is no LDO on this board and there is not going to be one — §5 spent a
+section explaining why a second regulator is not worth resurrecting. So the
+requirement has to be met somewhere else, and it is: **at the sensor, which is
+the only place the datasheet actually specifies.**
+
+**The 5 m cable is the filter.** This is the pleasing part of the design, and it
+is worth writing down because it inverts the obvious reading — the long branch
+looks like the liability that forces 22 AWG, and it is *simultaneously* the thing
+that makes a switching regulator acceptable to a part that asked for an LDO:
+
+- 5 m of twisted pair has a loop inductance of roughly **0.7 µH/m → ~3.5 µH**.
+  (This is an estimate from geometry, not a datasheet figure — which is exactly
+  why bring-up measures it rather than trusting it.)
+- Against the head's **100 µF**, that is a low-pass with a corner near
+  **8 kHz** — nearly two decades below U7's switching frequency.
+- At 500 kHz the cable's series impedance is inductive, ωL ≈ **11 Ω**, while the
+  head capacitance presents its ESR — a few hundred mΩ for a low-ESR 100 µF,
+  shunted further by the 100 nF ceramic's 3.2 Ω. The divider is therefore on the
+  order of **1:40**, and U7's 75 mV p-p arrives at the SCD41 as **~2 mV**.
+- Margin is over an order of magnitude, so the conclusion survives being wrong
+  about the inductance by 2× or the ESR by 5×.
+
+**It does not ring.** The obvious objection to putting an LC between a regulator
+and a pulsed load is that switching the branch on excites it. The wire's own
+**0.53 Ω** damps it: `Q = (1/R)·√(L/C) = (1/0.53)·√(3.5 µH / 100 µF) ≈ 0.35`,
+comfortably below 1. Note that 22 AWG was chosen in the section above for its
+*resistance* being low, and here the same resistance is wanted for damping — 20
+AWG would still give Q ≈ 0.5, so the choice is not delicate in either direction.
+
+> **The 100 µF at the head does two jobs, not one.** It is the reservoir for the
+> 205 mA burst *and* the shunt leg of the ripple filter. That is the reason it is
+> specified as **low-ESR** in §4b rather than "100 µF, any type": a high-ESR part
+> degrades both jobs at once.
+
+Because the inductance figure is an estimate, **bring-up measures this rather
+than assuming it** — see §7, where the head's VDD is scoped with the branch
+powered and the sensor idle. Under 30 mV p-p passes; anything near it means the
+cable is not what this section assumed.
 
 #### The head
 
@@ -1043,6 +1173,71 @@ no through-hole variant. Two honest ways to build the head:
 
 Either way the head carries the sensor, the 100 µF + 100 nF, the branch's 2.2 kΩ
 pull-up pair, and the **DNP heater pad** below.
+
+##### Building a bare LGA head
+
+Skip this if you buy the breakout — which is the recommendation. It is here so
+that the second option is a real option and not a shrug.
+
+**Pinout** (datasheet §2.3, Table 6; top view, 21 pads on a 10.1 × 10.1 mm body):
+
+| Pad | Net | Pad | Net |
+|---|---|---|---|
+| 1–5 | DNC | 11–18 | DNC |
+| **6** | **GND** | **19** | **VDDH** |
+| **7** | **VDD** | **20** | **GND** |
+| 8 | DNC | **21** | **GND** — four centre pads, all pad 21 |
+| **9** | **SCL** | | |
+| **10** | **SDA** | | |
+
+Three things about that table are easy to get wrong, and all three are silent
+failures:
+
+1. **Pad 8 is DNC, sitting between VDD and SCL.** The bottom row is
+   `GND · VDD · DNC · SCL · SDA`, not four signals in a row. A footprint drawn
+   from memory puts SCL and SDA one pad to the left and the sensor never answers.
+2. **"Do not connect" does not mean "leave unlanded".** The datasheet requires
+   that DNC *"pads must be soldered to a floating pad on the customer PCB"* —
+   they are mechanical, and the part is held on by them. Draw all 21 pads.
+3. **Pin 1 is marked twice**: a circular mark, and a **notched corner on the
+   protective membrane**. Use both; the package is very nearly square.
+
+**Pull-ups** live at the head, not on the front-end PCB — that is the whole point
+of putting R39/R40 downstream. The datasheet's example value is 10 kΩ for a short
+bus; this branch is 5 m and uses **2.2 kΩ** (§ *Wiring it*). Firmware **must only
+ever drive SDA and SCL low**, never high — the STM32WL's I2C peripheral is
+open-drain and already complies, but a bit-banged fallback written in a hurry is
+where this rule gets broken.
+
+**Handling and reflow** — the part is more fragile to process than to use:
+
+- **MSL 1** per IPC/JEDEC J-STD-033B1. Floor time out of bag is unlimited under
+  normal factory conditions (≤30 °C / 85 %RH); process within a year of delivery.
+  This is the one piece of good news — no bake, no dry cabinet.
+- **Reflow to J-STD-020, peak ≤ 245 °C for < 30 s**, ramp-up < 3 °C/s, above
+  T_L = 220 °C for < 60 s, ramp-down < 4 °C/s while above T_L.
+- **245 °C must not be exceeded anywhere in the part, not just at the pad.** The
+  datasheet warns that the cap interior runs hotter than a thermocouple on the
+  land reads. If you profile at the pad, leave headroom.
+- **Not compatible with vapour-phase reflow.** Hot air or IR/convection only.
+- **The white dust cover must not be removed, wetted, or tampered with** — before,
+  during, or after. It is not packaging.
+- **No extra flux, no second reflow pass, and no board wash afterwards.** A head
+  PCB that gets cleaned after soldering is a scrapped sensor.
+- **Respect the keep-free area** around the thermal relief hole in the land
+  pattern (§4.2 of the datasheet). Solder wicking into it is the classic defect.
+- **Reflow shifts the CO2 reading, temporarily.** Full accuracy returns **at most
+  five days** after soldering, whether or not the sensor is powered. So: do not
+  judge a freshly built head, and **do not run FRC on one** — the datasheet is
+  explicit that recalibration should be performed no less than five days after
+  assembly. Build the head, then leave it a week before you calibrate anything.
+
+The laser marking on the **sidewall of the cap** carries the variant (SCD40 /
+SCD41 / SCD43) and a data-matrix serial. Check it: SCD40 and SCD41 are visually
+identical from above, they share the 0x62 address, and the SCD40 **does not
+implement `measure_single_shot`** (datasheet §3.11: SCD41 and SCD43 only) — which
+is the one command this node depends on. The datasheet does not say how an SCD40
+responds to it, so do not plan to detect the mix-up in firmware; read the cap.
 
 **Mounting, for a mushroom house specifically:**
 
@@ -1250,7 +1445,7 @@ and rail-on time is set by the **750 ms conversion**.
 
 **What the SCD41 does add is measurement time, not settle time:** two 5 s single
 shots, taking the gated window from ~1 s to **~11 s**. Averaged over the wake that
-is 0.024 Wh/day, the smallest line in §5's budget.
+is 0.0136 Wh/day, the smallest line in §5's budget.
 
 Keep total `VSENS` bulk at **≤10 µF** and put **100 Ω–1 kΩ in series with the gate**
 to tame inrush — that lands around a millisecond. The SCD41's separate 10 µF local
@@ -1321,9 +1516,10 @@ remains **fault recovery** (§ *The rail gate*), not current handling — but it
 no longer true that nothing on this rail draws current.
 
 Route **U7's 3.3 V** → Q1 → `VSENS` as a wide trace anyway. On a large board it is
-tempting to let `VSENS` wander to reach six probe connectors and three branch
-connectors — don't; run it as a spine with short stubs. The **5 V** rail to J12
-wants the same treatment for a better reason: it really does carry 300 mA peaks.
+tempting to let `VSENS` wander to reach six probe connectors and four branch
+connectors — don't; run it as a spine with short stubs. **The stub to J12 matters
+most**, because it is the only one that carries 205 mA peaks; give the CO2 branch
+the shortest, widest path from Q1 that the layout allows.
 
 ---
 
@@ -1340,7 +1536,7 @@ Split in two, because the board is no longer the whole design: parts on the
 
 | Ref | Part | Value / spec | Notes |
 |---|---|---|---|
-| J7 | Box header 2×19, shrouded | 2.54 mm, keyed, latching | Signal cable to Nucleo CN10. **18 signals** now |
+| J7 | Box header 2×19, shrouded | 2.54 mm, keyed, latching | Signal cable to Nucleo CN10. **15 signals** in revision 2.0 |
 | J8 | Power connector 2-pin | keyed, latching (JST-XH, Micro-Fit 3.0) | **3.3 V buck output** + GND to Nucleo CN6-4/6 |
 | J14 | Solar input 2-pin | keyed, latching, ≥5 A | **24 V bank in** from the charge controller |
 | J1–J6 | Pluggable screw terminal, 3-pin | Phoenix MC 1,5/3-ST-3,5 or clone | **One per probe** — six of them |
@@ -1408,10 +1604,11 @@ thirty parts. All of it is still documented in
 | Each SHT45 ×3 | **SHT45-AD1B** + **100 nF** | Cap across VDD/VSS at the sensor. Small vented housing |
 | SHT45 #2 only | **Radiation shield** | Louvered/Stevenson type, sensor below, north-facing. Without it the ambient reference reads 10–15 °C high in sun |
 | CO2 head | **Sensirion `SEK-SCD41-SENSOR`** breakout (recommended), or a bare **`SCD41-D-R2`** on a small head PCB | Vented, splash-protected housing, **diffusion opening facing down**, PTFE/Gore membrane, **never sealed**, and **not in a misting nozzle's path**. **No radiation shield** — a mushroom house is dark |
-| CO2 head | **100 µF + 100 nF** | Across VDD/GND at the sensor. Not optional: this is what keeps the 205 mA bursts off 5 m of cable |
+| CO2 head | **100 µF, low-ESR** + **100 nF** | Across VDD/GND at the sensor. Not optional, and **low-ESR is part of the spec**: this capacitor is both the 205 mA reservoir and the shunt leg of the ripple filter that lets a switching regulator feed a part that asked for an LDO (§3, *The 30 mV question*) |
 | CO2 head | **2.2 kΩ ×2** | Channel 3's pull-up pair, if not already on the breakout |
 | CO2 head | **Heater resistor pad — DNP** | ~220 Ω across the branch 3.3 V (~50 mW). **Lay out the pad, fit nothing.** The SCD41 self-heats only ~1.5 mW, so it cannot hold itself above the dew point; whether it needs help is a question for the SHT45 logs. See *Condensation* in §3 |
-| CO2 head | **VDD and VDDH bridged** | Mandatory, both from the same rail. Already done on the breakout; easy to miss on a bare LGA |
+| CO2 head | **VDD and VDDH bridged** | Mandatory, both from the same rail, **linked close to the sensor**. Already done on the breakout; easy to miss on a bare LGA |
+| CO2 head, bare LGA only | **21 floating pads** | Every DNC pad must be soldered to a pad that goes nowhere — see *Building a bare LGA head* in §3 |
 
 ---
 
@@ -1884,10 +2081,15 @@ preference.
 All three clear the SCD41's **2.4 V** minimum with enormous margin, so this is not
 about the sensor browning out. It is about the datasheet's request that the supply
 *"not vary by more than 30 mV (e.g. ripples or drops caused by other loads)"* and
-its recommendation of a dedicated LDO. We give it neither an LDO nor 30 mV — we
-give it **22 AWG, a 100 µF reservoir at the head, and a measurement window in
-which nothing else on the rail is working**. Together those are enough; any one of
-them alone would not be.
+its recommendation of a dedicated LDO.
+
+**There is no LDO, and the 30 mV is nonetheless met — at the sensor, which is
+where the datasheet specifies it.** U7 puts out 75 mV p-p, and the cable and the
+head capacitor between it and the SCD41 attenuate that to roughly 2 mV. The
+arithmetic, the assumption it rests on, and the bring-up step that checks it are
+in §3, *The 30 mV question*; do not re-derive it here. What §5 owes that argument
+is the wire: **22 AWG is load-bearing twice over** — low resistance for the IR
+drop above, and enough resistance to damp the filter's LC.
 
 **Why not send a higher voltage and regulate at the head?** Because it would put a
 second regulator on the board — its capacitors, and half of this node's idle
@@ -1902,7 +2104,7 @@ generate. This one does not.
 | **U7 no-load input current** | 1 mA typ × 24 V = 24 mW | **0.58 Wh** |
 | MCU + LoRa + probes + SHT45s | ~1 mA avg @ 3.3 V | <0.1 Wh |
 | Module conversion loss | | ~0.1 Wh |
-| **SCD41** — 2 single shots × 96 wakes | 0.45 mA per shot-cycle @ 3.3 V | **0.024 Wh** |
+| **SCD41** — 96 power-cycled single shots | 154 mC per useful shot @ 3.3 V | **0.0136 Wh** |
 | TCA9548A standby | 0.1 µA typ | ~0 |
 | ST-LINK, **if** you power it | ~5 mA @ 3.3 V | ~0.4 Wh |
 | **Total** | | **≈0.8 Wh/day** |
@@ -1913,9 +2115,9 @@ days is ~2.4 Wh, against a 20 Ah 24 V bank's 480 Wh.
 
 **Read the shape of that table, not just the total.** **72 % of the budget is a
 regulator doing nothing**, and the CO2 sensor — which dominated every earlier
-version of this design, at 2.16 Wh/day — is **3 %**. There is no load left here
-worth optimising: halving the sensor would buy 0.012 Wh/day against a panel that
-makes eighty. The next watt-hour, if one is ever spent, should go on the head
+version of this design, at 2.16 Wh/day — is **under 2 %**. There is no load left
+here worth optimising: halving the sensor would buy 0.007 Wh/day against a panel
+that makes eighty. The next watt-hour, if one is ever spent, should go on the head
 heater (§3, *Condensation*), which takes the total to ~2.0 Wh/day and is still
 less than this board drew before the 5 V rail was deleted.
 
@@ -2097,7 +2299,7 @@ everything else:
 **Cable alone, nothing connected** — five minutes that pays for itself:
 
 6. **Buzz the signal ribbon end to end** against §2's map. Confirm continuity on
-   the **eighteen** contract positions and, critically, that **nothing** rings out
+   the **fifteen** contract positions and, critically, that **nothing** rings out
    to CN10-2, -4, -7, -22, -32 or -38. Note that **-35 and -37 are now used**
    (`DBG_TX`/`DBG_RX`) — they left the forbidden list this revision. A ribbon
    assembled one position out is the single most likely fault in this design, and
@@ -2189,6 +2391,20 @@ exist:
     everything else. Confirm they land *after* the DS18B20 conversions and the
     SHT45 reads have finished — if they overlap, the ordering in `main.cpp` has
     been changed and the probes are being sampled through a disturbed supply.
+22. **Scope VDD *at the CO2 head*, and check two numbers there.** §3's *30 mV
+    question* argues that the 5 m cable filters U7's switching ripple down to
+    roughly 2 mV at the sensor, but that argument rests on an *estimated* cable
+    inductance. This is where the estimate gets tested. Probe across the head's
+    100 nF, ground clip short, and read:
+
+    | | Expect | If it fails |
+    |---|---|---|
+    | **Ripple, sensor idle** (AC-coupled, 20 MHz BW limit) | **< 30 mV p-p**, and the calculation says ~2 mV | Near or above 30 mV means the head capacitor is high-ESR, missing, or not actually at the sensor. This is the datasheet limit, not a guideline |
+    | **Sag, during a shot** | Head VDD stays **well above 2.4 V** (predicted ~3.12 V) | A sag toward 2.4 V means 24 AWG got fitted instead of 22 AWG, or the 100 µF is absent |
+
+    Both faults are silent: the sensor keeps answering and keeps returning numbers
+    that pass CRC. Measure once, at build time, and write the two values in the
+    build log — there is no runtime symptom that will bring you back here.
 
 ---
 
@@ -2202,10 +2418,25 @@ exist:
   VCP/D0-D1 arrangement.
 - Sensirion **SCD4x** datasheet, **v1.7 (April 2025)** — the CO2 sensor. §1.1
   accuracy bands, §2.1 the 175/205 mA peak and the single-shot average, §2.2 the
-  −10…60 °C / 0–95 %RH envelope, §2.3 the VDD/VDDH tie and the 30 mV supply-quiet
-  request, §3.8 **ASC and its weekly-400-ppm assumption** plus the FRC procedure,
-  §3.11 single-shot mode and the note that **ASC is unavailable when power-cycled**,
-  and §3.12 the CRC-8 that `src/sensirion_i2c.cpp` implements.
+  −10…60 °C / 0–95 %RH envelope, §2.3 the pad table, the VDD/VDDH tie and the
+  30 mV supply-quiet request, §2.4 the **30 ms** power-up, §3.8 **ASC and its
+  weekly-400-ppm assumption** plus FRC, §3.11 single-shot mode and the note that
+  **ASC is unavailable when power-cycled**, §3.12 the CRC-8 that
+  `src/sensirion_i2c.cpp` implements, and §4.1–4.6 the package, land pattern,
+  MSL 1 and the reflow profile.
+  **Read §6, the revision history, as well** — two entries in it change how the
+  rest should be read. v1.4 *"[corrected] power-up time and soft reset time"*
+  (1000 ms → 30 ms; the old figure still circulates in Sensirion's own app note),
+  and **v1.7 is the revision that removed the "discard the first single shot
+  after a power cycle" recommendation that this build still follows** — see §3,
+  *The cost is the throwaway shot*, for why it is still followed.
+- Sensirion application note **"SCD4x Low Power Operation"**, v1.0 (July 2022) —
+  the authority for the operating mode this node actually uses. §2.4
+  power-cycled single shot, the discarded first reading, and the **380 s**
+  threshold above which power-cycling beats idling; §3.3 **Equation 2** (154 mC
+  per useful shot at 3.3 V), which is where §5's CO2 energy line comes from; §5.1
+  the FRC run-up of **5 minutes at a 1-minute sampling period**. Treat its timing
+  flowcharts with care — they still show the superseded 1000 ms power-up.
 - Traco Power **TSR 1 series** datasheet, rev. 2026-07-02 — U7 (TSR 1-2433):
   input range, ±2 % set accuracy, 250 % current limit, 1 mA typ no-load input
   current, the SIP-3 pinout (1 = +V_in, 2 = GND, 3 = +V_out), the 470 µF

@@ -255,7 +255,7 @@ numbers mean.
 
 **This section has been rewritten twice, and the direction is the point.** It was
 about rationing an SCD41; then about a Senseair S88 that could not be rationed at
-all; it is now about a CO2 sensor that costs **0.024 Wh/day** and is no longer
+all; it is now about a CO2 sensor that costs **0.0136 Wh/day** and is no longer
 worth arguing about. The sensor is a **Sensirion SCD41** on I2C at `0x62`, on mux
 channel 3, at mid-house crop level, and it is **power-cycled with everything else**.
 
@@ -300,7 +300,7 @@ cleaned anyway. Full procedure and its preconditions:
 | U7 no-load input current | 1 mA typ @ 24 V | **0.58 Wh** |
 | MCU + LoRa + probes + SHT45s | ~1 mA avg @ 3.3 V | <0.1 Wh |
 | Module conversion loss | | ~0.1 Wh |
-| **SCD41** — 2 single shots × 96 wakes | 0.45 mA per shot-cycle | **0.024 Wh** |
+| **SCD41** — 96 power-cycled single shots | 154 mC per useful shot | **0.0136 Wh** |
 | **Total** | | **≈0.8 Wh/day** |
 
 Against ~80 Wh/day from a 20 W panel at four peak-sun hours the whole node is

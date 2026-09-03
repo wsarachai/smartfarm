@@ -48,8 +48,8 @@
  *   DQ_P1  PA4   CN10-17      DQ_P4  PB8   CN10-27   <-- moved off PC1 (2026-08)
  *   DQ_P2  PA9   CN10-19      DQ_P5  PB10  CN10-25
  *
- * DQ_P4 moved from PC1 to PB8 in 2026-08 because PC1 was then LPUART1_TX for
- * the Senseair S88 CO2 sensor. That sensor is gone (2026-09: the CO2 part is an
+ * DQ_P4 moved from PC1 to PB8 in 2026-08 because PC1 was then a UART TX pin for
+ * a CO2 sensor on RS-485. That subsystem is gone (2026-09: the CO2 part is an
  * SCD41 on I2C) and PC1 is free again -- but DQ_P4 STAYS on PB8. Moving it back
  * would churn the connector contract, the front-end layout and this table for
  * no gain. PB8 sits at CN10-27, flanked by the
@@ -96,11 +96,11 @@
  * branches in a greenhouse WILL latch SDA low eventually. On a failed
  * transaction: gate off, wait, gate on, retry.
  *
- * 2026-09: EVERYTHING the front-end reads is behind this gate again, including
- * the CO2 sensor. The S88 had to sit outside it (5 V, and ABC that needed
- * continuous power); the SCD41 does not -- it takes on-demand single shots and
- * is happiest power-cycled. So the gate covers all four 5 m branches, and there
- * is no always-on sensor rail left to reason about. */
+ * EVERYTHING the front-end reads is behind this gate, including the CO2 sensor:
+ * the SCD41 takes on-demand single shots and is happiest power-cycled, so the
+ * gate covers all four 5 m branches and there is no always-on sensor rail left
+ * to reason about. (Not true before 2026-09, when the CO2 part needed 5 V and
+ * continuous power -- a board with an ungated sensor rail is not this design.) */
 #define DS_PWR_PORT             GPIOA
 #define DS_PWR_PIN              GPIO_PIN_8
 #define DS_PWR_GPIO_CLK()       __HAL_RCC_GPIOA_CLK_ENABLE()
@@ -114,20 +114,18 @@
  * Unchanged by the probe count: the probes convert in parallel. */
 #define DS_CONVERT_MS           750
 
-/* ---- I2C sensor bus (the three SHT45s -- nothing else) -------------------- */
+/* ---- I2C sensor bus (three SHT45s + the SCD41, all remote) --------------- */
 /* I2C2 on PA11/PA12 (CN10-5 / CN10-3). Chosen over I2C1 (PA9/PA10 -- PA9 is a
  * probe) and I2C3 (PB10/PB11 -- PB10 is a probe and PB11 is the Nucleo's LED3,
  * which would sit on SDA).
  *
- * 2026-09: the SCD41 is BACK on this bus (it left for a Senseair S88 on
- * RS-485 in 2026-08, and that whole subsystem is now deleted). On the bus:
- * the TCA9548A, three SHT45s on channels 0-2, and the SCD41 on channel 3.
- * None of them are on the board -- each sits at the far end of its own <=5 m
- * cable, which is why the downstream pull-ups are 2.2k rather than 4.7k.
- * All on the gated VSENS rail. */
+ * On the bus: the TCA9548A, three SHT45s on channels 0-2, and the SCD41 on
+ * channel 3. None of them are on the board -- each sits at the far end of its
+ * own <=5 m cable, which is why the downstream pull-ups are 2.2k rather than
+ * 4.7k. All on the gated VSENS rail. */
 #define I2C_SDA_PIN             PA11
 #define I2C_SCL_PIN             PA12
-#define I2C_CLOCK_HZ            100000   /* 100 kHz: kind to three 5 m branches */
+#define I2C_CLOCK_HZ            100000   /* 100 kHz: kind to four 5 m branches */
 
 /* ---- SHT45 air temp + humidity: THREE of them ---------------------------
  * The SHT4x I2C address is fixed at the factory by the order code
@@ -167,29 +165,36 @@
 #define I2C_MUX_CHANNELS        { 0, 1, 2 }
 
 /* ---- CO2: Sensirion SCD41 on I2C, behind the mux ------------------------- *
- * 2026-09: replaces the Senseair S88 LP, and takes the entire RS-485 subsystem
- * with it -- U4, U5, the head LDO, the A/B TVS pairs, the 5 V rail and its buck
- * module, and three signals off the board-to-board connector (S88_TX on PC1,
- * S88_RX on PC0, S88_DE on PA7), which is why the contract dropped from
- * eighteen signals to fifteen.
+ * What it costs the board: one mux channel and one connector. It needs no
+ * regulator of its own, no transceiver, and no extra signal across the
+ * board-to-board joint.
  *
- * Why it is a better fit than the part it replaces:
- *   - 2.4-5.5 V, so it runs from the same 3.3 V as everything else. The S88's
- *     4.5-5.25 V is what forced a second regulator onto the board.
- *   - I2C with a CRC-8 on EVERY 16-bit word (sensirion_i2c.cpp), so dropping
- *     Modbus costs no data integrity -- a corrupted reply is still detected and
- *     retried rather than published as a plausible wrong number.
+ * Why this part:
+ *   - 2.4-5.5 V, so it runs from the same 3.3 V as everything else.
+ *   - I2C with a CRC-8 on EVERY 16-bit word (sensirion_i2c.cpp), so a corrupted
+ *     reply is detected and retried rather than published as a plausible wrong
+ *     number. I2C here costs no data integrity against a framed protocol.
  *   - measure_single_shot: on-demand measurement, so it lives behind SENS_GATE
  *     like everything else instead of needing an always-on rail.
- *   - -10..60 C, 0-95 %RH, against the S88 LP's 0..50 C, 0..85 %RH. The
- *     mushroom house is the reason this mattered enough to change parts.
+ *   - -10..60 C, 0-95 %RH. The mushroom house -- warm, and at 90-95 %RH after
+ *     misting -- is what made this range a hard requirement rather than a
+ *     preference, and it is why the CO2 part was changed in 2026-09.
  *
- * The cost is current: 175 mA typ / 205 mA max peak, against the S88's 300 mA
- * but ten times the SCD41's own average. Two consequences, both handled:
- *   - the 5 m branch is 22 AWG with 100 uF + 100 nF at the head, so the ~109 mV
- *     IR drop lands well above the 2.4 V minimum;
+ * The cost is current: 175 mA typ / 205 mA max peak, ten times its own average
+ * and ten times anything else the front-end powers. Two consequences, both
+ * handled:
+ *   - the 5 m branch is 22 AWG with 100 uF (low-ESR) + 100 nF at the head, so
+ *     the ~109 mV IR drop lands well above the 2.4 V minimum. That capacitor is
+ *     also the shunt leg of the filter that gets U7's 75 mVpp switching ripple
+ *     under the SCD41's 30 mV supply limit -- see docs/hardware-interface.md.
  *   - main.cpp reads it LAST inside the gated window, after the DS18B20
  *     conversions have finished, so its bursts never overlap theirs.
+ *
+ * History, because it explains the pin map above: the CO2 sensor was on RS-485
+ * until 2026-09, and deleting that subsystem removed U4, U5, the head LDO, the
+ * A/B TVS pairs, the 5 V rail and its buck module, plus three signals from the
+ * board-to-board connector (PC1, PC0, PA7 -- now free and unused). That is why
+ * the contract dropped from eighteen signals to fifteen.
  */
 #define SCD41_ADDR              0x62
 #define SCD41_MUX_CHANNEL       3        /* SHT45s hold 0..2 -- see above */
@@ -214,8 +219,8 @@
 #define SCD41_SITE_ALTITUDE_M   330
 
 /* ---- Sensor rail settle time for the I2C parts --------------------------- */
-/* This was 1000 ms for years, on the strength of an SCD41 power-up figure the
- * datasheet does not actually give -- SCD4x v1.7 Table 7 says 30 ms max. The
+/* This was 1000 ms for years, on the strength of an SCD41 power-up figure that
+ * Sensirion has since corrected -- SCD4x v1.7 Table 7 says 30 ms max. The
  * sequencing built around overlapping that 1 s with the 750 ms DS18B20 conversion
  * survives anyway, because it is the right shape and now costs nothing. Every I2C
  * part here settles in single-digit ms: the SHT45s ~1 ms, the mux immediately,
@@ -224,8 +229,9 @@
  * 2026-09: the SCD41 needs a settle window again (SCD41_POWER_UP_MS), but it
  * costs nothing -- it is addressed last, by which time the rail has been up for
  * the whole 750 ms conversion plus three SHT45 reads, against the datasheet's
- * 30 ms power-up. (The driver carried 1000 ms until 2026-09; nothing in SCD4x
- * v1.7 supports that figure -- see src/scd41.h.) */
+ * 30 ms power-up. (The driver carried 1000 ms until 2026-09. That came from
+ * datasheet v1.3, which really did say 1000 ms; v1.4 corrected it to 30 ms and
+ * v1.7 still does -- see src/scd41.h.) */
 #define I2C_POWER_SETTLE_MS     10
 
 /* ---- Supply telemetry: 24 V bank via a divider ---------------------------- *

@@ -1,10 +1,22 @@
 # water-temp-node — hardware interface spec
 
-> ⚠ **SUPERSEDED — 2026-09.** This is the **LM5164 discrete-buck revision** of the
-> spec, kept verbatim for reference. The current spec is
-> [`hardware-interface.md`](hardware-interface.md), whose revision 1.0 replaces
-> U6/U7 with two off-the-shelf Traco TSR 1 modules. **Do not build from this file.**
-> Everything outside §5 and the power rows of §4 is identical in both.
+> ⚠ **SUPERSEDED — 2026-09, and now two revisions behind.** This is the
+> **LM5164 discrete-buck revision**, kept verbatim for reference. **Do not build
+> from this file.** Two changes have landed since:
+>
+> - **Revision 1.0** replaced the discrete `U6`/`U7` bucks with two off-the-shelf
+>   **Traco TSR 1** modules. That is the change this file exists to document the
+>   other side of, and §5 plus the power rows of §4 are the parts that differ.
+> - **Revision 2.0** then replaced the Senseair S88 CO2 sensor with a **Sensirion
+>   SCD41 on I2C**, which deleted the 5 V rail, one of the two modules, the whole
+>   RS-485 subsystem, and three signals from the connector contract (eighteen →
+>   fifteen).
+>
+> So the power sections here are one revision out of date and the rest of the
+> document is two. The current spec is
+> [`hardware-interface.md`](hardware-interface.md); the intermediate S88 revision,
+> if that is what you are looking for, is
+> [`hardware-interface-s88.md`](hardware-interface-s88.md).
 
 The real (non-breadboard) build is **two PCBs joined by a cable**:
 

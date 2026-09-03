@@ -11,12 +11,12 @@
  * then sleeps. Uplink-only.
  *
  * EVERYTHING sits on the ONE gated rail, so the whole front-end is off between
- * wakes. That includes the CO2 sensor as of 2026-09: the Senseair S88 it
- * replaced had to run continuously on its own 5 V rail for its ABC, while the
- * SCD41 takes on-demand single shots and is happiest power-cycled. The probes
- * are nearly free by comparison: each owns its own pin, so all six convert in
- * PARALLEL and their rail-on time is one 750 ms conversion regardless of how
- * many are fitted.
+ * wakes -- including the CO2 sensor, which takes on-demand single shots and is
+ * happiest power-cycled. (Not true before 2026-09: the CO2 part then needed its
+ * own always-on 5 V rail. A board with an ungated sensor rail is not this
+ * design.) The probes are nearly free by comparison: each owns its own pin, so
+ * all six convert in PARALLEL and their rail-on time is one 750 ms conversion
+ * regardless of how many are fitted.
  *
  * Deep sleep (Stop2) + the RTC wake timer are done with RAW HAL here (not the
  * STM32duino Low Power/RTC libraries — those 2.0.0 releases #error against the

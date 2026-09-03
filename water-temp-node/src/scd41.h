@@ -12,20 +12,50 @@
  *       average forever, so it is wrong for a battery node.
  *
  *   SINGLE SHOT (scd41_measure_single_shot)
- *       One on-demand measurement, 5 s, then idle. The datasheet quotes the cost
- *       duty-averaged: 0.45 mA typ / 0.5 mA max at 3.3 V for one shot every five
- *       minutes, i.e. ~135 mAs of charge per shot, drawn as 175 mA typ / 205 mA
- *       max bursts. Right for the power-gated WL55 node, which wakes every
- *       15 minutes. This command is SCD41-only (the SCD40 does not have it).
+ *       One on-demand measurement, 5 s, then idle. Costs 77 mC of charge per
+ *       shot at 3.3 V, drawn as 175 mA typ / 205 mA max bursts. Right for the
+ *       power-gated WL55 node, which wakes every 15 minutes. This command is
+ *       SCD41-only (the SCD40 does not have it).
  *
  * >>> The single-shot accuracy caveat, which matters for the battery node <<<
- * The datasheet is explicit that the FIRST single-shot reading after power-up
- * is not trustworthy — the photoacoustic cell needs a measurement cycle to
- * settle. Take a throwaway reading first (scd41_measure_single_shot() twice,
- * or pass warmup=1 to scd41_read_single_shot()) and use the second. That is
- * ~10 s of sensor-on time per wake, which IS the CO2 sensor's whole energy cost
- * — 2 shots x 96 wakes x 135 mAs = ~0.024 Wh/day. See README, "CO2 on a solar
- * node".
+ * Cutting VDD between measurements is what Sensirion calls POWER-CYCLED SINGLE
+ * SHOT operation, and its rule is: "Because the sensor requires one single shot
+ * measurement to stabilize after power cycling, the CO2 reading of the initial
+ * single shot after startup should always be discarded."
+ *
+ * SOURCE, and read this before you "optimise" the second shot away, because the
+ * CURRENT DATASHEET DOES NOT SAY IT:
+ *   - datasheet v1.3..v1.6:  "After a power cycle, the initial single shot
+ *     reading should be discarded to maximize accuracy." (plus a separate note
+ *     saying the same about the first reading after wake_up)
+ *   - datasheet v1.7 (Apr 2025):  BOTH removed. Revision history: "removed
+ *     recommendation to discard initial single shot measurement after power
+ *     cycle (Section 3.11)".
+ *   - app note "SCD4x Low Power Operation" v1.0 (Jul 2022) sec 2.4:  still says
+ *     it, and harder -- "should always be discarded".
+ *
+ * Sensirion never said why it went. A deletion is not a statement that the first
+ * reading is now good, and that app note is stale elsewhere (its flowcharts keep
+ * the 1000 ms power-up that v1.4 corrected to 30 ms), so neither document simply
+ * wins. We keep the throwaway shot on an asymmetric-cost argument: unnecessary,
+ * it wastes 0.007 Wh/day out of an 80 Wh/day budget; necessary and skipped, the
+ * CO2 reads LOW, the greenhouse controller under-ventilates, and nothing on the
+ * dashboard looks wrong. Revisit only if Sensirion states positively that the
+ * first shot is valid -- not merely if a later datasheet is silent again.
+ *
+ * So take a throwaway reading first (scd41_measure_single_shot() twice, or pass
+ * warmup=1 to scd41_read_single_shot()) and use the second. ~10 s of sensor-on
+ * time per wake, which IS the CO2 sensor's whole energy cost:
+ *
+ *     154 mC per useful reading (app note eq. 2 — the two shots above)
+ *     x 96 wakes/day x 3.3 V = 48.8 J = ~0.0136 Wh/day
+ *
+ * against ~0.8 Wh/day for the whole node. See README, "CO2 on a solar node".
+ *
+ * The same note puts a threshold under the design decision: power-cycling beats
+ * leaving the sensor idle between shots only above a ~380 s sampling period.
+ * This node wakes every 900 s. Sample much faster and gating becomes the more
+ * expensive option, not the cheaper one.
  *
  * The SCD41 also reports its own temperature and humidity. We deliberately do
  * NOT use them for telemetry: the part self-heats, so its T/RH read high, and
@@ -58,12 +88,17 @@
  * allows 2, because an early read is a NACK rather than a retry and the extra
  * millisecond is free on a node that wakes every fifteen minutes.
  *
- * SCD41_POWER_UP_MS was 1000 ms until 2026-09. That number pre-dated this
- * datasheet revision and nothing in v1.7 supports it — Table 7 says "Power-up
- * time, after hard reset, VDD >= 2.25 V: max 30 ms". It made no difference here
- * (the gated rail has been up for the whole 750 ms DS18B20 conversion plus three
- * SHT45 reads before the SCD41 is addressed), but it is wrong by a factor of
- * thirty and would matter in any design where it sits on the critical path.
+ * SCD41_POWER_UP_MS was 1000 ms until 2026-09, and that was not an invented
+ * number: datasheet v1.3 (Sept 2022) really did specify 1000 ms, and the Low
+ * Power Operation app note still shows "(1000 ms)" in its mode flowcharts.
+ * Sensirion CORRECTED it in v1.4 (Feb 2023) — the revision history entry reads
+ * "Correction of power-up time and soft reset time" — and every revision since,
+ * through v1.7, says 30 ms max. The app note predates the correction and was
+ * never refreshed, so it is the stale document, not a second opinion.
+ *
+ * It makes no difference here: the gated rail has been up for the whole 750 ms
+ * DS18B20 conversion plus three SHT45 reads before the SCD41 is addressed. It
+ * would matter in any design where this sits on the critical path.
  */
 
 /*
