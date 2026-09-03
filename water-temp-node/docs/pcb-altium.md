@@ -23,18 +23,43 @@ fiducials, and why no pick-and-place file is generated.
 
 This is not a blank start. Read from the project files themselves:
 
+Four sheets, in `C:\Users\Public\Documents\Altium\Projects\WaterTempNode_FE`:
+
 | Sheet | Last saved | What is on it |
 |---|---|---|
-| `FrontEnd.SchDoc` | 31 Aug, 01:30 | 58 refs — **the pre-revision-2.0 board**: U1a/U1b/U1c, U2, TVS1, C12–C14 |
 | `Connector.SchDoc` | 3 Sep, 15:31 | J7, J8, J13, CN6, Q1, R1, R2, C1, C2 |
-| `1-Wire-probes.SchDoc` | 2 Sep, 13:17 | J1–J6, D1–D6, R3–R14 |
+| `1-Wire-probes.SchDoc` | 3 Sep, 23:27 | J1–J6, D1–D6, R3–R14 |
 | `I2C-sensors.SchDoc` | 3 Sep, 15:31 | U3, J9–J12, R15–R23, R39, R40, C8 — and C4, C5, C6 |
-| `Buck-regulator.SchDoc` | 3 Sep, 22:43 | F1, Q2, R38, D9, D10, C11, C19, C21, R24, R25, C10, the Traco module |
+| `Buck-regulator.SchDoc` | 3 Sep, 23:25 | F1, Q2, R38, D9, D10, C11, C19, C21, R24, R25, C10, the Traco module |
 
-There is **no `.PcbDoc`**, and there is **no project library** — every part is
-placed from `Miscellaneous Devices.IntLib` / `Miscellaneous Connectors.IntLib`
-that shipped with the program, plus three downloaded libraries:
-`TSR_1-2433.IntLib`, `TCA9548APWR.IntLib` and `CDSOD323-T05LC.SchLib`.
+A fifth sheet, `FrontEnd.SchDoc`, held the whole **pre-revision-2.0 board** — 58
+refs including U1a/U1b/U1c, U2 and TVS1, from when the SHT45s and the SCD41 were
+still on the PCB. **It was deleted from disk on 4 September.** Two consequences,
+both live right now:
+
+- The `.PrjPcb` was last written before the deletion and **still lists it** as
+  `[Document1]`. Deleting a file does not remove it from the project; Altium will
+  report a missing document until the entry goes too (§2.3).
+- It is not lost yet. `History\` still holds **49 `FrontEnd*` backups (~1 MB)**,
+  which is the only surviving copy of that drawing — and §2.2 tells you to delete
+  `History\`. Recover it *first* (§2.1 step 2).
+
+There is **no `.PcbDoc`**. Generic parts come from `Miscellaneous Devices.IntLib` /
+`Miscellaneous Connectors.IntLib`, which shipped with the program. Everything
+specific comes from **`C:\Users\ASUS\Documents\Altium`**:
+
+| Folder | Used by | State |
+|---|---|---|
+| `TSR_1_2433\TSR_1-2433.IntLib` | U7 | In use — `CONV_TSR_1-2433` |
+| `TCA9548APWR.IntLib` | U3 | In use — `SOP65P640X120-24N` |
+| `CDSOD323-T05LC\` (`.SchLib` + `.PcbLib` + STEP) | D1–D6 | In use — `CDSOD323_BRN` |
+| `DMP6023LE-13\` (`.SchLib` + `.PcbLib` + STEP) | **Q2** | **Downloaded but never used** — Q2 is still a generic `MOSFET-P` with an `E3` footprint |
+| `LM5164DDAR\` | — | **Stale.** The LM5164 buck was deleted in revision 1.0 (§4a). Nothing refers to it |
+
+The same folder also holds `mb1389_bdp\` — ST's own Altium source for the
+**NUCLEO-WL55JC1 (MB1389)**, schematic and PCB. That is a better authority than
+UM2592 for anything about CN10 or CN6, and §2 of the spec depends on getting those
+right.
 
 Cross-sheet connectivity is carried entirely by **power ports** — `VSENS`,
 `DQ_P0`…`DQ_P5`, `I2C_SDA`, `I2C_SCL`, `SENS_GATE`, `VBAT_SENSE`, `GND`,
@@ -70,12 +95,17 @@ through-hole — but not `RAD-0.3`, see item 3.
 
 `E3` is the axial **diode** footprint. Both MOSFET symbols have three pins and
 `E3` has two pads, so this one at least announces itself: the ECO into the PCB will
-fail with a pin/pad mismatch. What it should be:
+fail with a pin/pad mismatch. What they should be:
 
-- **Q1 — AO3401A — SOT-23** (3 pads)
-- **Q2 — DMP6023LE-13 — SOT-223** (3 pads plus the tab, and **the tab is the
-  drain** — §5, *Why the drain faces the supply*. The tab is a fourth pad, not
-  decoration, and it is the thermal path)
+- **Q2 — DMP6023LE-13 — SOT-223.** The library is already downloaded and unused
+  (`DMP6023LE-13\`). **Replace the whole component**, not just its footprint: the
+  generic `MOSFET-P` symbol has three pins, the SOT-223 land has **four pads**
+  because the tab is a pad, and there is no pin mapping that makes three onto four
+  work. The vendor symbol carries the mapping and the part number. And the tab
+  matters: **it is the drain** — §5, *Why the drain faces the supply* — so it is
+  both a connection and the thermal path, not decoration.
+- **Q1 — AO3401A — SOT-23** (3 pads). No library for this one; it is on the
+  make-it-yourself list in §3.6.
 
 ### 3. Four package errors on parts that do have a package specified
 
@@ -173,13 +203,26 @@ which is outside the repo, so nothing in it is versioned and nothing cross-check
 against §4a.
 
 1. **Close Altium.**
-2. Move the whole folder to `water-temp-node/hardware/WaterTempNode_FE/`.
-3. Delete the `History/` subfolder — it is Altium's own local backup and there are
-   over a hundred `.Zip` files in it. Git is the history from now on.
-4. Reopen by double-clicking `WaterTempNode_FE.PrjPcb`.
+2. **Rescue the old sheet before anything else.** In `History\`, take the
+   **newest** `FrontEnd.~(nn).SchDoc.Zip`, unzip it, and save the result as
+   `hardware/FrontEnd-rev1-superseded.SchDoc`. Do **not** add it to the project —
+   it is an archive, and putting it back re-creates the duplicate-designator
+   problem it was deleted to solve. This repo keeps superseded revisions
+   (`hardware-interface-back.md`, `hardware-interface-s88.md`) but keeps them as
+   *prose*; this is the only drawn record of the board that carried the SHT45s and
+   the SCD41 on it.
+3. Move the whole project folder to `water-temp-node/hardware/WaterTempNode_FE/`.
+4. **Copy the part libraries in too.** From `C:\Users\ASUS\Documents\Altium`, copy
+   `TSR_1_2433\`, `TCA9548APWR.IntLib`, `CDSOD323-T05LC\` and `DMP6023LE-13\` into
+   `water-temp-node/hardware/lib/`. Take the STEP models with them. **Leave
+   `LM5164DDAR\` behind** — that part was deleted in revision 1.0 — and leave
+   `mb1389_bdp\` behind as well: ST's Nucleo design is 30 MB of reference material
+   that this board does not build.
+5. *Now* delete the `History\` subfolder. Git is the history from here.
+6. Reopen by double-clicking `WaterTempNode_FE.PrjPcb`.
 
-The document paths in the `.PrjPcb` are relative (`DocumentPath=FrontEnd.SchDoc`),
-so the move is safe. The *library* paths are not — see §3.4.
+The document paths in the `.PrjPcb` are relative (`DocumentPath=Connector.SchDoc`),
+so the move is safe. Library paths are not — see §3.2.
 
 ### 2.2 `.gitignore`
 
@@ -198,25 +241,30 @@ hardware/**/*.PcbDocPreview
 ```
 
 Commit the sources — `.PrjPcb`, `.SchDoc`, `.PcbDoc`, `.SchLib`, `.PcbLib`,
-`.OutJob` — and commit the released fabrication zip only when you actually order a
-board, so the tag and the gerbers travel together.
+`.OutJob` — **and commit `hardware/lib/`**, vendor libraries and STEP models
+included. They are a few hundred kilobytes and they are the difference between a
+repo that builds a board and a repo that describes one. Commit the released
+fabrication zip only when you actually order a board, so the tag and the gerbers
+travel together.
 
 These are binary files. `git diff` will tell you nothing useful about them, so
 **write real commit messages**: "add SOT-223 land for Q2, tab tied to drain" beats
 "update PCB".
 
-### 2.3 Take `FrontEnd.SchDoc` out of the project
+### 2.3 Clear the stale `FrontEnd.SchDoc` entry
 
-It is `Document1` in the `.PrjPcb`, and it holds a full copy of the old board:
-C1, C2, J1–J8, Q1, R1 — all of which now also exist on the new sheets. Compile the
-project as it stands and you get a wall of duplicate-designator errors that hides
-everything you actually want to read.
+The file is gone; the *project entry* is not. `WaterTempNode_FE.PrjPcb` still
+carries `[Document1] DocumentPath=FrontEnd.SchDoc`, so Altium opens the project
+reporting a missing document, and it will keep doing so until the entry is
+removed.
 
-`Project » Remove from Project...`, select `FrontEnd.SchDoc`. **Keep the file on
-disk** — rename it `FrontEnd-rev1-superseded.SchDoc`, matching how
-`hardware-interface-back.md` and `hardware-interface-s88.md` keep superseded
-revisions in this repo. It is the only drawn record of the board that had the
-SHT45s and the SCD41 on it.
+`Project » Remove from Project...`, select `FrontEnd.SchDoc`, and save the project.
+That rewrites the `.PrjPcb` and the warning goes.
+
+Deleting the file did fix the real problem, which was worth stating: it held a full
+copy of the old board — C1, C2, J1–J8, Q1, R1 — all of which also exist on the four
+current sheets, so compiling with it in the project produced a wall of duplicate
+designators that buried every message worth reading.
 
 ---
 
@@ -224,20 +272,36 @@ SHT45s and the SCD41 on it.
 
 ### 3.1 Why bother
 
-Three of the parts already come from downloaded libraries that live somewhere on
-this machine and are not in the repo. When those files move, the schematic keeps
-working — the symbol is cached in the `.SchDoc` — but the **footprint link
-breaks**, and it breaks at the moment you push changes to the PCB, which is the
-moment you are least able to notice one missing part among sixty.
+Four of the parts come from downloaded libraries that lived in
+`C:\Users\ASUS\Documents\Altium` — outside the repo, on one machine. When those
+files move, the schematic keeps working, because the symbol is cached in the
+`.SchDoc`. The **footprint link breaks**, and it breaks at the moment you push
+changes to the PCB: the moment you are least able to notice one missing part among
+sixty.
 
-A project library fixes that: one `.SchLib` and one `.PcbLib`, committed next to
-the sheets, containing everything this board uses.
+§2.1 step 4 copies them into `hardware/lib/`. That solves *where the files are*.
+The second half is *how the project finds them*, and it is the part that is easy to
+get wrong.
 
-### 3.2 Create them
+### 3.2 Add them to the project, do not install them globally
 
-`File » New » Library » Schematic Library` and `File » New » Library » PCB Library`.
-Save them into the project folder as `WaterTempNode_FE.SchLib` and
-`WaterTempNode_FE.PcbLib`. They join the project automatically.
+Altium has two ways to make a library available, and they store the path
+differently:
+
+| | Where it is set | Path stored | Survives cloning the repo? |
+|---|---|---|---|
+| **Installed (global)** | Libraries panel » *Libraries…* » Installed | **Absolute** — `C:\Users\ASUS\…` | **No** |
+| **Project library** | `Project » Add Existing to Project...` | **Relative to the `.PrjPcb`** | **Yes** |
+
+Use the second. Add all four — `TSR_1-2433.IntLib`, `TCA9548APWR.IntLib`,
+`CDSOD323-T05LC.PcbLib` + `.SchLib`, `DMP6023LE-13.PcbLib` + `.SchLib` — with
+`Project » Add Existing to Project...`. They then appear under the project in the
+Projects panel and travel with it.
+
+Then make one more pair for the parts nobody publishes a library for:
+`File » New » Library » Schematic Library` and `... » PCB Library`, saved into the
+project folder as `WaterTempNode_FE.SchLib` and `WaterTempNode_FE.PcbLib`. That is
+where the 0805 land, the two Phoenix terminals and the rest of §3.6 go.
 
 ### 3.3 There is no IPC wizard in this version
 
@@ -249,37 +313,67 @@ appears in no resource file and in no binary in the install. What you have is:
 covering resistors, capacitors, SOIC/SOP, headers and a few others. It asks for pad
 size and spacing directly; it does not compute them from a package outline.
 
-So the pad dimensions have to come from somewhere, and the right somewhere is the
+So for anything you draw yourself, the pad dimensions have to come from the
 **manufacturer's recommended land pattern**, which every part on this board
 publishes. For hand soldering, take that recommended land and extend the *outer*
 end of each pad by 0.2–0.3 mm — that is where the iron tip and the solder go. Do
 not widen the gap between pads; that is what sets the part's self-alignment.
 
-### 3.4 What to build, and from where
+### 3.4 For the downloaded libraries, that work is already done — pick `-M`
+
+Open `CDSOD323-T05LC.PcbLib` and there are three footprints, not one:
+
+| Suffix | IPC-7351 density | Use it when |
+|---|---|---|
+| `-L` | **L**east — smallest lands | Fine-pitch machine assembly, tight boards |
+| *(none)* | **N**ominal | The default, reflow assembly |
+| `-M` | **M**ost — largest lands | **Hand soldering**, rework, prototypes |
+
+`DMP6023LE-13.PcbLib` has the same three. The schematic currently uses the
+**nominal** variant of both (`CDSOD323_BRN`, and `E3` for Q2 which is not even
+close). This board is hand-soldered in a batch of five, so switch them:
+
+- D1–D6 → **`CDSOD323_BRN-M`**
+- Q2 → **`DMP6023LE-13_DIO-M`** (arriving with the vendor symbol, per §1 item 2)
+
+That is the same margin the 0.2–0.3 mm rule above buys you, computed by someone
+with the package drawing in front of them. `TCA9548APWR.IntLib` and
+`TSR_1-2433.IntLib` ship one footprint each, so there is no choice to make there.
+
+### 3.5 What you already have
+
+Four parts are done. Verify each against the datasheet once — a downloaded
+footprint is a claim, not a fact — and then never think about them again.
+
+| Refs | Library | Footprint to use | Check |
+|---|---|---|---|
+| D1–D6 | `CDSOD323-T05LC` | **`CDSOD323_BRN-M`** | SOD-323 against the Bourns drawing |
+| Q2 | `DMP6023LE-13` | **`DMP6023LE-13_DIO-M`** | SOT-223, four pads, **tab = drain** |
+| U3 | `TCA9548APWR.IntLib` | `SOP65P640X120-24N` | TSSOP-24 pitch against TI's PW drawing |
+| U7 | `TSR_1-2433.IntLib` | `CONV_TSR_1-2433` | **Buzz it out before soldering** (§5): a reversed footprint puts 24 V on the output pin, and the Nucleo is downstream |
+
+### 3.6 What you have to draw
 
 | Refs | Package | Where the land pattern comes from |
 |---|---|---|
-| R1–R25, R38–R40 | 0805 | Resistor datasheet, "recommended solder pad". One footprint, thirty uses |
-| C1, C2, C8, C10, C21 | 0805 | Same; C21 may be 1210 if you buy 22 µF that way |
+| R1–R25, R38–R40 | 0805 | Resistor datasheet, "recommended solder pad". **One footprint, thirty uses** — draw this one first |
+| C1, C2, C8, C10, C21 | 0805 | Same land; C21 may be 1210 if you buy 22 µF that way |
 | C19 | 1210 or radial | 22 µF **50 V** — check which you can actually buy before drawing the land |
 | C11 | Radial electrolytic | 100 µF ≥63 V. Measure the real part: body ~10 mm, lead pitch 5 mm |
 | Q1 | SOT-23 | AOS AO3401A datasheet |
-| Q2 | **SOT-223** | Diodes DMP6023LE datasheet. Four pads — **tab = drain** |
-| D1–D6 | SOD-323 | Already have `CDSOD323_BRN` from the downloaded library — **copy it into the project `.PcbLib`** and verify against the Bourns datasheet rather than trusting it |
 | D9 | SMB / DO-214AA | Littelfuse SMBJ series datasheet |
 | D10 | SOT-23 or SOD-123 | Match whichever part you buy |
-| U3 | TSSOP-24, 0.65 mm | `SOP65P640X120-24N` from the downloaded library is the correct package — copy it in and check the pad pitch against TI's PW package drawing |
-| U7 | SIP-3, 2.54 mm | `CONV_TSR_1-2433` from the downloaded library. **Buzz it out before soldering** (§5): a reversed footprint puts 24 V on the output pin, and the Nucleo is downstream |
 | F1 | 5×20 mm holder | Two pads at the holder's lead spacing — measure the holder you buy |
 | J1–J6 | **MC 1,5/3-ST-3,5** | Phoenix drawing 1840379. 3 pads, **3.5 mm** pitch |
 | J9–J12 | **MC 1,5/4-ST-3,5** | Phoenix drawing 1840382. 4 pads, 3.5 mm pitch |
 | J7 | 2×19 shrouded header | 2.54 mm, 38 pads. Get the **shroud outline** onto the mechanical layer — it is much larger than the pin field, and it is what collides with things |
 | J8, J13, J14 | 2/3/2-pin | Per `sourcing-th.md` |
+| TP1–TP26 | 1.5 mm pad | One pad, no body. See §7 item 6 |
 
-Two footprints do the work of thirty-eight parts here (0805 and the two Phoenix
-terminals), so start with those three and the board is more than half libraried.
+Three footprints cover thirty-eight of those parts (the 0805 land and the two
+Phoenix terminals). Draw those three and the board is more than half libraried.
 
-### 3.5 Every footprint gets checked twice
+### 3.7 Every footprint gets checked twice
 
 Once when you draw it, against the datasheet. Once when the boards arrive, before
 you solder anything: print the fabrication drawing **at 1:1** on paper and set the
@@ -302,6 +396,11 @@ be substituted — `Q1` AO3401A, `Q2` DMP6023LE-13, `D1`–`D6` CDSOD323-T05LC, 
 SMBJ33A, `D10` BZX84C12, `U3` TCA9548APWR, `U7` TSR 1-2433, `F1` (2 A time-lag,
 I²t ≥0.5 A²s), and the four Phoenix connectors. The 0805 passives keep Value and
 footprint only; they are commodities.
+
+The four parts that come from vendor libraries — D1–D6, Q2, U3, U7 — often arrive
+with a part-number parameter already, under some name of the library author's
+choosing. Look before you add a second one: two parameters holding the same number
+under different names is how a BOM ends up with an empty MPN column.
 
 The reason to put these *in the schematic* rather than only in `sourcing-th.md` is
 that the BOM is what someone reads a year from now while ordering, and
@@ -531,8 +630,14 @@ soldering, and HASL is cheaper).
 
 ## 11. Before you spend money
 
-- [ ] `FrontEnd.SchDoc` removed from the project, kept on disk as
-      `FrontEnd-rev1-superseded.SchDoc`
+- [ ] `FrontEnd.SchDoc` recovered from `History\` and archived as
+      `hardware/FrontEnd-rev1-superseded.SchDoc` **before** `History\` was deleted
+- [ ] The stale `[Document1] FrontEnd.SchDoc` entry removed from the `.PrjPcb`
+- [ ] Vendor libraries in `hardware/lib/`, attached with
+      `Project » Add Existing to Project...` — **not** installed globally
+- [ ] `LM5164DDAR` not copied in; `mb1389_bdp` not copied in
+- [ ] Q2 is the **DMP6023LE-13 component**, not a generic `MOSFET-P`
+- [ ] `-M` footprint variants selected: `CDSOD323_BRN-M`, `DMP6023LE-13_DIO-M`
 - [ ] Compile: **zero errors**, every warning read
 - [ ] No `AXIAL-0.3` or `RAD-0.3` anywhere except the two parts that really are
       through-hole (C11, and C19 if you bought it radial)
