@@ -1534,6 +1534,11 @@ Split in two, because the board is no longer the whole design: parts on the
 > numbers for everything non-generic, what to check when substituting, and which
 > items are better bought from local Thai suppliers than from Digi-Key TH.
 
+> **Drawing it:** [`pcb-altium.md`](pcb-altium.md) takes this table into Altium
+> Designer 17 — project layout, the footprint each reference needs, placement
+> against §5's rules, and the fabrication outputs. It also audits the schematic
+> sheets that already exist against this section.
+
 ### 4a. Front-end PCB
 
 | Ref | Part | Value / spec | Notes |
