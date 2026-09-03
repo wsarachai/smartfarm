@@ -18,6 +18,8 @@ forced by code, the code is cited — change one and you change the other.
 - Gate + sleep handling: [`src/main.cpp`](../src/main.cpp)
 - Wire frame (probe → metric): [`src/lora/lora_packet.h`](../src/lora/lora_packet.h)
 - Cable-length guidance: [README → *Probe cable runs*](../README.md)
+- Shopping list with quantities and purchase waves: [`parts-list-th.md`](parts-list-th.md)
+- Manufacturer part numbers and substitution rules: [`sourcing-th.md`](sourcing-th.md)
 - Thai translation: [`hardware-interface.th.md`](hardware-interface.th.md) — **this English file is the source of truth**; update it first
 
 > **Revision 2.0 (2026-09) — the CO2 sensor is a Sensirion SCD41 on I2C, and the
@@ -1551,7 +1553,7 @@ Split in two, because the board is no longer the whole design: parts on the
 | R9–R14 | Resistor 0805 | 100 Ω | Six DQ series |
 | D1–D6 | TVS bidirectional, **low-C signal-line** | Bourns **CDSOD323-T05LC** (1 pF) or onsemi **ESD9B5.0ST5G** (15 pF) | One per DQ. `V_RWM` ≥ 3.6 V — see *Choosing the TVS* |
 | **I2C / SHT45 branches** ||||
-| U3 | **TCA9548A** | I2C `0x70`, 8-ch bus switch | A2/A1/A0 to GND. Only ch0–ch2 used. **Nothing else is on this bus now** |
+| U3 | **TCA9548A** | I2C `0x70`, 8-ch bus switch | A2/A1/A0 to GND. **Channels 0–3 used** — three SHT45s and the SCD41. Nothing sits upstream of it |
 | R23 | Resistor 0805 | 10 kΩ | U3 `RESET` pull-up to `VSENS`. **Not optional** — active-LOW, no internal pull-up |
 | R15, R16 | Resistor 0805 | 4.7 kΩ | **Upstream** SDA/SCL pull-ups. Board-local, 30 mm — 4.7 kΩ is right here |
 | R17–R22 | Resistor 0805 | **2.2 kΩ** | **Downstream**, one pair per channel. **2.2 kΩ, not 4.7 kΩ** — each pair drives 5 m of cable |
@@ -2072,9 +2074,14 @@ preference.
 
 | Gauge | Ω/km | Round-trip R over 5 m | Drop at 205 mA | VDD at the head |
 |---|---|---|---|---|
-| 24 AWG (as used for the SHT45s) | 84.22 | 0.84 Ω | 173 mV | 3.06 V |
-| **22 AWG — specified** | **52.96** | **0.53 Ω** | **109 mV** | **3.12 V** |
+| 24 AWG single conductor (as used for the SHT45s) | 84.22 | 0.84 Ω | 173 mV | 3.06 V |
+| 22 AWG | 52.96 | 0.53 Ω | 109 mV | 3.12 V |
+| **2× 24 AWG in parallel — specified (§6)** | **42.11** | **0.42 Ω** | **86 mV** | **3.14 V** |
 | 20 AWG | 33.31 | 0.33 Ω | 68 mV | 3.16 V |
+
+**The specified branch is Cat5 with `V` and `G` doubled up**, not a separate 22 AWG
+cable. Cat5 has eight conductors and this branch needs six; spending two of the
+spares on copper beats buying a second cable type, and it lands *below* 22 AWG.
 
 (VDD at the head is U7's ±2 % worst case, 3.23 V, minus the drop.)
 
@@ -2198,10 +2205,16 @@ air, which is what §3's ASC section is about).
   the rise time is 0.60 µs against a 1000 ns budget. At 10 m it fails. If a run
   must be longer, fit a P82B715 on that branch (§3) — do not simply lengthen the
   cable. Twist **SDA with GND**; run SCL in the second pair. One Cat5 per branch.
-- **The CO2 branch is 22 AWG on `V`/`G`, and that is a specification.** It is the
-  only branch carrying a 205 mA burst; at 24 AWG the IR drop is 172 mV instead of
-  109 mV. See §5, *3.3 V goes down the CO2 cable*. Cat5 is 24 AWG — for this one
-  branch either use a heavier 4-core cable, or double up conductors on `V` and `G`.
+- **The CO2 branch needs more copper on `V`/`G` than a single Cat5 conductor**, and
+  that is a specification, not a preference — it is the only branch carrying a
+  205 mA burst, and a lone 24 AWG conductor drops 173 mV against 22 AWG's 109 mV.
+  **Preferred: keep Cat5 on all four branches and double up conductors** — Cat5
+  has eight, so `V` and `G` get two each, `SDA` and `SCL` one each, and two spare.
+  Two 24 AWG conductors in parallel are **42.11 Ω/km**, which beats 22 AWG's 52.96
+  outright: 0.42 Ω round trip and an **86 mV** drop. One cable part number covers
+  the whole build, and the CO2 branch ends up with *better* margin than the
+  original specification. A dedicated 4-core 22 AWG cable is the alternative if
+  doubling up at the terminals is awkward. See §5, *3.3 V goes down the CO2 cable*.
 - **Label both ends of every branch.** Four identical connectors and four
   near-identical cables. A swapped J10/J11 silently exchanges "inside the house"
   for "ambient reference" and the data still looks plausible; a swapped J12 puts

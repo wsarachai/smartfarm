@@ -8,6 +8,12 @@ Digi-Key TH ships from US stock with THB pricing and DDP customs.
 > stale number in a spec file is worse than no number. Check before ordering, and
 > check the *alternates* column before assuming something is unobtainable.
 
+> **Looking for a shopping list rather than substitution rules?** See
+> [`parts-list-th.md`](parts-list-th.md) — every item for one node plus a gateway,
+> numbered, with quantities, spares and purchase waves, covering the two
+> prototype stages as well as the final board. This file stays the authority on
+> *what may be substituted for what*; that one is the authority on *how many*.
+
 ## The parts that actually constrain the design
 
 | Ref | MPN | What to check when substituting |
