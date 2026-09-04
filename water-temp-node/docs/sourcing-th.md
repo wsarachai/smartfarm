@@ -28,8 +28,9 @@ Digi-Key TH ships from US stock with THB pricing and DDP customs.
 | **Q2** | Diodes **DMP6023LE-13** (SOT-223) | Reverse-polarity on the 24 V input. −60 V, 7 A, 28 mΩ @ V_GS = −10 V, **tab = drain**. Substitutes need V_DS ≥60 V and R_DS(on) specified at −10 V — do **not** reuse the AO3401A, it is a 30 V part. Whatever you fit, check **V_GS(max)**: at ±20 V the gate clamp `D10` is mandatory, and a part rated ±12 V would need a lower-voltage Zener |
 | **D10** | 12 V Zener, 250 mW — **BZX84C12** (SOT-23) or **MMSZ5242B** (SOD-123) | Q2's gate clamp. **Not** interchangeable with a TVS. Stay at 12 V: 16 V or 18 V leaves too little margin against Q2's ±20 V gate limit at a 32 V bank |
 | **D9** | Littelfuse **SMBJ33A** | 33 V standoff / 600 W, on the 24 V input. Unidirectional; the bus never goes negative once Q2 is in |
+| **C11, C19** | Nichicon **UVR1J101MPD** — 100 µF **63 V**, φ8 × 11.5 มม., ระยะขา 3.5 | **ชิ้นเดียวกันทั้งสองตำแหน่ง** C19 อยู่บนโหนด `24V_PROT` เดียวกับ C11 ซึ่ง §4a กำหนดไว้เองว่า 63 V ไม่ใช่ 50 V เพราะ D9 หนีบได้ถึง 53.3 V ส่วน 22 µF/50 V แบบ X7R 1210 ที่ไบอัส 24–29 V เหลือความจุไม่ถึงครึ่ง ขณะที่ 22 µF ของ Traco เป็นค่าต่ำสุด **ผลข้างเคียงที่ต้องรู้:** ความจุบัลก์หลัง Q2 เพิ่มเท่าตัว กระแสกระชากตอนเสียบไฟจึงขยับจากราว 0.1 เป็น 0.2 A²s เทียบกับ 0.5 A²s ที่ F1 กำหนดไว้ |
 | **D1–D6** | Bourns **CDSOD323-T05LC** | 5 V, 1 pF, SOD-323. Budget alternate: onsemi **ESD9B5.0ST5G** (15 pF, SOD-923 — 0.8×0.6 mm, fine for assembly, unpleasant by hand). **Reject** anything whose datasheet buries the capacitance figure |
-| **F1** | 2 A **time-lag (T)**, 5×20 mm cartridge + holder — **prefer this over the 1206** | On the 24 V input, before Q2. Specify by **I²t ≥0.5 A²s**, not by amps: the hot-plug inrush through Q2's body diode is ~0.1 A²s and some 1206 "slow-blow" 2 A parts sit right on that number. A cartridge is also the one you can replace on a pole |
+| **F1** | 2 A **time-lag (T)**, 5×20 mm cartridge + **รังฟิวส์ชิ้นเดียวมีฝาปิด พิทช์ 22.6 มม.** (ตระกูล PTF-78 ที่หาได้ในไทย หรือ Schurter **OG (Holder) 5x20** เบอร์ **0031.8001**) — **เลือกแบบกระบอก ไม่ใช่ 1206** | On the 24 V input, before Q2. Specify by **I²t ≥0.5 A²s**, not by amps: the hot-plug inrush through Q2's body diode is ~0.1 A²s and some 1206 "slow-blow" 2 A parts sit right on that number. A cartridge is also the one you can replace on a pole |
 
 ## Connectors
 
@@ -40,7 +41,7 @@ Digi-Key TH ships from US stock with THB pricing and DDP customs.
 | J7 | 2×19 shrouded boxed header, 2.54 mm + 2× IDC socket + 38-way ribbon | **Clip CN10-6 and plug the matching socket hole** — the keying trick in §1 |
 | J8 | JST **XHP-2** / Micro-Fit 3.0, keyed | 3.3 V to Nucleo CN6-4/6 |
 | J13 | 1×3 pin header, 2.54 mm | Debug UART for a USB-serial adapter |
-| J14 | 2-pin, ≥5 A, keyed | 24 V solar input |
+| J14 | Phoenix **MC 1,5/2-G-3,5** (**1844210**) + ปลั๊ก MC 1,5/2-ST-3,5 | 24 V solar input. **ตระกูลเดียวกับ J1–J12** — พิทช์ 3.5, รู 1.2, แบบเจาะเดียวกัน, 8 A เกินข้อกำหนด ≥5 A. **J8 จงใจใช้คนละตระกูล** เพื่อให้เสียบสลับกับ 24 V ไม่ได้ในทางกายภาพ |
 
 ## Local Thai suppliers — usually faster and cheaper for the common parts
 

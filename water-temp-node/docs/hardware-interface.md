@@ -68,11 +68,15 @@ the Nucleo — which is what decides the connector question.
 
 | Cable | Carries | Nucleo end | Front-end end |
 |---|---|---|---|
-| **Signal** | `SENS_GATE`, 6× `DQ_Pn`, `SDA`, `SCL`, `DBG_TX/RX`, `VBAT_SENSE`, 2× `GND` | **2×19 IDC socket over the whole of morpho CN10** | shrouded, keyed 2×19 box header |
-| **Power** | `V3V3_MCU`, `GND` | **1×8 socket over the whole of ARDUINO CN6** (only pins 4/6/7 wired) | keyed, latching 2-pin (JST-XH or Micro-Fit 3.0) |
+| **Signal** | `SENS_GATE`, 6× `DQ_Pn`, `SDA`, `SCL`, `DBG_TX/RX`, `VBAT_SENSE`, 2× `GND` | **2×20 IDC socket over morpho CN10**, overhanging it by one column | shrouded, keyed **2×20** box header |
+| **Power** | `V3V3_MCU`, `GND` | **1×8 socket over the whole of ARDUINO CN6** (only positions 4/6/7 wired) | **1×8 header, CN6 mirrored pin for pin** |
 
-Signal cable: 2.54 mm, 40-way rainbow ribbon cut to **38 conductors**, IDC
-mass-terminated at both ends. Keep it **≤ 30 cm**.
+Signal cable: 2.54 mm, **40-way** rainbow ribbon, IDC mass-terminated at both ends
+with identical 2×20 sockets. Keep it **≤ 30 cm**. Two of the forty conductors are
+dead — they land on J7-39/40 at one end and on nothing at all at the other, because
+CN10 is 2×19 and **no IDC manufacturer makes that size**. Cutting the ribbon to 38
+conductors instead was the earlier plan and it does not work: the sockets are 40-way
+whatever you do to the cable.
 
 ### Why this and not the alternatives
 
@@ -82,13 +86,21 @@ to them means four separate cables, and it cannot reach PA8. Morpho **CN10** is
 a single 2×19 that carries every logic signal this design needs, so one ribbon
 does the whole job.
 
-**Why one full-length socket instead of a small one.** A 2×19 IDC socket spans
-the *entire* CN10 header, so it physically cannot be fitted offset by a position.
-A 1×10 socket on an ARDUINO header, or a 2×5 on part of the morpho, can — and a
-one-position slip moves every signal at once, which is the kind of fault that
-survives a whole afternoon of debugging.
+**Why one full-length socket instead of a small one.** A socket that spans the
+whole of CN10 leaves only one place it can sit. A 1×10 socket on an ARDUINO
+header, or a 2×5 on part of the morpho, can slip a position — and a one-position
+slip moves every signal at once, which is the kind of fault that survives a whole
+afternoon of debugging.
 
-**Why power is a separate cable, and this is the important one.** A 2×19 socket on
+> **This argument used to be stronger than it is now, and the difference matters.**
+> While the socket was 2×19 it was exactly as wide as CN10, and a slip was
+> *geometrically impossible*. The 2×20 socket this revision uses is one column
+> wider, so a slip is possible again and is prevented instead by the plugged key
+> hole (§1, *Keying the signal ribbon*). The protection is now a step in the build
+> procedure rather than a property of the parts, which is weaker — a step can be
+> skipped. **Do not skip it.**
+
+**Why power is a separate cable, and this is the important one.** A ribbon socket on
 an unshrouded pin field *can* be pressed on **rotated 180°**. If `V3V3_MCU` were on
 that ribbon, one bad insertion puts the supply rail onto a GPIO. With power on its
 own keyed 2-pin lead, the worst a reversed ribbon can do is short a couple of
@@ -114,15 +126,31 @@ DS2483 line driver, not to a different cable between these two boards.
 2. **Plug the matching hole in the IDC socket** with the key plug that ships with
    most IDC sockets, or a blob of epoxy.
 
-Rotated 180°, that plugged hole lands on **position 33 (PB12)**, which *is*
-populated — so the socket will not seat. A physical stop beats a silkscreen arrow.
+A plugged hole cannot go down over a pin, and **CN10-6 is the only pin that is
+missing**, so the socket seats in exactly one position and refuses every other. A
+physical stop beats a silkscreen arrow.
+
+> **This key does more work than it was designed for, and that is what makes the
+> 2×20 connector safe.** J7 is a **2×20** header and the cable is a 40-way ribbon
+> with a 40-way socket at both ends (§4a), because 2×19 is not a size any IDC
+> manufacturer makes. At the Nucleo end that socket is one column wider than
+> CN10, so it can sit correctly *or* one column out — and one column out moves
+> every signal by two pins, which is the worst failure this interface has.
+>
+> The key already prevents it. The plug is at socket position 6, on the **even**
+> row. Shift the socket one column and the plug lands on CN10-4, which is
+> populated. Rotate it 180° and the plug moves to the **odd** row, where every
+> pin from 1 to 37 is present. Of the four ways this socket can physically be
+> offered up, three are blocked by a single plugged hole.
+>
+> So: clip CN10-6 and plug hole 6. On this revision it is not a nicety.
 
 Still worth doing on top:
 
 - **Silkscreen a pin-1 triangle** on the front-end box header and mark the ribbon's
   red stripe = pin 1 at both ends.
-- **Different-sized connectors** already stop the two cables being swapped: 2×19
-  ribbon versus a 2-pin power lead.
+- **Different-sized connectors** already stop the two cables being swapped: a
+  40-way ribbon versus a 2-pin power lead.
 
 ```
    ┌────────────────────────────────────────────┐
@@ -131,9 +159,9 @@ Still worth doing on top:
    │  U3 mux -> J9..J12 (3x SHT45 + SCD41, 5 m) │
    │  U7 TSR 1-2433 · J14 24 V solar in         │
    │                                            │
-   │   [2x19 box header, keyed]      [2-pin]    │
+   │   [2x20 box header, keyed]      [2-pin]    │
    └────────────┬──────────────────────┬────────┘
-                │ 38-way ribbon        │ 3V3 + GND
+                │ 40-way ribbon        │ 3V3 + GND
                 │ <= 30 cm             │ (keyed, latching)
    ┌────────────┴──────────────────────┴────────┐
    │  NUCLEO-WL55JC1                            │
@@ -303,15 +331,31 @@ neighbours. Useful, free, and no substitute for a real return.
 
 #### What to draw on J7 in the schematic
 
-Every one of the 38 positions needs a deliberate decision, and "ground the spare
-ones to be tidy" is wrong for 22 of them. Four categories:
+Every one of the **40** positions needs a deliberate decision, and "ground the
+spare ones to be tidy" is wrong for 21 of them. Five categories — the fifth is new
+in the 2×20 revision and is the easiest to forget, because those two positions do
+not appear on the Nucleo at all:
+
+> **This table was wrong until 2026-09-04, and wrong in the worst possible
+> direction.** It still described the pre-revision-2.0 board: it put a net on
+> **23** (`PC1`, which `DQ_P4` left in 2026-08) and told you to float **27**
+> (`PB8`, `DQ_P4`), **31** (`PB3`, `VBAT_SENSE`), **35** (`PB6`, `DBG_TX`) and
+> **37** (`PB7`, `DBG_RX`) — four live contract signals.
+>
+> Following it cost a probe channel, the battery telemetry and the debug UART,
+> and **the no-connect flags it told you to place are exactly what stopped ERC
+> reporting any of it.** The signal table above and the CN10 pin map below both
+> had it right the whole time; only this one drifted. When the three disagree,
+> **the pin map wins** — it is the one checked against UM2592 and against
+> `node_config.h`.
 
 | Positions | Count | Draw | Why |
 |---|---:|---|---|
-| 3, 5, 9, 11, 16, 17, 19, 20, 21, 23, 25 | 11 | **the net** | The contract signals (§2), including both GND returns |
+| 3, 5, 9, 11, 16, 17, 19, 20, 21, 25, **27**, **31**, **35**, **37** | 14 | **the net** | The contract signals from the table above, including both GND returns |
 | 6, 10, 18, 24, 34 | 5 | **GND** | NC on the Nucleo, so grounding them at this end is safe and buys a capacitive guard |
-| 1, 12, 13, 14, 15, 26, 27, 28, 29, 30, 31, 33, 36 | 13 | **no-connect flag** | Real MCU pins we do not use. Float them |
-| 2, 4, 7, 8, 22, 32, 35, 37, 38 | 9 | **no-connect flag** | RF switch, TCXO, AVDD, AGND, VCP, 5V_USB_CHGR — grounding any of these breaks the board |
+| 1, 12, 13, 14, 15, **23**, 26, 28, 29, 30, 33, 36 | 12 | **no-connect flag** | Real MCU pins we do not use. Float them |
+| 2, 4, 7, 8, 22, 32, 38 | 7 | **no-connect flag** | RF switch, TCXO, AVDD, AGND — grounding any of these breaks the board |
+| **39, 40** | **2** | **no-connect flag** | **Not on the Nucleo at all.** J7 is 2×20 and CN10 is 2×19, so this column's conductors end in mid-air past the end of CN10. Never ground them: a grounded conductor with a free end is an antenna wired to the return path of six 1-Wire lines |
 
 **Never ground an unused MCU pin.** It is a GPIO: firmware that drives it push-pull
 high then shorts it, and positions 26/28/30 are the user LEDs, which would sink
@@ -505,6 +549,25 @@ wired. A shorter socket can slide along the strip and put `V3V3_MCU` on `NRST` o
 `5V`; a full-length one cannot. `CN7-16` is the same 3V3 net if you would rather
 tap power from the morpho side — but then use a full-length socket there too, or
 you are back to a connector that can slip.
+
+> **Key this lead. Spanning the header stops it sliding; it does not stop it
+> going on backwards.** Since 2026-09-04 the front-end presents its own **1×8
+> header mirroring CN6** — the dedicated 2-pin power connector J8 is gone — so
+> both ends of the lead are 1×8 and either could be fitted rotated 180°.
+>
+> Read what a rotated lead does, from the table above: position 4 lands on **5**,
+> so the board's 3.3 V is driven into the Nucleo's `5V` rail; position 6 lands on
+> **3**, holding `NRST` at ground; position 7 lands on **2**, grounding `IOREF`.
+> That is an MCU held in reset, permanently, by a cable — and it looks like a dead
+> board, not like a plugged-in-backwards cable.
+>
+> **CN6-1 is NC** (the table says so). So use the same trick §1 uses on CN10:
+> **clip CN6-1 and plug hole 1**. Rotated, the plug lands on position 8, `VIN`,
+> which is populated — the socket will not seat.
+>
+> This is the protection that used to come free from J8 being a keyed 2-pin
+> connector that physically could not mate with anything else. Removing J8 moved
+> that safety from the parts into the build procedure, which is weaker. Do it.
 
 ---
 
@@ -1543,8 +1606,8 @@ Split in two, because the board is no longer the whole design: parts on the
 
 | Ref | Part | Value / spec | Notes |
 |---|---|---|---|
-| J7 | Box header 2×19, shrouded | 2.54 mm, keyed, latching | Signal cable to Nucleo CN10. **15 signals** in revision 2.0 |
-| J8 | Power connector 2-pin | keyed, latching (JST-XH, Micro-Fit 3.0) | **3.3 V buck output** + GND to Nucleo CN6-4/6 |
+| J7 | Box header **2×20**, shrouded | 2.54 mm, keyed, latching | Signal cable to Nucleo CN10. **15 signals** in revision 2.0. **40 positions, of which 39 and 40 connect to nothing** — 2×19 is not a size IDC manufacturers make, so the connector is one column wider than CN10 and the extra conductors hang past the end of it (§1) |
+| CN6 | Pin header 1×8 | 2.54 mm | **The 3.3 V output.** Mirrors the Nucleo's CN6 pin for pin; only positions 4, 6 and 7 are wired. **Clip CN6-1 on the Nucleo and plug hole 1 of the socket** — see §2, *The CN6 power tap* |
 | J14 | Solar input 2-pin | keyed, latching, ≥5 A | **24 V bank in** from the charge controller |
 | J1–J6 | Pluggable screw terminal, 3-pin | Phoenix MC 1,5/3-ST-3,5 or clone | **One per probe** — six of them |
 | J9–J12 | Pluggable screw terminal, 4-pin | same family | **One per I2C branch — four identical connectors, one part number.** `V / SDA / SCL / G`. Silkscreen the destination: `CH0 หัว`, `CH1 ท้าย`, `CH2 นอก`, **`CH3 CO2 กลาง`** |
@@ -1572,7 +1635,7 @@ Split in two, because the board is no longer the whole design: parts on the
 | F1 | Fuse, **time-lag (T)**, 5×20 mm cartridge preferred | 2 A, **I²t ≥ 0.5 A²s** | 24 V input. Sized by I²t, not amps: hot-plug inrush through Q2's body diode is ~0.1 A²s and will nuisance-blow a low-I²t 1206 |
 | C11 | Electrolytic / polymer | 100 µF, **≥63 V** | 24 V bulk, before the modules. **63 V, not 50 V** — D9 clamps as high as 53.3 V |
 | **Power — the buck module (§5)** ||||
-| U7 | Buck module, **fixed 3.3 V** | Traco **TSR 1-2433**, SIP-3 through-hole | 4.75–36 V in, 1 A, ±2 %. **The only regulator on the board:** MCU (J8) + `VSENS` + everything on it. Pins **1 = +V_in, 2 = GND, 3 = +V_out** (datasheet rev. 2026-07-02); **no traces under the module**. **Fixed output only** — never an adjustable module with a trim pot; CN6-4 and the STM32WL die at 3.6 V |
+| U7 | Buck module, **fixed 3.3 V** | Traco **TSR 1-2433**, SIP-3 through-hole | 4.75–36 V in, 1 A, ±2 %. **The only regulator on the board:** MCU (via CN6) + `VSENS` + everything on it. Pins **1 = +V_in, 2 = GND, 3 = +V_out** (datasheet rev. 2026-07-02); **no traces under the module**. **Fixed output only** — never an adjustable module with a trim pot; CN6-4 and the STM32WL die at 3.6 V |
 | C19 | Ceramic X7R 1210, or small electrolytic | **22 µF, 50 V** | `C_IN`, **directly across pins 1 and 2**, ≤5 mm. **22 µF is Traco's requirement, not a choice** — the datasheet demands an external 22 µF/50 V input capacitor for V_in > 32 V |
 | C21 | Ceramic X7R | 22 µF, 16 V | `C_OUT`. **Optional** — the module needs none; fitted for the LoRa TX and SCD41 current steps. DNP without consequence |
 | — | LED + series resistor | ×1 | **DNP.** Rail indicator for bring-up only — ~0.5 Wh/day if left fitted, which is more than half this node's entire budget |
@@ -1584,15 +1647,32 @@ Split in two, because the board is no longer the whole design: parts on the
 | C1 | Ceramic | 1–10 µF | `VSENS` bulk (see settle time) |
 | C2 | Ceramic | 100 nF | `VSENS` decoupling |
 | **Mechanical** ||||
-| — | 38-way ribbon + 2× IDC 2×19 socket | 2.54 mm, ≤30 cm | **Clip CN10-6 and plug the matching hole** |
-| — | IDC key plug | — | The rotation key (§1) |
-| — | 1×8 socket + 2-core lead | 2.54 mm | CN6 tap, positions 4/6/7 wired |
+| — | **40-way ribbon + 2× IDC 2×20 socket** | 2.54 mm, ≤30 cm | Identical socket at both ends. **Clip CN10-6 and plug hole 6** — on this revision that plug is what stops the wider socket seating one column out (§1) |
+| — | IDC key plug | — | The key (§1). Blocks rotation **and** the one-column shift the 2×20 socket would otherwise allow |
+| — | 8-way lead, 2× 1×8 IDC/crimp socket | 2.54 mm | CN6 tap. Only positions 4/6/7 carry a conductor. **Plug hole 1 at the Nucleo end** |
+| — | Key plug for the CN6 socket | — | The CN6 key (§2). Without it a reversed lead puts 3.3 V on `5V` and holds `NRST` low |
 | — | M3 nylon standoffs + screws | ×8 | Both boards |
 | — | Cable ties / strain relief | ×11 | Within 30 mm of every entry |
-| TP1–14 | Test pads | — | `VSENS`, all six DQ, `SENS_GATE`, **`24V_PROT`**, `VBAT_SENSE`, `GND`, upstream SDA/SCL |
+| TP1–14 | Test pads | — | **Numbered, because two other rows refer to them:** TP1 `VSENS` · TP2–TP7 `DQ_P0`–`DQ_P5` · TP8 `SENS_GATE` · TP9 **`24V_PROT`** · TP10 `VBAT_SENSE` · TP11 `GND` · TP12/TP13 upstream SDA/SCL · TP14 **a second `GND`, placed among TP15–TP22** — see the note below |
 | TP15–22 | Test pads | — | The **four** downstream SDA/SCL pairs. Without these, a dead sensor and a dead mux channel look identical |
-| TP23, TP24 | Test pads | — | **V_in and V_out of U7.** With `24V_PROT` at TP1 they tell a dead module from a dead input in one measurement, and TP23 is where the no-load current gets measured |
-| TP25, TP26 | Test pads | — | **`24V_RAW`** (J14 side of Q2) and **Q2's gate**. With `24V_PROT` at TP1 these three tell a blown F1, a dead Q2 and a missing gate clamp apart in one measurement |
+| TP23, TP24 | Test pads | — | **V_in and V_out of U7.** With `24V_PROT` at **TP9** they tell a dead module from a dead input in one measurement, and TP23 is where the no-load current gets measured |
+| TP25, TP26 | Test pads | — | **`24V_RAW`** (J14 side of Q2) and **Q2's gate**. With `24V_PROT` at **TP9** these three tell a blown F1, a dead Q2 and a missing gate clamp apart in one measurement |
+
+> **Why TP14 is a second ground, and why it goes where it goes.** This row used to
+> say "TP1–14" over a list of **thirteen** nets, and two rows below it called
+> `24V_PROT` "TP1" while the list order made TP1 `VSENS`. Both are fixed above.
+>
+> The fourteenth pad is a second `GND`, and it belongs **with TP15–TP22**, not at
+> some symmetric far corner. Those eight pads exist to scope I2C edges per
+> channel, and §3 puts that rise time at **0.60 µs against a 1000 ns budget** —
+> not much room. A probe's ground lead is an inductor in series with the very edge
+> you are trying to measure, so on that measurement the return has to be within a
+> few centimetres. The 1-Wire pads TP2–TP7 do not need it: bit-banged 1-Wire is
+> slow enough that a long ground lead changes nothing. TP11 sits in the 24 V
+> corner, diagonally opposite the sensor connectors, and serves the power pads.
+>
+> A second ground goes where a measurement needs one, not where the drawing looks
+> balanced.
 
 **Deleted from the previous revision:** U2 (SCD41), C3 (its 10 µF local bulk), C7
 (its 100 nF), and U1a/U1b/U1c with C4–C6 — the SHT45s are no longer on this board.
@@ -1910,7 +1990,7 @@ requirement as covering both D9's 53.3 V clamp *and* this ring.
 ### One rail, and why the second one went away
 
 ```
-  24 V ──[F1]──[Q2 rev]──[D9 TVS]──┬──[U7 TSR1-2433]── 3.3 V ──┬── J8 ─> Nucleo CN6-4
+  24 V ──[F1]──[Q2 rev]──[D9 TVS]──┬──[U7 TSR1-2433]── 3.3 V ──┬── CN6 ─> Nucleo CN6-4
                                    │                           │
                                    │                           └──[Q1 gate]── VSENS
                                    │                               (probes, SHT45s,
@@ -1984,7 +2064,7 @@ traces under the converter."*
 |---|---|---|
 | 1 | `+V_in` | `24V_PROT`. **`C_IN` (22 µF / 50 V) directly across pins 1 and 2** |
 | 2 | `GND` | Ground plane, with its own wide copper back toward J14's ground pin |
-| 3 | `+V_out` | The 3.3 V rail: C21, J8, and Q1's source |
+| 3 | `+V_out` | The 3.3 V rail: C21, CN6, and Q1's source |
 
 There is no enable, no power-good and no feedback pin — nothing to tune, nothing
 to scope, and no COT ripple network to get wrong. That was the point of revision
@@ -2312,7 +2392,7 @@ everything else:
    backwards — source and drain swapped — which is the one build error that passes
    every correct-polarity test. Do this now, on a bench, rather than discovering it
    at a charge controller with the polarity guessed from faded insulation.
-5. **Only then connect J8 to the Nucleo.**
+5. **Only then connect the CN6 lead to the Nucleo** — with hole 1 plugged and CN6-1 clipped (§2).
 
 **Cable alone, nothing connected** — five minutes that pays for itself:
 
@@ -2322,9 +2402,12 @@ everything else:
    (`DBG_TX`/`DBG_RX`) — they left the forbidden list this revision. A ribbon
    assembled one position out is the single most likely fault in this design, and
    this is the last moment it is cheap.
-7. **Check the key.** With CN10-6 clipped and the socket hole plugged, the socket
-   must seat one way and refuse the other. If it seats both ways, the key is not
-   done — go back and do it.
+7. **Check the key. This step carries more weight than it used to.** With CN10-6
+   clipped and hole 6 plugged, the socket must seat in **exactly one** position and
+   refuse every other. Try all four: normal, shifted one column, and both of those
+   rotated 180°. Three must refuse. If more than one seats, the key is not done —
+   go back and do it, because the socket is a column wider than CN10 (§1) and
+   nothing else stops it landing two pins out.
 
 **Front-end alone, ribbon unplugged from the Nucleo** — this is why the test pads
 exist:

@@ -23,14 +23,23 @@ fiducials, and why no pick-and-place file is generated.
 
 This is not a blank start. Read from the project files themselves:
 
-Four sheets, in `C:\Users\Public\Documents\Altium\Projects\WaterTempNode_FE`:
+**Three sheets**, in `C:\Users\Public\Documents\Altium\Projects\WaterTempNode_FE`:
 
-| Sheet | Last saved | What is on it |
-|---|---|---|
-| `Connector.SchDoc` | 3 Sep, 15:31 | J7, J8, J13, CN6, Q1, R1, R2, C1, C2 |
-| `1-Wire-probes.SchDoc` | 3 Sep, 23:27 | J1–J6, D1–D6, R3–R14 |
-| `I2C-sensors.SchDoc` | 3 Sep, 15:31 | U3, J9–J12, R15–R23, R39, R40, C8 — and C4, C5, C6 |
-| `Buck-regulator.SchDoc` | 3 Sep, 23:25 | F1, Q2, R38, D9, D10, C11, C19, C21, R24, R25, C10, the Traco module |
+| Sheet | What is on it |
+|---|---|
+| `FrontEnd-signals.SchDoc` | J7, J13, **CN6**, Q1, R1, R2, C1, C2 **and** J1–J6, D1–D6, R3–R14 |
+| `I2C-sensors.SchDoc` | U3, J9–J12, R15–R23, R39, R40, C8 |
+| `Buck-regulator.SchDoc` | F1, Q2, R38, D9, D10, C11, C19, C21, R24, R25, C10, **U7** |
+
+It was four sheets until 4 September, when `Connector.SchDoc` was merged into the
+probe sheet and the combined sheet was renamed `FrontEnd-signals` — the old name
+stopped describing a sheet that also carries the signal connector, the rail gate
+and the debug port. `Connector.SchDoc` is out of the project and off the disk;
+`History\` still holds 43 copies of it if any of that turns out to be needed.
+
+**J8 is gone too**, deleted the same day. The 3.3 V output now leaves through
+`CN6`, a board-side 1×8 header mirroring the Nucleo's — see §2 of the spec, *The
+CN6 power tap*, and key that lead.
 
 A fifth sheet, `FrontEnd.SchDoc`, held the whole **pre-revision-2.0 board** — 58
 refs including U1a/U1b/U1c, U2 and TVS1, from when the SHT45s and the SCD41 were
@@ -72,127 +81,41 @@ order is: the audit below, a project library, one PCB document, and the outputs.
 
 ---
 
-## 1. The audit — nine things that are wrong right now
+## 1. The audit — nine things that were wrong
 
 Fix these before drawing a single track. Every one of them is silent: none stops
 you from finishing the layout, and each one produces a board that is wrong in a way
 you find out about after paying for it.
 
-### 1. Every passive carries a through-hole footprint
-
-| Refs | Footprint now | §4a says | Count |
-|---|---|---|---:|
-| R1–R25, R38, R39, R40 | `AXIAL-0.3` — an axial resistor on 0.3″ pitch | **0805** | ~30 |
-| C1, C2, C4–C6, C8, C10, C21 | `RAD-0.3` — a radial cap on 0.3″ pitch | **0805** ceramic | 8 |
-
-Push this to a PCB unchanged and you get a through-hole board with thirty axial
-resistors on it. This is the single largest item on the list and §3 exists to fix it.
-
-`C11` (100 µF ≥63 V electrolytic) and `C19` are the two that legitimately *are*
-through-hole — but not `RAD-0.3`, see item 3.
-
-### 2. Q1 and Q2 both carry `E3`
-
-`E3` is the axial **diode** footprint. Both MOSFET symbols have three pins and
-`E3` has two pads, so this one at least announces itself: the ECO into the PCB will
-fail with a pin/pad mismatch. What they should be:
-
-- **Q2 — DMP6023LE-13 — SOT-223.** The library is already downloaded and unused
-  (`DMP6023LE-13\`). **Replace the whole component**, not just its footprint: the
-  generic `MOSFET-P` symbol has three pins, the SOT-223 land has **four pads**
-  because the tab is a pad, and there is no pin mapping that makes three onto four
-  work. The vendor symbol carries the mapping and the part number. And the tab
-  matters: **it is the drain** — §5, *Why the drain faces the supply* — so it is
-  both a connection and the thermal path, not decoration.
-- **Q1 — AO3401A — SOT-23** (3 pads). No library for this one; it is on the
-  make-it-yourself list in §3.6.
-
-### 3. Four package errors on parts that do have a package specified
-
-| Ref | Footprint now | Should be | Consequence |
-|---|---|---|---|
-| D9 (SMBJ33A) | `SMC` | **SMB** / DO-214AA | Pads too far apart; part sits on air |
-| D10 (BZX84C12) | `SMC` | **SOT-23** (3 pads) — or SOD-123 if you fit MMSZ5242B | Two pads for a three-lead part |
-| C19 | `RAD-0.3`, value "22uF 16v", comment "2.2 µF/100 V" | **22 µF / 50 V**, X7R 1210 or a small electrolytic | Three different answers on one part. §5 calls the 22 µF/50 V input cap *Traco's requirement, not a choice*, for V_in > 32 V |
-| C11 | `RAD-0.3` | 100 µF **≥63 V** radial, ~10 mm body, 5 mm lead pitch | A 0.3″ radial land will not take the real capacitor |
-
-### 4. The 3.3 V rail has three different names
-
-`Buck-regulator.SchDoc` names the module output **`3.3V`**. `Connector.SchDoc`
-uses **`U7 3v3`** and **`V3V3_MCU`**. Power ports connect by *name*, and those
-three names are three different nets. **As drawn, the buck output does not reach
-J8 or CN6.**
-
-Pick one name, use it on both sheets. `V3V3_MCU` is the better name — it says
-which rail it is, and it will not be confused with `VSENS`, which is the gated
-sensor rail downstream of Q1 and is a genuinely different net.
-
-While you are there: the schematic uses power ports for *signals* (`DQ_P0`,
-`I2C_SDA`, `SENS_GATE`). It works, but a power port carries the "power object"
-flag, which suppresses the ERC check for *"net has no driving source"*. Convert
-the signal ones to **net labels** (`Place » Net Label`) and keep power ports for
-`GND`, `V3V3_MCU`, `VSENS` and `24V_RAW`/`24V_PROT`. Then set the scope explicitly:
-`Project » Project Options » Options` tab, **Net Identifier Scope = Flat**. It is
-currently *Automatic*, which happens to resolve to Flat because there are no ports
-in the design — but that is a coincidence you would rather not depend on.
-
-### 5. The test points are power ports, not pads
-
-`TP1`, `TP15`, `TP16`, `TP21`, `TP22`, `TP23`, `TP25`, `TP26` appear as power
-ports. A power port names a net; it does not create anything you can touch with a
-probe. §4a asks for **TP1–TP26**, twenty-six of them, and the reason is in §6:
-*"With six probes and four I2C branches, 'which one?' is the first question of
-every field failure."*
-
-Worse, a `TP1` power port sitting on the same wire as a `VSENS` power port gives
-that net two names, which Altium reports as a warning and then quietly picks one.
-
-Delete the TP power ports. Test points are a **PCB** object: see §7 item 6.
-
-### 6. C4, C5 and C6 are still there
-
-§4a: *"Deleted from the previous revision: U2 (SCD41), C3, C7, and U1a/U1b/U1c with
-C4–C6 — the SHT45s are no longer on this board."* The SHT45 decoupling now lives
-out at each sensor head (§4b). Delete C4, C5, C6 from `I2C-sensors.SchDoc`.
-
-### 7. Two components are unannotated
-
-The Traco module is **`PS?`** and one 100 nF on the I2C sheet is **`C?`**. §4a calls
-the module **U7** and every reference in §5 and §7 uses that name — `TP23`/`TP24`
-are *"V_in and V_out of U7"*, and the bring-up steps name it. Rename it by hand.
-
-Then, when you annotate: **`Tools » Annotate Schematics...`** and set *Order of
-Processing* so it fills gaps only. **Do not use "Reset Designators".** §4a owns
-every reference designator on this board, `sourcing-th.md` orders parts against
-them, and §7's bring-up procedure names them one by one. A full reset renumbers
-R3–R14 into some other order and every one of those documents becomes wrong at
-once.
-
-### 8. J1–J6 and J9–J12 are pin headers
-
-They are `HDR1X3` and `HDR1X4` — 2.54 mm pin headers. §4a and `sourcing-th.md`
-specify **Phoenix MC 1,5/3-ST-3,5** (1840379) and **MC 1,5/4-ST-3,5** (1840382),
-pluggable screw terminals on **3.5 mm** pitch. §6 gives the reason: *"Field
-re-termination with cold hands is the design case."*
-
-The pitch difference alone (3.5 vs 2.54 mm) makes this a real footprint job, and
-these ten connectors are what sets the size of the board — see §6.
-
-### 9. The probe silkscreen names do not match the firmware
-
-The nets are right: `DQ_P0`…`DQ_P5`, matching `DS_PROBE_BUSES` in
-`include/node_config.h`. The **Comment** fields are not — J1–J6 read
-`HOT_PROBE_1 / COLD_PROBE_1 / HOT_PROBE_2 / COLD_PROBE_2 / HOT_PROBE_3 /
-COLD_PROBE_3`, which is a three-pair scheme that does not exist anywhere in the
-firmware.
-
-§6: *"number them `P0`–`P5` to match `DS_PROBE_BUSES` and the dashboard metric
-names."* `temp_hot` and `temp_cold` are the names of the first two *slots*, kept for
-backward compatibility with the packet format (`src/lora/lora_packet.h`), not the
-names of two kinds of probe. Set the comments to `P0`…`P5`; they become the
-silkscreen, and the silkscreen is what someone reads on a pole in the rain.
-
----
+> **Progress as of 4 September, 20:07**, read from the sheets themselves:
+>
+> | Item | State |
+> |---|---|
+> | 1 — through-hole footprints on the passives | **done** |
+> | 2 — Q1/Q2 on `E3` | **done** — Q1 `SOT23-3-M`, Q2 `DMP6023LE-13_DIO-M` |
+> | 3 — package errors | **partly** — D9 is `SMB-DO214AA-M`; **C11 and C19 are still `RAD-0.3`** |
+> | 4 — three names for the 3.3 V rail | **done**, `V3V3_MCU` ×3 |
+> | 5 — test points are power ports | **not yet** — all eight still power ports |
+> | 6 — C4, C5, C6 | **done** |
+> | 7 — `PS?` and `C?` unannotated | **done** |
+> | 8 — pin headers where terminals belong | **half** — the new footprints are on, **the old ones were never removed** |
+> | 9 — probe silkscreen names | **wrong, not merely undone** — they read `P1`–`P6`, and the nets on the same sheet read `DQ_P0`–`DQ_P5` |
+>
+> Also clean, and checked directly: **no orphaned wires on any sheet**, **no
+> floating power ports**, J7's symbol is now `Header 20X2` with 40 pins to match
+> `HDR2X20-BOX`, and `no-connect` is no longer a power port.
+>
+> **Two things are silent and worth repeating.**
+>
+> *Stale footprint models.* Adding a footprint does not remove the old one, and a
+> part with two models gives no warning about which is current. Seven `HDR1X3`
+> models are still attached to J1–J6 and J13, and D10 still carries `SOT-23`
+> alongside `SOT23-3-M`. **Remove**, do not just **Add**.
+>
+> *NoERC directives went from 14 to 2 when the sheets were merged.* §2 needs
+> **21** on J7. Nothing reports their absence — the pins simply read as
+> not-yet-wired, mixed in with every other warning, which is the exact outcome §2
+> put the flags there to prevent.
 
 ## 2. Setting up
 
@@ -221,7 +144,7 @@ against §4a.
 5. *Now* delete the `History\` subfolder. Git is the history from here.
 6. Reopen by double-clicking `WaterTempNode_FE.PrjPcb`.
 
-The document paths in the `.PrjPcb` are relative (`DocumentPath=Connector.SchDoc`),
+The document paths in the `.PrjPcb` are relative (`DocumentPath=I2C-sensors.SchDoc`),
 so the move is safe. Library paths are not — see §3.2.
 
 ### 2.2 `.gitignore`
@@ -352,26 +275,60 @@ footprint is a claim, not a fact — and then never think about them again.
 | U3 | `TCA9548APWR.IntLib` | `SOP65P640X120-24N` | TSSOP-24 pitch against TI's PW drawing |
 | U7 | `TSR_1-2433.IntLib` | `CONV_TSR_1-2433` | **Buzz it out before soldering** (§5): a reversed footprint puts 24 V on the output pin, and the Nucleo is downstream |
 
-### 3.6 What you have to draw
+### 3.6 What the script draws, and what is left
 
-| Refs | Package | Where the land pattern comes from |
+**Ten footprints are written as a script**,
+[`hardware/scripts/MakeFootprints.pas`](../hardware/scripts/MakeFootprints.pas).
+To run it:
+
+1. `File » Open...` →
+   [`hardware/scripts/WaterTempNode_Scripts.PrjScr`](../hardware/scripts/WaterTempNode_Scripts.PrjScr).
+   **Altium will not run a loose `.pas`.** Its Run Script browser filters for
+   *Script Project Files (\*.PrjScr)*, and the list of runnable scripts is built
+   from open projects and open free documents — never from a path on disk. That
+   project file exists only to make this script visible.
+2. Open `WaterTempNode_FE.PcbLib` and make it the **active** document. The
+   script writes into whichever PCB library is in front.
+3. **`DXP » Run Script...`** — the `DXP` menu is the leftmost item on the menu
+   bar, before `File`, and `Run Script...` is the last entry in it. It is **not**
+   under `Tools` in this version. Pick `MakeFootprints.pas` › `MakeFootprints`.
+Every dimension in it is quoted from the manufacturer document it came from, in a
+comment above the line that uses it:
+
+| Footprint | Covers | Land from |
 |---|---|---|
-| R1–R25, R38–R40 | 0805 | Resistor datasheet, "recommended solder pad". **One footprint, thirty uses** — draw this one first |
-| C1, C2, C8, C10, C21 | 0805 | Same land; C21 may be 1210 if you buy 22 µF that way |
-| C19 | 1210 or radial | 22 µF **50 V** — check which you can actually buy before drawing the land |
-| C11 | Radial electrolytic | 100 µF ≥63 V. Measure the real part: body ~10 mm, lead pitch 5 mm |
-| Q1 | SOT-23 | AOS AO3401A datasheet |
-| D9 | SMB / DO-214AA | Littelfuse SMBJ series datasheet |
-| D10 | SOT-23 or SOD-123 | Match whichever part you buy |
-| F1 | 5×20 mm holder | Two pads at the holder's lead spacing — measure the holder you buy |
-| J1–J6 | **MC 1,5/3-ST-3,5** | Phoenix drawing 1840379. 3 pads, **3.5 mm** pitch |
-| J9–J12 | **MC 1,5/4-ST-3,5** | Phoenix drawing 1840382. 4 pads, 3.5 mm pitch |
-| J7 | 2×19 shrouded header | 2.54 mm, 38 pads. Get the **shroud outline** onto the mechanical layer — it is much larger than the pin field, and it is what collides with things |
-| J8, J13, J14 | 2/3/2-pin | Per `sourcing-th.md` |
-| TP1–TP26 | 1.5 mm pad | One pad, no body. See §7 item 6 |
+| `CHIP0805-M` | R1–R25, R38–R40, C1, C2, C8, C10, C21 — **35 parts** | Vishay doc 28950, IPC-7351 reflow |
+| `SOT23-3-M` | Q1, **D10** | AOS PO-00001 rev N |
+| `SMB-DO214AA-M` | D9 | Bourns SMBJ, *Recommended Footprint* |
+| `PHX-MC15-2-G-35` | **J14** | Phoenix 1844223 drilling plan |
+| `PHX-MC15-3-G-35` | J1–J6 | same |
+| `PHX-MC15-4-G-35` | J9–J12 | same |
+| `RADIAL-D8-P35` | **C11 and C19** | Nichicon CAT.8100M case + lead tables |
+| `HDR2X20-BOX` | **J7** | 2.54 mm grid is the definition of the part |
+| `FUSEHOLDER-5X20-P226` | **F1** | 22.6 mm is the de-facto pitch for covered 5×20 PCB holders (PTF-78 family; Schurter OG `0031.8001` is the same class) |
+| `HDR1X8-P254` | **CN6** — the 3.3 V output since J8 was deleted | 2.54 mm grid |
+| `HDR1X3-P254` | **J13** | 2.54 mm grid |
+| `TESTPAD-1MM5` | TP1–TP26 | — |
 
-Three footprints cover thirty-eight of those parts (the 0805 land and the two
-Phoenix terminals). Draw those three and the board is more than half libraried.
+Every SMD land is the recommended one with each pad's **outer** end extended by
+0.25 mm for hand soldering; the gap between pads is never widened, because that gap
+is what makes the part self-align.
+
+Five numbers are choices rather than citations and the script says so at each: the
+2.2 mm pad on the Phoenix headers, the 0.9/1.8 mm hole and pad on the electrolytic,
+the 1.0/1.8 mm on J7, the **1.5/3.0 mm on the fuse holder — oversized on purpose**,
+because nobody in that class publishes a terminal thickness and an oversized hole
+costs a little solder while an undersized one costs a board, and the 1.5 mm test
+pad. Two **outlines** are provisional and both decide board area: **J7's shroud**
+and **F1's body**.
+
+Running a script does not excuse §3.7. Check what it made.
+
+**Nothing is left to draw.** J8 was the last open item and it no longer exists —
+the 3.3 V leaves through CN6 now, and CN6's header is in the list above. That lead
+needs its key: **clip CN6-1 and plug hole 1** (§2 of the spec, *The CN6 power
+tap*). Without it a reversed lead drives 3.3 V into the Nucleo's `5V` pin and holds
+`NRST` at ground, which presents as a dead board rather than as a reversed cable.
 
 ### 3.7 Every footprint gets checked twice
 
@@ -386,10 +343,56 @@ footprint that is self-consistently wrong.
 
 Work through §1 in order. Two mechanical notes:
 
-**Changing a footprint on many parts at once.** Select one resistor, right-click,
-`Find Similar Objects...`, set *Library Reference* to `Same`, OK. The Inspector
-panel opens with every resistor selected; change the footprint there once. This is
-the difference between fixing thirty parts and fixing thirty parts thirty times.
+### Changing a footprint on many parts at once
+
+Use **`Tools » Footprint Manager...`** from a schematic sheet. It lists every
+component **in the whole project**, not just the open sheet, and it finishes with
+an ECO you can read before anything changes. That is the difference between fixing
+thirty parts and fixing thirty parts thirty times.
+
+The reliable way to swap a footprint in bulk is **add the new one, then remove the
+old one** — never "edit the name in place". A component with exactly one footprint
+model has no ambiguity about which one is current, and that is the state you want
+to end in.
+
+1. Sort the grid by the **`Current Footprint`** column. Everything wrong is now
+   grouped: one block of `AXIAL-0.3`, one of `RAD-0.3`, one of `HDR1X3`, one of
+   `HDR1X4`.
+2. Select the whole block (click the first row, shift-click the last).
+3. In the footprint pane on the right, **Add** the new footprint, browsing to
+   `WaterTempNode_FE.PcbLib`. It is added to every selected component at once.
+4. With the same rows still selected, pick the **old** footprint in that pane and
+   **Remove** it.
+5. Repeat per block. Four passes cover forty-five parts:
+
+| Sorted block | Add | Then remove |
+|---|---|---|
+| `AXIAL-0.3` — R1–R25, R38–R40 | `CHIP0805-M` | `AXIAL-0.3` |
+| `RAD-0.3` — **C1, C2, C8, C10, C21 only** | `CHIP0805-M` | `RAD-0.3` |
+| `HDR1X3` — J1–J6 | `PHX-MC15-3-G-35` | `HDR1X3` |
+| `HDR1X4` — J9–J12 | `PHX-MC15-4-G-35` | `HDR1X4` |
+
+**`C11` and `C19` are also `RAD-0.3` and must not be swept up in pass 2.** They
+are the two capacitors that really are through-hole (§1 item 3), and their
+footprints do not exist yet because they depend on which parts you buy.
+
+6. **`Accept Changes (Create ECO)`** at the bottom. Read the change list, then
+   *Validate Changes*, then *Execute Changes*. If a row reports an error rather
+   than a tick, stop and read it — that is the ECO telling you a footprint does
+   not exist or a pin does not map.
+
+**Four parts are not bulk work**, because the symbol and the land do not line up
+by themselves. Do these one at a time with the datasheet open:
+
+- **Q2** — replace the whole component with the one from `DMP6023LE-13`, not just
+  its footprint (§1 item 2)
+- **Q1** — `SOT23-3-M`, after checking AO3401A's pin order against the generic
+  `MOSFET-P` symbol's pin numbers
+- **D10** — `SOT23-3-M`. A two-pin diode symbol onto a three-pad land needs an
+  explicit pin/pad map, with the unused pad left unmapped
+- **D9** — `SMB-DO214AA-M`. Two pins onto two pads, but confirm that pad 1, the
+  cathode, is the symbol's cathode pin. D9 is unidirectional and only works one
+  way round
 
 **MPN parameters.** Add a parameter named `MPN` to the twelve parts that must not
 be substituted — `Q1` AO3401A, `Q2` DMP6023LE-13, `D1`–`D6` CDSOD323-T05LC, `D9`
@@ -407,10 +410,12 @@ that the BOM is what someone reads a year from now while ordering, and
 `sourcing-th.md` is explicit about what happens if they guess: *"do not reuse the
 AO3401A, it is a 30 V part."*
 
-### J7 needs 38 deliberate decisions
+### J7 needs 40 deliberate decisions
 
 §2, *What to draw on J7 in the schematic*, is a table you follow position by
-position: 11 positions carry a net, 5 get grounded, 22 get a **no-connect flag**.
+position: **14** positions carry a net, 5 get grounded, **21 get a no-connect flag**
+(J7 is 2×20 and CN10 is 2×19, so positions 39 and 40 exist on the board and on
+the cable but nowhere on the Nucleo).
 Place them with `Place » Directives » Generic No ERC`.
 
 Read that section before drawing it. Grounding CN10-7 shorts the ADC reference;
@@ -437,7 +442,7 @@ reading, not clearing. The ones that matter here:
   which after §1 item 4 means a name that does not match its other half
 - **Nets with multiple names** — two power ports on one wire; the `TP*` ports
 - **Floating net label / unconnected pin** — a real missed connection, and the
-  reason for putting no-connect flags on J7's 22 unused positions: without them
+  reason for putting no-connect flags on J7's 21 unused positions: without them
   this message is drowned
 
 Double-click any message to jump to the object. Fix, save, compile again. Do not
@@ -468,11 +473,11 @@ of eleven cable entries (§6). Do the arithmetic before drawing anything.
 | J1–J6, MC 1,5/**3**-ST-3,5 @ 3.5 mm | ~11.5 mm | 6 | **~69 mm** |
 | J9–J12, MC 1,5/**4**-ST-3,5 @ 3.5 mm | ~15 mm | 4 | **~60 mm** |
 | J14 (24 V in) | ~10 mm | 1 | 10 mm |
-| J8, J13 | ~8 mm | 2 | 16 mm |
+| CN6, J13 | ~22 mm / ~8 mm | 2 | 30 mm |
 
 All ten terminals on one edge is ~130 mm of connector, which is a silly board. Put
 the **six probes along one long edge** and the **four I2C branches along the
-opposite long edge**; J14 with U7 at one short edge; J8 and J13 at the other.
+opposite long edge**; J14 with U7 at one short edge; CN6 and J13 at the other.
 That gives roughly **80 × 60 mm**, and it satisfies §5's placement rule 2 —
 *"the module in one corner, with the 24 V input, far from J1–J12"* — because the
 24 V corner is then diagonally away from every sensor terminal.

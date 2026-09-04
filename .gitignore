@@ -13,3 +13,4 @@ build/
 # Python bytecode
 __pycache__/
 *.pyc
+water-temp-node/hardware/scripts/__Previews/MakeFootprints.pasPreview
