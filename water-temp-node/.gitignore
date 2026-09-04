@@ -3,3 +3,12 @@
 *.bin
 *.elf
 *.hex
+# Altium generated output and local state
+hardware/**/History/
+hardware/**/__Previews__/
+hardware/**/Project Logs*/
+hardware/**/Project Outputs*/
+hardware/**/*.PrjPcbStructure
+hardware/**/*.~*.Zip
+hardware/**/*.SchDocPreview
+hardware/**/*.PcbDocPreview
