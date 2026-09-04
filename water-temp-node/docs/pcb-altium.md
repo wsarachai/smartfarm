@@ -270,10 +270,10 @@ footprint is a claim, not a fact — and then never think about them again.
 
 | Refs | Library | Footprint to use | Check |
 |---|---|---|---|
-| D1–D6 | `CDSOD323-T05LC` | **`CDSOD323_BRN-M`** | SOD-323 against the Bourns drawing |
-| Q2 | `DMP6023LE-13` | **`DMP6023LE-13_DIO-M`** | SOT-223, four pads, **tab = drain** |
-| U3 | `TCA9548APWR.IntLib` | `SOP65P640X120-24N` | TSSOP-24 pitch against TI's PW drawing |
-| U7 | `TSR_1-2433.IntLib` | `CONV_TSR_1-2433` | **Buzz it out before soldering** (§5): a reversed footprint puts 24 V on the output pin, and the Nucleo is downstream |
+| D1–D6 | `Lib\CDSOD323-T05LC\` | **`CDSOD323_BRN-M`** | SOD-323 against the Bourns drawing. **A second copy of this part exists as `CDSOD323_T05LC\...IntLib`, whose footprint is `SOD2513X114N`** — it has re-linked D1–D6 to itself twice. Keep one copy only |
+| Q2 | `Lib\DMP6023LE-13\` | **`DMP6023LE-13_DIO-M`** | SOT-223, four pads, **tab = drain** |
+| U3 | `Lib\TCA9548APWR\` | `PW24_TEX` | TSSOP-24 pitch against TI's PW drawing |
+| U7 | `Lib\TSR_1_2433\` | `TSR1-SINGLE_TRP` | **Buzz it out before soldering** (§5): a reversed footprint puts 24 V on the output pin, and the Nucleo is downstream |
 
 ### 3.6 What the script draws, and what is left
 
@@ -380,6 +380,16 @@ footprints do not exist yet because they depend on which parts you buy.
    *Validate Changes*, then *Execute Changes*. If a row reports an error rather
    than a tick, stop and read it — that is the ECO telling you a footprint does
    not exist or a pin does not map.
+7. **`File » Save All`.**
+
+> **Nothing an ECO does is on disk until you save, and neither is anything you
+> change about the project itself.** An ECO edits the open `.PcbDoc` in memory;
+> adding or removing a library edits the `.PrjPcb` in memory. Both look finished
+> on screen and both vanish on close. This cost several rounds during the first
+> build: the schematic would be right, the board would still be a revision
+> behind, and the difference was one unsaved document. `File » Save All` after
+> every batch, and check the Projects panel — a modified document is marked
+> beside its name.
 
 **Four parts are not bulk work**, because the symbol and the land do not line up
 by themselves. Do these one at a time with the datasheet open:
