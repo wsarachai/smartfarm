@@ -87,35 +87,34 @@ Fix these before drawing a single track. Every one of them is silent: none stops
 you from finishing the layout, and each one produces a board that is wrong in a way
 you find out about after paying for it.
 
-> **Progress as of 4 September, 20:07**, read from the sheets themselves:
+> **This audit is closed.** As of 5 September the schematic matches §4a on every
+> reference: 88 components, every footprint one of the specified ones and exactly
+> one model per part, no orphaned wires, no floating power ports, J7 carrying 14
+> nets / 5 grounds / 21 no-connect flags, TP1–TP26 all present as pads, and seven
+> vendor libraries under `hardware/lib/` attached by relative path. The netlist is
+> on the PCB.
 >
-> | Item | State |
-> |---|---|
-> | 1 — through-hole footprints on the passives | **done** |
-> | 2 — Q1/Q2 on `E3` | **done** — Q1 `SOT23-3-M`, Q2 `DMP6023LE-13_DIO-M` |
-> | 3 — package errors | **partly** — D9 is `SMB-DO214AA-M`; **C11 and C19 are still `RAD-0.3`** |
-> | 4 — three names for the 3.3 V rail | **done**, `V3V3_MCU` ×3 |
-> | 5 — test points are power ports | **not yet** — all eight still power ports |
-> | 6 — C4, C5, C6 | **done** |
-> | 7 — `PS?` and `C?` unannotated | **done** |
-> | 8 — pin headers where terminals belong | **half** — the new footprints are on, **the old ones were never removed** |
-> | 9 — probe silkscreen names | **wrong, not merely undone** — they read `P1`–`P6`, and the nets on the same sheet read `DQ_P0`–`DQ_P5` |
+> **Three of the nine items turned out to be defects in the spec, not the
+> drawing**, and all three were invisible to ERC. They are worth remembering,
+> because each was found by comparing two documents rather than by any tool:
 >
-> Also clean, and checked directly: **no orphaned wires on any sheet**, **no
-> floating power ports**, J7's symbol is now `Header 20X2` with 40 pins to match
-> `HDR2X20-BOX`, and `no-connect` is no longer a power port.
+> - **§2's "what to draw on J7" table was two revisions out of date.** It put a
+>   net on position 23 (`PC1`, which `DQ_P4` left in 2026-08) and told you to
+>   float 27, 31, 35 and 37 — `DQ_P4`, `VBAT_SENSE`, `DBG_TX`, `DBG_RX`. Four live
+>   signals, and **the no-connect flags it asked for are what kept ERC quiet about
+>   them.** §2's signal table and CN10 pin map had it right the whole time; only
+>   the drawing table drifted, because it was the one table nothing cross-checked.
+> - **§4a's `TP1–14` row named fourteen pads over thirteen nets**, and two rows
+>   below it called `24V_PROT` "TP1" when the list order made TP1 `VSENS`.
+> - **D10 was drawn with a dual-diode symbol and wired backwards.** Cathode at the
+>   gate instead of the source turns a 12 V clamp into a 0.7 V one, which leaves
+>   Q2 barely conducting — a board that looks dead, from a part §5 calls "not
+>   optional". The pin numbering came from the Vishay BZX84 datasheet: SOT-23 is
+>   **1 = anode, 2 = no connection, 3 = cathode**.
 >
-> **Two things are silent and worth repeating.**
->
-> *Stale footprint models.* Adding a footprint does not remove the old one, and a
-> part with two models gives no warning about which is current. Seven `HDR1X3`
-> models are still attached to J1–J6 and J13, and D10 still carries `SOT-23`
-> alongside `SOT23-3-M`. **Remove**, do not just **Add**.
->
-> *NoERC directives went from 14 to 2 when the sheets were merged.* §2 needs
-> **21** on J7. Nothing reports their absence — the pins simply read as
-> not-yet-wired, mixed in with every other warning, which is the exact outcome §2
-> put the flags there to prevent.
+> The pattern in all three: a table that nothing else is checked against goes
+> stale silently, and a suppressed warning is indistinguishable from a solved
+> problem.
 
 ## 2. Setting up
 
@@ -478,19 +477,41 @@ you want. Do not add layers.
 Nothing in the spec fixes a board size, because nothing should: the size falls out
 of eleven cable entries (§6). Do the arithmetic before drawing anything.
 
+These are the real widths, from the datasheets behind the footprints — not
+estimates:
+
 | Group | Each | Count | Edge length |
 |---|---|---:|---:|
-| J1–J6, MC 1,5/**3**-ST-3,5 @ 3.5 mm | ~11.5 mm | 6 | **~69 mm** |
-| J9–J12, MC 1,5/**4**-ST-3,5 @ 3.5 mm | ~15 mm | 4 | **~60 mm** |
-| J14 (24 V in) | ~10 mm | 1 | 10 mm |
-| CN6, J13 | ~22 mm / ~8 mm | 2 | 30 mm |
+| J1–J6, `PHX-MC15-3-G-35` | **11.9 mm** | 6 | **71.4 mm** |
+| J9–J12, `PHX-MC15-4-G-35` | **15.4 mm** | 4 | **61.6 mm** |
+| J14, `PHX-MC15-2-G-35` | **8.4 mm** | 1 | 8.4 mm |
+| CN6, `HDR1X8-P254` | 20.3 mm | 1 | 20.3 mm |
+| J13, `HDR1X3-P254` | 7.6 mm | 1 | 7.6 mm |
 
-All ten terminals on one edge is ~130 mm of connector, which is a silly board. Put
-the **six probes along one long edge** and the **four I2C branches along the
-opposite long edge**; J14 with U7 at one short edge; CN6 and J13 at the other.
-That gives roughly **80 × 60 mm**, and it satisfies §5's placement rule 2 —
-*"the module in one corner, with the 24 V input, far from J1–J12"* — because the
-24 V corner is then diagonally away from every sensor terminal.
+All ten screw terminals on one edge is 133 mm of connector, which is a silly board.
+Put the **six probes along one long edge** (71.4 mm) and the **four I2C branches
+along the opposite long edge** (61.6 mm); J14 with U7 at one short edge; CN6 and
+J13 at the other (27.9 mm together). That satisfies §5's placement rule 2 — *"the
+module in one corner, with the 24 V input, far from J1–J12"* — because the 24 V
+corner ends up diagonally away from every sensor terminal.
+
+**Two objects do not fit on any edge and set the width instead.** `J7` is
+**~50 mm** across the pin field alone and its shroud is wider; `F1`'s holder is
+about **30 mm** long. Both have to live in the interior, and the Phoenix bodies eat
+**9.2 mm** of depth along each long edge before the interior starts. So:
+
+```
+length  >= 71.4 (probe edge) + margin        ->  ~80 mm
+width   >= 9.2 + 9.2 (both connector rows)
+           + ~10 (J7 with its shroud)
+           + room for U7, Q2, D9, C11, C19, U3 and 33 passives
+                                             ->  ~60 mm
+```
+
+**~80 × 60 mm**, and the two numbers come from different places: the length from
+the probe terminals, the width from J7 plus the two connector rows. Check both
+before drawing the outline — if the shroud on the box header you buy is wider than
+the 50 mm pin field, the width moves, not the length.
 
 Draw it: `Design » Board Shape » Redefine Board Shape`, or draw a closed outline on
 the **Mechanical 1** layer and use `Design » Board Shape » Define from selected
