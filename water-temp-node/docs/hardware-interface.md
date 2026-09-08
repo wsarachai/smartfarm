@@ -1636,7 +1636,7 @@ Split in two, because the board is no longer the whole design: parts on the
 | C11 | Electrolytic / polymer | 100 µF, **≥63 V** | 24 V bulk, before the modules. **63 V, not 50 V** — D9 clamps as high as 53.3 V |
 | **Power — the buck module (§5)** ||||
 | U7 | Buck module, **fixed 3.3 V** | Traco **TSR 1-2433**, SIP-3 through-hole | 4.75–36 V in, 1 A, ±2 %. **The only regulator on the board:** MCU (via CN6) + `VSENS` + everything on it. Pins **1 = +V_in, 2 = GND, 3 = +V_out** (datasheet rev. 2026-07-02); **no traces under the module**. **Fixed output only** — never an adjustable module with a trim pot; CN6-4 and the STM32WL die at 3.6 V |
-| C19 | Ceramic X7R 1210, or small electrolytic | **22 µF, 50 V** | `C_IN`, **directly across pins 1 and 2**, ≤5 mm. **22 µF is Traco's requirement, not a choice** — the datasheet demands an external 22 µF/50 V input capacitor for V_in > 32 V |
+| C19 | Electrolytic — **the same part as C11** | 100 µF, **≥63 V** (Nichicon **UVR1J101MPD**) | `C_IN`, across pins 1 and 2. **22 µF is Traco's *minimum*, not a target.** C19 sits on the same `24V_PROT` node as C11, where this table already demands 63 V; and a 22 µF/50 V X7R 1210 biased at 24–29 V keeps under half its rating, so it would not actually deliver 22 µF. **It is therefore polarised** — see the netlist table below. **As built it sits 6.9 mm from U7's pins, not ≤5 mm** — see the deviation note under layout rule 3 |
 | C21 | Ceramic X7R | 22 µF, 16 V | `C_OUT`. **Optional** — the module needs none; fitted for the LoRa TX and SCD41 current steps. DNP without consequence |
 | — | LED + series resistor | ×1 | **DNP.** Rail indicator for bring-up only — ~0.5 Wh/day if left fitted, which is more than half this node's entire budget |
 | **Supply telemetry** ||||
@@ -1653,26 +1653,48 @@ Split in two, because the board is no longer the whole design: parts on the
 | — | Key plug for the CN6 socket | — | The CN6 key (§2). Without it a reversed lead puts 3.3 V on `5V` and holds `NRST` low |
 | — | M3 nylon standoffs + screws | ×8 | Both boards |
 | — | Cable ties / strain relief | ×11 | Within 30 mm of every entry |
-| TP1–14 | Test pads | — | **Numbered, because two other rows refer to them:** TP1 `VSENS` · TP2–TP7 `DQ_P0`–`DQ_P5` · TP8 `SENS_GATE` · TP9 **`24V_PROT`** · TP10 `VBAT_SENSE` · TP11 `GND` · TP12/TP13 upstream SDA/SCL · TP14 **a second `GND`, placed among TP15–TP22** — see the note below |
-| TP15–22 | Test pads | — | The **four** downstream SDA/SCL pairs. Without these, a dead sensor and a dead mux channel look identical |
-| TP23, TP24 | Test pads | — | **V_in and V_out of U7.** With `24V_PROT` at **TP9** they tell a dead module from a dead input in one measurement, and TP23 is where the no-load current gets measured |
-| TP25, TP26 | Test pads | — | **`24V_RAW`** (J14 side of Q2) and **Q2's gate**. With `24V_PROT` at **TP9** these three tell a blown F1, a dead Q2 and a missing gate clamp apart in one measurement |
+| ~~TP1–TP26~~ | Test pads | **not fitted** | **Revision 2.0 carries no dedicated test pads.** The diagnostic intent below is unchanged — those measurements still have to be made — but they are made at component pads instead. See *Where to probe without test pads*. |
 
-> **Why TP14 is a second ground, and why it goes where it goes.** This row used to
-> say "TP1–14" over a list of **thirteen** nets, and two rows below it called
-> `24V_PROT` "TP1" while the list order made TP1 `VSENS`. Both are fixed above.
+> **The test-point design, kept because it is the argument, not the artefact.**
+> Two sets were specified and both were dropped from the board in 2026-09 to save
+> placement work, not because the reasoning changed. If bring-up on the first five
+> boards proves painful, fit them on the next revision — the numbering below is
+> reserved for exactly that, and nothing else should ever be numbered `TP`.
 >
-> The fourteenth pad is a second `GND`, and it belongs **with TP15–TP22**, not at
-> some symmetric far corner. Those eight pads exist to scope I2C edges per
-> channel, and §3 puts that rise time at **0.60 µs against a 1000 ns budget** —
-> not much room. A probe's ground lead is an inductor in series with the very edge
-> you are trying to measure, so on that measurement the return has to be within a
-> few centimetres. The 1-Wire pads TP2–TP7 do not need it: bit-banged 1-Wire is
-> slow enough that a long ground lead changes nothing. TP11 sits in the 24 V
-> corner, diagonally opposite the sensor connectors, and serves the power pads.
+> **Power set** — TP1 `VSENS` · TP9 `24V_PROT` · TP11 `GND` · TP23/TP24 U7's V_in
+> and V_out (TP23 is where the no-load current would be measured) · TP25
+> `24V_RAW` · TP26 Q2's gate. TP25/TP9/TP26 together tell a blown F1, a dead Q2
+> and a missing gate clamp apart in one measurement.
 >
-> A second ground goes where a measurement needs one, not where the drawing looks
-> balanced.
+> **I2C set** — TP15–TP22, the four downstream SDA/SCL pairs, plus TP14 as a
+> second `GND` among them. Without per-branch access *a dead sensor and a dead mux
+> channel look identical*, and a scope probe needs a return close to what it
+> measures: §3 puts the I2C rise time at **0.60 µs against a 1000 ns budget**, and
+> a long ground lead is an inductor in series with the edge you are trying to see.
+>
+> **The rest were never fitted anyway** — the six `DQ` lines, `SENS_GATE`,
+> `VBAT_SENSE` and the upstream SDA/SCL pair each have a component pad or a
+> pluggable screw terminal within a few millimetres.
+
+#### Where to probe without test pads
+
+Every reading §7 asks for is still available, on a pad big enough to take a probe.
+None of these is an 0805 — they are through-hole leads and a SOT-223 tab:
+
+| Reading | Probe here instead |
+|---|---|
+| `24V_RAW` | **Q2's tab** — the large SOT-223 pad, which *is* the drain |
+| `24V_PROT` | **U7 pin 1**, or C11's **+** lead |
+| Q2's gate | **R38's pad** on the gate side, or **D10's anode** pad |
+| `GND` | **U7 pin 2**, or C11's **−** lead |
+| `VSENS` | **C1** or **C2**, whichever end is easier to reach |
+| U7 V_out | **U7 pin 3**, or C21 |
+| Each downstream SDA/SCL | that branch's pull-up pair — R17/R18, R19/R20, R21/R22, R39/R40 |
+
+**The one that genuinely got harder is the last row.** Probing an 0805 pad on a
+live bus with a hand-held tip risks shorting to its neighbour 1 mm away; a
+dedicated pad does not. If step 15 or 16 sends you there more than once, that is
+the signal to fit the I2C set on the next revision.
 
 **Deleted from the previous revision:** U2 (SCD41), C3 (its 10 µF local bulk), C7
 (its 100 nF), and U1a/U1b/U1c with C4–C6 — the SHT45s are no longer on this board.
@@ -1754,15 +1776,15 @@ two orders of magnitude.
       │
    [ F1 ]   2 A time-lag cartridge
       │
-      ●──── 24V_RAW ── TP25        the tab (= drain) sits at THIS potential
+      ●──── 24V_RAW             the tab (= drain) sits at THIS potential
       │
       │ D
    ┌──┴───┐
    │  Q2  │  DMP6023LE       body diode:  D ──►|── S   (points at the LOAD)
    └──┬───┘
-      │ S                  G ──●── TP26
+      │ S                  G ──●
       │                        │
-      ●──── 24V_PROT ── TP1    ├──[ D10  12 V ]──── to S   (cathode at S)
+      ●──── 24V_PROT         ├──[ D10  12 V ]──── to S   (cathode at S)
       │                        │
       ├──► D9, C11, U7         └──[ R38  470 k ]─── GND
       │    (all in PARALLEL — see the next section)
@@ -1902,7 +1924,7 @@ single node:
        │
        ●━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━  24V_PROT
        │      │        │            │          │
-      TP1   ══╪══     ═╪═         ══╪══     [R24 300k]
+            ══╪══     ═╪═         ══╪══     [R24 300k]
               │        │            │          │
             [D9]     [C11]       [C19]         ●──── VBAT_SENSE
            SMBJ33A   100 µF        22 µF       │      → PB3
@@ -1924,7 +1946,8 @@ Read as a netlist, since polarity is where this node gets destroyed:
 | | anode | `GND`, straight back to J14's ground pin |
 | **C11** 100 µF ≥63 V | **`+`** | `24V_PROT` |
 | | `−` | `GND` |
-| **C19** 22 µF/50 V | — | across **U7's** pins 1 (+V_in) and 2 (GND) |
+| **C19** 100 µF ≥63 V | **`+`** | `24V_PROT`, at **U7's** pin 1 (+V_in) |
+| | `−` | `GND`, at U7's pin 2 |
 | **U7** V_in (pin 1) | — | `24V_PROT` |
 | **R24** 300 kΩ | — | `24V_PROT` (top of the `VBAT_SENSE` divider) |
 
@@ -1955,6 +1978,18 @@ along the trace is a real specification:
    this job — see *The buck modules*, layout rule 1. The converse also applies: a
    module fed through more than a few centimetres of trace, or any length of cable,
    wants bulk capacitance upstream — which is what C11 is for.
+
+   > **As built, C19 is 6.9 mm from U7's pins 1 and 2, not ≤5 mm.** That is the
+   > physical floor: a φ8 mm can beside an 11.5 mm SIP-3 body cannot get closer.
+   > Accepted, because Traco's 5 mm figure is written for a layout with an unknown
+   > return path, and this board has a **solid, uncut ground plane directly under
+   > the 1.0 mm trace** — the loop is trace-to-plane across 1.6 mm of FR4, so the
+   > extra 2 mm costs roughly 0.8 nH against U7's own 75 mV p-p ripple. **Prove it
+   > at bring-up:** scope U7 pins 1–2; expect ~75 mV p-p, and treat **>150 mV p-p**
+   > as the input loop being a real problem. The ≤30 mV check at the SCD41 head
+   > (§7) is the stricter test and will catch it first. If it ever has to be fixed,
+   > do **not** move C19 — add 2–3× 22 µF/50 V X7R 1210 on the **bottom** side
+   > directly under pins 1–2; that layer is empty and a 1210 is 1.4 mm thick.
 4. **R24/R25 last**, farthest from the module. It is a 27 kΩ analog source; it
    has no business near switching copper.
 
@@ -2062,7 +2097,7 @@ traces under the converter."*
 
 | Pin | Name | Connect to |
 |---|---|---|
-| 1 | `+V_in` | `24V_PROT`. **`C_IN` (22 µF / 50 V) directly across pins 1 and 2** |
+| 1 | `+V_in` | `24V_PROT`. **`C_IN` = C19, 100 µF / 63 V, across pins 1 and 2** — Traco's 22 µF is a minimum; see *Capacitors* |
 | 2 | `GND` | Ground plane, with its own wide copper back toward J14's ground pin |
 | 3 | `+V_out` | The 3.3 V rail: C21, CN6, and Q1's source |
 
@@ -2074,8 +2109,8 @@ to scope, and no COT ripple network to get wrong. That was the point of revision
                         ┌───────────────┐
    24V_PROT ────┬───────┤1 +Vin  +Vout 3├───────┬─────────── 3.3 V
                 │       │               │       │
-            [ C_IN ]    │  TSR 1-2433   │   [ C_OUT ]
-           22 µF/50 V   │      U7       │    22 µF
+            [ C19  ]    │  TSR 1-2433   │   [ C21  ]
+          100 µF/63 V   │      U7       │  22 µF/16 V
                 │       │    2 GND      │       │
                GND      └───────┬───────┘      GND
                                GND
@@ -2083,10 +2118,14 @@ to scope, and no COT ripple network to get wrong. That was the point of revision
 
 #### Capacitors
 
-- **`C19` — 22 µF / 50 V, across pins 1–2 within 5 mm.** The value is Traco's, not
-  ours: the datasheet requires *"an external input capacitor 22 µF / 50 V for input
-  voltage higher than 32 VDC"*, and 32 V is the top of the design range. Either a
-  1210 X7R (accept ~40 % DC-bias loss at 32 V) or a small aluminium electrolytic.
+- **`C19` — 100 µF / ≥63 V electrolytic, the same part as C11 (UVR1J101MPD).** The
+  datasheet requires *"an external input capacitor 22 µF / 50 V for input voltage
+  higher than 32 VDC"* — but 22 µF is a **minimum**, and C19 sits on `24V_PROT`,
+  which this document already rates at 63 V because D9 clamps to 53.3 V. A 1210
+  X7R biased at 24–29 V keeps under half its rating, so it would not deliver the
+  22 µF it is marked with. One part covers both positions. **It is polarised —
+  fitting it backwards destroys it.** See the deviation note under layout rule 3
+  for why it sits 6.9 mm from the pins rather than within 5 mm.
 - **`C21` — 22 µF / 16 V, optional.** The module is internally compensated and
   needs no output capacitor. Fitted because it is cheap and takes the edge off the
   LoRa TX and SCD41 current steps; DNP it without consequence.
@@ -2107,8 +2146,26 @@ to scope, and no COT ripple network to get wrong. That was the point of revision
 2. **The module in one corner, with the 24 V input, far from J1–J12.** Six
    bit-banged 1-Wire lines, four unshielded 5 m I2C branches, a 27 kΩ ADC divider
    and a 923 MHz radio all live on this board.
-3. **Give pin 2 its own wide GND return to J14.** It is the only ground pin the
-   module has; do not let it share a thin trace with the analog ground or R25.
+3. **Get pin 2 into the ground plane on the shortest possible path, and keep the
+   analog reference out of its way.** It is the only ground pin the module has.
+   On a two-layer board with a solid bottom `GND` pour — which is what §6.3 of
+   `pcb-altium.md` specifies — that means **a via right at the pad**, not a long
+   trace: the plane is already a far better return than any track you could draw,
+   and the impedance that is left is the via's, so the only thing that matters is
+   how short you make it.
+
+   > **This rule used to say "give pin 2 its own wide GND return to J14", and that
+   > was written for a board where ground is routed as traces.** Drawn literally
+   > on this board it produces a 1 mm track running 73 mm across the middle, which
+   > sits *in parallel with* a plane that already carries the current, and blocks
+   > the band where the 24 V section and the rail gate live. The wording changed in
+   > 2026-09; the intent did not.
+
+   What still bites is the second half: **do not let the switcher's return share a
+   path with the analog reference.** On a plane the current spreads, but it is
+   densest on the straight line between pin 2 and where the supply comes in — so
+   put the ground vias for **R25 and C10 outside that line**, on the far side of
+   U7 rather than between U7 and J14.
 4. **Nothing routed under the module** — Traco's own instruction. The body sits
    0.5 mm off the board; keep that footprint area copper-free on the top layer.
 
@@ -2325,10 +2382,10 @@ air, which is what §3's ASC section is about).
   section and the CN12 SMA. A 30 cm ribbon draped over the antenna is a real
   antenna-detuning problem — and there are now eleven cables competing for the same
   space, so plan the routing rather than discovering it.
-- **Test points:** the ones in the BOM — and note that TP15–22 are now **four**
-  downstream SDA/SCL pairs, one per branch. With six probes and four I2C branches,
-  "which one?" is the first question of every field failure.
-
+- **Test points:** this revision has none — see §4a, *Where to probe without test
+  pads*, for the component pad that stands in for each reading. With six probes and
+  four I2C branches, "which one?" is still the first question of every field
+  failure; the answer now comes from that table instead of from a labelled pad.
 ---
 
 ## 7. Bring-up order
@@ -2367,15 +2424,17 @@ everything else:
    with the short still applied and confirm the rail recovers — that is the
    recovery path firmware depends on, and it is the reason the CO2 sensor was
    brought back behind the gate.
-3. **Read the input chain at TP25 / TP1 / TP26, all referenced to the `GND` pad,
-   before anything else.** Three DMM readings at 24.0 V in, correct polarity,
-   separate every way this chain gets built wrong:
+3. **Read the input chain at Q2's tab, U7 pin 1 and R38's gate-side pad, all
+   referenced to U7 pin 2, before anything else.** There are no test pads on this
+   revision (§4a), so these are the pads to use — a SOT-223 tab and three
+   through-hole leads, all big enough for a probe. Three DMM readings at 24.0 V in,
+   correct polarity, separate every way this chain gets built wrong:
 
-   | TP25 `24V_RAW` | TP1 `24V_PROT` | TP26 gate | Diagnosis |
+   | `24V_RAW` at Q2's tab | `24V_PROT` at U7-1 | gate at R38 | Diagnosis |
    |---|---|---|---|
    | 24 V | ≈24 V | **≈12 V** | **Correct.** V_GS = −12 V, channel fully enhanced |
    | **0 V** | 0 V | 0 V | **F1 open**, or no supply reaching J14 |
-   | 24 V | **≈23.3 V** | ≈ same as TP1 | **`R38` open/unfitted, or `D10` shorted** → V_GS ≈ 0, running on the body diode |
+   | 24 V | **≈23.3 V** | ≈ same as `24V_PROT` | **`R38` open/unfitted, or `D10` shorted** → V_GS ≈ 0, running on the body diode |
    | 24 V | ≈24 V | **≈0 V** | **`D10` missing, backwards or wrong value** → V_GS = −24 V, past the ±20 V limit. Replace D10 **and** Q2 |
    | 24 V | **0 V** | 0 V | Q2 open — dead, or not actually soldered down |
 

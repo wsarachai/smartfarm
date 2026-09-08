@@ -23,7 +23,7 @@ fiducials, and why no pick-and-place file is generated.
 
 This is not a blank start. Read from the project files themselves:
 
-**Three sheets**, in `C:\Users\Public\Documents\Altium\Projects\WaterTempNode_FE`:
+**Three sheets**, in `water-temp-node/hardware/STM32WL_FE/`:
 
 | Sheet | What is on it |
 |---|---|
@@ -46,12 +46,17 @@ refs including U1a/U1b/U1c, U2 and TVS1, from when the SHT45s and the SCD41 were
 still on the PCB. **It was deleted from disk on 4 September.** Two consequences,
 both live right now:
 
-- The `.PrjPcb` was last written before the deletion and **still lists it** as
-  `[Document1]`. Deleting a file does not remove it from the project; Altium will
-  report a missing document until the entry goes too (§2.3).
-- It is not lost yet. `History\` still holds **49 `FrontEnd*` backups (~1 MB)**,
-  which is the only surviving copy of that drawing — and §2.2 tells you to delete
-  `History\`. Recover it *first* (§2.1 step 2).
+Both consequences are now closed, and this paragraph is kept because the *shape*
+of the problem recurs every time a sheet is deleted:
+
+- The `.PrjPcb` was written before the deletion and **still listed it** as
+  `[Document1]` — deleting a file does not remove it from the project. That entry
+  is gone; the only `FrontEnd` string left in the project is
+  `FrontEnd-signals.SchDoc`, the live sheet.
+- It was **recovered on 7 September** from the newest of the 78 `FrontEnd*`
+  backups in `History\` and saved as `hardware/FrontEnd-rev1-superseded.SchDoc`
+  (346 KB), which is now the only copy of that drawing outside `History\`
+  itself — and `History\` is `.gitignore`d. See §2.1.
 
 There is **no `.PcbDoc`**. Generic parts come from `Miscellaneous Devices.IntLib` /
 `Miscellaneous Connectors.IntLib`, which shipped with the program. Everything
@@ -90,9 +95,9 @@ you find out about after paying for it.
 > **This audit is closed.** As of 5 September the schematic matches §4a on every
 > reference: 88 components, every footprint one of the specified ones and exactly
 > one model per part, no orphaned wires, no floating power ports, J7 carrying 14
-> nets / 5 grounds / 21 no-connect flags, TP1–TP26 all present as pads, and seven
-> vendor libraries under `hardware/lib/` attached by relative path. The netlist is
-> on the PCB.
+> nets / 5 grounds / 21 no-connect flags, the test points fitted as pads, and seven
+> vendor libraries under `hardware/STM32WL_FE/Lib/` attached by relative path. The
+> netlist is on the PCB.
 >
 > **Three of the nine items turned out to be defects in the spec, not the
 > drawing**, and all three were invisible to ERC. They are worth remembering,
@@ -118,41 +123,65 @@ you find out about after paying for it.
 
 ## 2. Setting up
 
-### 2.1 Move the project into the repository
+### 2.1 The project is in the repository — done 7 September
 
-It currently lives in `C:\Users\Public\Documents\Altium\Projects\WaterTempNode_FE`,
-which is outside the repo, so nothing in it is versioned and nothing cross-checks
-against §4a.
+This section used to be an instruction. It is now a record, because on
+**2026-09-07** the project was renamed and moved. It had lived in
+`C:\Users\Public\Documents\Altium\Projects\WaterTempNode_FE`, outside the repo,
+where nothing in it was versioned and nothing cross-checked against §4a.
 
-1. **Close Altium.**
-2. **Rescue the old sheet before anything else.** In `History\`, take the
-   **newest** `FrontEnd.~(nn).SchDoc.Zip`, unzip it, and save the result as
+What was done, and what it means if something looks wrong:
+
+1. **Renamed `WaterTempNode_FE` → `STM32WL_FE`**, after the MCU rather than after
+   the measurement, because a second board now exists — `STM32WL_Proto`, the
+   self-etched board of [`hardware-interface-proto.md`](hardware-interface-proto.md)
+   — and "water temp node" no longer distinguishes them. Every file, both output
+   folders and all 18 name references inside `.PrjPcb`, `.OutJob` and `.Dat` were
+   renamed with it. **The name was free to change: no board had been ordered.**
+2. **Moved to `water-temp-node/hardware/STM32WL_FE/`.** The document paths in the
+   `.PrjPcb` are relative (`DocumentPath=I2C-sensors.SchDoc`), so the move itself
+   was safe; the three absolute paths that did exist — in `.OutJob` and `.Dat` —
+   were rewritten. All 34 project entries were verified to resolve afterwards.
+3. **The deleted `FrontEnd.SchDoc` was rescued first**, from the newest of the 78
+   `FrontEnd.~(nn).SchDoc.Zip` backups in `History\`, and saved as
    `hardware/FrontEnd-rev1-superseded.SchDoc`. Do **not** add it to the project —
    it is an archive, and putting it back re-creates the duplicate-designator
    problem it was deleted to solve. This repo keeps superseded revisions
    (`hardware-interface-back.md`, `hardware-interface-s88.md`) but keeps them as
    *prose*; this is the only drawn record of the board that carried the SHT45s and
    the SCD41 on it.
-3. Move the whole project folder to `water-temp-node/hardware/WaterTempNode_FE/`.
-4. **Copy the part libraries in too.** From `C:\Users\ASUS\Documents\Altium`, copy
-   `TSR_1_2433\`, `TCA9548APWR.IntLib`, `CDSOD323-T05LC\` and `DMP6023LE-13\` into
-   `water-temp-node/hardware/lib/`. Take the STEP models with them. **Leave
-   `LM5164DDAR\` behind** — that part was deleted in revision 1.0 — and leave
-   `mb1389_bdp\` behind as well: ST's Nucleo design is 30 MB of reference material
-   that this board does not build.
-5. *Now* delete the `History\` subfolder. Git is the history from here.
-6. Reopen by double-clicking `WaterTempNode_FE.PrjPcb`.
+4. **`History\` was kept, not deleted.** The earlier instruction here said to
+   delete it once the rescue was done. It is 144 MB over 501 files and it is
+   `.gitignore`d, so it costs the repository nothing and git is still the history
+   from here — but it is now the *only* copy of everything that predates the first
+   commit of these binaries, so it stays until that commit exists.
 
-The document paths in the `.PrjPcb` are relative (`DocumentPath=I2C-sensors.SchDoc`),
-so the move is safe. Library paths are not — see §3.2.
+**The vendor libraries did not move to `hardware/lib/`.** They live where the
+project already had them, `hardware/STM32WL_FE/Lib/`, attached by relative path
+(`DocumentPath=Lib\CDSOD323-T05LC\CDSOD323-T05LC.PcbLib`) and resolving correctly.
+Six are attached to the project — `AO3401A`, `BZX84C12`, `CDSOD323-T05LC`,
+`DMP6023LE-13`, `SMBJ33A`, `TCA9548APWR` — and two more sit beside them
+unattached: `TSR_1_2433` (U7 draws `CONV_TSR_1-2433` from the installed `.IntLib`,
+not from here) and `mb1389_bdp`, ST's 35 MB Nucleo reference design, which nothing
+builds but §2 of the spec cites as the authority on CN6 and CN10.
+
+> **Open question, and it belongs to `STM32WL_Proto`, not to this board.** The
+> proto reuses `AO3401A` and `CDSOD323-T05LC` unchanged. Two projects sharing one
+> library folder is what `hardware/lib/` was for. Promoting `Lib/` to
+> `hardware/lib/` means rewriting six `DocumentPath` entries from `Lib\…` to
+> `..\lib\…`; leaving it means the proto either duplicates those libraries or
+> reaches sideways into a sibling project's folder. Decide before the proto's
+> `.PrjPcb` is created, because that is the cheap moment.
 
 ### 2.2 `.gitignore`
 
-Append to `water-temp-node/.gitignore`:
+Now in `water-temp-node/.gitignore`, and verified against the real paths with
+`git check-ignore` rather than by reading:
 
 ```gitignore
 # Altium generated output and local state
 hardware/**/History/
+hardware/**/__Previews/
 hardware/**/__Previews__/
 hardware/**/Project Logs*/
 hardware/**/Project Outputs*/
@@ -160,14 +189,33 @@ hardware/**/*.PrjPcbStructure
 hardware/**/*.~*.Zip
 hardware/**/*.SchDocPreview
 hardware/**/*.PcbDocPreview
+# manual recovery copies kept beside the live documents
+hardware/**/*.broken-*
 ```
 
+Two of those lines are new and one is a fix, all found by testing the rules
+instead of trusting them:
+
+- **`__Previews/` — the old rule said `__Previews__/` and matched nothing.**
+  Altium's folder has no trailing underscores. The rule had been in the file since
+  the move was first planned and had never ignored a single file. Both spellings
+  are listed now; the wrong one is harmless and some Altium versions do use it.
+- **`*.broken-*`** catches the hand-made rescue copies that sit beside the live
+  documents — `STM32WL_FE.PcbDoc.broken-1842` (1.4 MB),
+  `Buck-regulator.SchDoc.broken-1826`. They are local recovery state, not sources.
+
 Commit the sources — `.PrjPcb`, `.SchDoc`, `.PcbDoc`, `.SchLib`, `.PcbLib`,
-`.OutJob` — **and commit `hardware/lib/`**, vendor libraries and STEP models
-included. They are a few hundred kilobytes and they are the difference between a
-repo that builds a board and a repo that describes one. Commit the released
-fabrication zip only when you actually order a board, so the tag and the gerbers
-travel together.
+`.OutJob` — **and commit the vendor libraries in `hardware/STM32WL_FE/Lib/`**,
+STEP models included. They are the difference between a repo that builds a board
+and a repo that describes one. Commit the released fabrication zip only when you
+actually order a board, so the tag and the gerbers travel together.
+
+> **`Lib/mb1389_bdp/` is 35 MB of that, and nothing builds it.** It is ST's own
+> Altium source for the NUCLEO-WL55JC1, kept because §2 of the spec treats it as a
+> better authority than UM2592 on CN6 and CN10 — and it is re-downloadable from
+> ST. Committing it makes the repo self-contained at a one-time 35 MB; ignoring it
+> keeps the repo small and leaves a link in its place. The other seven libraries
+> are ~1 MB in total and there is no argument about those.
 
 These are binary files. `git diff` will tell you nothing useful about them, so
 **write real commit messages**: "add SOT-223 land for Q2, tab tied to drain" beats
@@ -175,7 +223,7 @@ These are binary files. `git diff` will tell you nothing useful about them, so
 
 ### 2.3 Clear the stale `FrontEnd.SchDoc` entry
 
-The file is gone; the *project entry* is not. `WaterTempNode_FE.PrjPcb` still
+The file is gone; the *project entry* is not. `STM32WL_FE.PrjPcb` still
 carries `[Document1] DocumentPath=FrontEnd.SchDoc`, so Altium opens the project
 reporting a missing document, and it will keep doing so until the entry is
 removed.
@@ -201,7 +249,7 @@ files move, the schematic keeps working, because the symbol is cached in the
 changes to the PCB: the moment you are least able to notice one missing part among
 sixty.
 
-§2.1 step 4 copies them into `hardware/lib/`. That solves *where the files are*.
+They sit in `hardware/STM32WL_FE/Lib/` (§2.1). That solves *where the files are*.
 The second half is *how the project finds them*, and it is the part that is easy to
 get wrong.
 
@@ -222,7 +270,7 @@ Projects panel and travel with it.
 
 Then make one more pair for the parts nobody publishes a library for:
 `File » New » Library » Schematic Library` and `... » PCB Library`, saved into the
-project folder as `WaterTempNode_FE.SchLib` and `WaterTempNode_FE.PcbLib`. That is
+project folder as `STM32WL_FE.SchLib` and `STM32WL_FE.PcbLib`. That is
 where the 0805 land, the two Phoenix terminals and the rest of §3.6 go.
 
 ### 3.3 There is no IPC wizard in this version
@@ -286,7 +334,7 @@ To run it:
    *Script Project Files (\*.PrjScr)*, and the list of runnable scripts is built
    from open projects and open free documents — never from a path on disk. That
    project file exists only to make this script visible.
-2. Open `WaterTempNode_FE.PcbLib` and make it the **active** document. The
+2. Open `STM32WL_FE.PcbLib` and make it the **active** document. The
    script writes into whichever PCB library is in front.
 3. **`DXP » Run Script...`** — the `DXP` menu is the leftmost item on the menu
    bar, before `File`, and `Run Script...` is the last entry in it. It is **not**
@@ -307,7 +355,7 @@ comment above the line that uses it:
 | `FUSEHOLDER-5X20-P226` | **F1** | 22.6 mm is the de-facto pitch for covered 5×20 PCB holders (PTF-78 family; Schurter OG `0031.8001` is the same class) |
 | `HDR1X8-P254` | **CN6** — the 3.3 V output since J8 was deleted | 2.54 mm grid |
 | `HDR1X3-P254` | **J13** | 2.54 mm grid |
-| `TESTPAD-1MM5` | TP1–TP26 | — |
+| `TESTPAD-1MM5` | *(none fitted — kept for a later revision)* | — |
 
 Every SMD land is the recommended one with each pad's **outer** end extended by
 0.25 mm for hand soldering; the gap between pads is never widened, because that gap
@@ -359,7 +407,7 @@ to end in.
    `HDR1X4`.
 2. Select the whole block (click the first row, shift-click the last).
 3. In the footprint pane on the right, **Add** the new footprint, browsing to
-   `WaterTempNode_FE.PcbLib`. It is added to every selected component at once.
+   `STM32WL_FE.PcbLib`. It is added to every selected component at once.
 4. With the same rows still selected, pick the **old** footprint in that pane and
    **Remove** it.
 5. Repeat per block. Four passes cover forty-five parts:
@@ -437,7 +485,7 @@ of them on one connector you will not remember which is which in a month.
 
 ## 5. Compile
 
-**`Project » Compile PCB Project WaterTempNode_FE.PrjPcb`.**
+**`Project » Compile PCB Project STM32WL_FE.PrjPcb`.**
 
 (In this version the command is *Compile*. Altium 18 renamed it *Validate*, so
 tutorials written after 2018 use the other word for the same thing.)
@@ -463,7 +511,7 @@ start the PCB until this is clean — every error here becomes a harder error th
 
 ### 6.1 The document
 
-`File » New » PCB`, save as `WaterTempNode_FE.PcbDoc` in the project folder.
+`File » New » PCB`, save as `STM32WL_FE.PcbDoc` in the project folder.
 
 `Design » Board Options...` — set the grid to **1 mm** with a **0.1 mm** snap.
 Press `Q` to toggle units if the display shows mils; this board is metric because
@@ -500,23 +548,38 @@ corner ends up diagonally away from every sensor terminal.
 about **30 mm** long. Both have to live in the interior, and the Phoenix bodies eat
 **9.2 mm** of depth along each long edge before the interior starts. So:
 
+**And a third input, which is the one that caught this design out.** §4a wants four
+**M3 mounting holes** at the corners. A 3.2 mm hole needs its own footprint, and the
+probe row leaves nowhere to put it: six connectors at a 12 mm pitch span 71.4 mm,
+so on an 80 mm edge only **4.3 mm** remains at each end — less than one hole plus
+its edge clearance. Corner holes and a full connector row do not both fit on 80 mm.
+
 ```
-length  >= 71.4 (probe edge) + margin        ->  ~80 mm
+length  >= 71.4 (probe row)
+           + a hole and its clearance at each end   ->  ~90 mm
 width   >= 9.2 + 9.2 (both connector rows)
            + ~10 (J7 with its shroud)
            + room for U7, Q2, D9, C11, C19, U3 and 33 passives
-                                             ->  ~60 mm
+                                                    ->  ~60 mm
 ```
 
-**~80 × 60 mm**, and the two numbers come from different places: the length from
-the probe terminals, the width from J7 plus the two connector rows. Check both
-before drawing the outline — if the shroud on the box header you buy is wider than
-the 50 mm pin field, the width moves, not the length.
+**90 × 60 mm**, and the three numbers come from different places: the length from
+the probe terminals *plus the mounting holes*, the width from J7 plus the two
+connector rows.
+
+**Going from 80 to 90 mm costs nothing.** JLCPCB's lowest price tier is a
+100 × 100 mm envelope, so every size inside it prices the same — squeezing the
+outline below 100 mm in either axis buys no money and loses margin. Confirm the
+tier when you order, but do not shrink the board to save a fee that is not there.
+
+Check the width before drawing: if the shroud on the box header you buy is wider
+than the 50 mm pin field, the **width** moves, not the length.
 
 Draw it: `Design » Board Shape » Redefine Board Shape`, or draw a closed outline on
 the **Mechanical 1** layer and use `Design » Board Shape » Define from selected
-objects`. Add four **M3 mounting holes**, 3.2 mm, inset ~5 mm from the corners —
-§4a specifies M3 nylon standoffs for both boards.
+objects`. Then place the four **M3 holes** — 3.2 mm, non-plated — at **(5, 5),
+(85, 5), (5, 55), (85, 55)**, which clears the connector rows at both ends. §4a
+specifies M3 nylon standoffs for both boards.
 
 ### 6.3 Design rules
 
@@ -530,7 +593,16 @@ because coarse is what survives.
 | Clearance, 24 V net class | **0.5 mm** | D9 clamps as high as **53.3 V** (§5). Electrically 0.25 mm would pass; this is margin against a surge, and it is free on a board with this much empty space |
 | Width (default) | 0.25 mm, min 0.2, max 2 | Signals |
 | Width, `V3V3_MCU` / `VSENS` | **0.5 mm** | The SCD41's 205 mA burst plus everything else on the gated rail |
-| Width, `24V_RAW` / `24V_PROT` / GND return to U7 pin 2 | **1.0 mm** | F1 is a 2 A fuse; 1 mm on 1 oz outer copper carries that with a small rise. §5 rule 3: *"Give pin 2 its own wide GND return to J14"* |
+| Width, net class `24V` (`24V_RAW`, `24V_PROT`) | **1.0 mm** | F1 is a 2 A fuse; 1 mm on 1 oz outer copper carries that with a small rise |
+
+**§5's rule 3 is not a width rule at all.** It used to read *"give pin 2 its own
+wide GND return to J14"*, and on this board that is the wrong instruction: the
+bottom layer is a solid `GND` pour, so a 1 mm track running 73 mm from U7 to J14
+would sit in parallel with a plane that already carries the current, while blocking
+the band where the 24 V section lives. §5 now says what it means — **a via right at
+pin 2, as short as you can make it**, and the ground vias for **R25 and C10 kept
+off the line between U7 and the supply**, so the analog reference does not share
+the switcher's return.
 | Routing Via Style | 0.3 mm hole / 0.6 mm pad | Comfortably above JLCPCB's 0.3/0.45 minimum |
 | Silkscreen to solder mask | 0.15 mm | Keeps reference designators off pads |
 | Polygon connect style | **Relief** on through-hole pads | Direct connect to a ground pour makes a THT joint that a hand iron cannot heat. This one rule decides whether the board is solderable |
@@ -542,7 +614,7 @@ have something to attach to.
 
 ## 7. Placement
 
-`Design » Import Changes From WaterTempNode_FE.PrjPcb` pulls the components across.
+`Design » Import Changes From STM32WL_FE.PrjPcb` pulls the components across.
 Validate, then Execute. Everything lands in a heap outside the outline; that is
 normal.
 
@@ -555,7 +627,7 @@ easy once the parts are in the right places, and impossible if they are not.
 2. **U7 and the 24 V input in their corner.** §5's four rules, in full:
    - `C19` across pins 1 and 2, **within 5 mm**
    - the module in one corner with the 24 V input, far from J1–J12
-   - pin 2 gets its own wide GND return to J14 — not shared with analog ground or R25
+   - pin 2 gets a via straight into the ground plane, as short as possible — and R25/C10's ground vias stay off the line between U7 and J14
    - **nothing routed under the module**; the body sits 0.5 mm off the board, so
      keep that area copper-free on the top layer. Draw a keep-out on the
      mechanical layer so you cannot forget
@@ -567,12 +639,11 @@ easy once the parts are in the right places, and impossible if they are not.
 5. **U3 between the I2C connectors and J7**, with C8 against its supply pins. The
    four downstream pull-up pairs (R17–R22, R39, R40) go near their connectors, not
    near U3 — they are terminating 5 m of cable each.
-6. **Test points last, TP1–TP26** (§4a). Use a 1.5 mm pad with no component: place
-   a free pad, or make a one-pad "TP" footprint in the project library and place it
-   as a real component so it appears in the BOM count. Label every one on the
-   silkscreen. TP15–TP22 are the four downstream SDA/SCL pairs, and §6 is blunt
-   about why: *"Without these, a dead sensor and a dead mux channel look
-   identical."*
+6. **No test points.** This revision fits none — the decision and the reasoning are
+   in §4a of the spec, together with the component pad that stands in for each
+   reading §7 asks for. The `TESTPOINT` symbol and the `TESTPAD-1MM5` footprint stay
+   in the libraries: the numbering `TP1`–`TP26` is reserved so a later revision can
+   fit them without renumbering anything.
 
 ---
 
@@ -669,9 +740,10 @@ soldering, and HASL is cheaper).
 - [ ] `FrontEnd.SchDoc` recovered from `History\` and archived as
       `hardware/FrontEnd-rev1-superseded.SchDoc` **before** `History\` was deleted
 - [ ] The stale `[Document1] FrontEnd.SchDoc` entry removed from the `.PrjPcb`
-- [ ] Vendor libraries in `hardware/lib/`, attached with
+- [x] Vendor libraries in `hardware/STM32WL_FE/Lib/`, attached with
       `Project » Add Existing to Project...` — **not** installed globally
-- [ ] `LM5164DDAR` not copied in; `mb1389_bdp` not copied in
+- [x] `LM5164DDAR` not copied in. `mb1389_bdp` **was** copied in (35 MB, unattached,
+      reference only) — see §2.2 for whether it should be committed
 - [ ] Q2 is the **DMP6023LE-13 component**, not a generic `MOSFET-P`
 - [ ] `-M` footprint variants selected: `CDSOD323_BRN-M`, `DMP6023LE-13_DIO-M`
 - [ ] Compile: **zero errors**, every warning read
@@ -682,7 +754,7 @@ soldering, and HASL is cheaper).
 - [ ] C4, C5, C6 deleted; `PS?` renamed U7; `C?` annotated
 - [ ] J7: 11 nets, 5 grounds, **22 no-connect flags** — against §2's table, position
       by position
-- [ ] TP1–TP26 exist as **pads**, all labelled
+- [ ] No `TP*` components on either the schematic or the board — this revision fits none (§4a)
 - [ ] J1–J6 silkscreened `P0`–`P5`; J9–J12 silkscreened `CH0 หัว`, `CH1 ท้าย`,
       `CH2 นอก`, `CH3 CO2 กลาง` (§4a)
 - [ ] Nothing routed under U7; C19 within 5 mm of its pins 1–2

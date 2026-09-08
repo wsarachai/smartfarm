@@ -38,8 +38,8 @@ Digi-Key TH ships from US stock with THB pricing and DDP customs.
 |---|---|---|
 | J1–J6 | Phoenix **MC 1,5/3-ST-3,5** (1840379) + matching header | 3-pin pluggable, one per probe. Clones from JST/Degson are fine and much cheaper locally |
 | J9–J12 | Phoenix **MC 1,5/4-ST-3,5** (1840382) + header | 4-pin: three SHT45 branches **and the SCD41 head** — four identical connectors, one part number, one cable pinout `V / SDA / SCL / G` |
-| J7 | 2×19 shrouded boxed header, 2.54 mm + 2× IDC socket + 38-way ribbon | **Clip CN10-6 and plug the matching socket hole** — the keying trick in §1 |
-| J8 | JST **XHP-2** / Micro-Fit 3.0, keyed | 3.3 V to Nucleo CN6-4/6 |
+| J7 | **2×20** shrouded boxed header, 2.54 mm + **2× IDC socket 2×20** + **40-way** ribbon | ตัวถังบนบอร์ดคือ `HDR2X20-BOX` — **2×19 ไม่มีขายเป็นของมาตรฐาน** จึงใช้ 2×20 แล้วปล่อยตำแหน่ง 39/40 ว่าง **หนีบขา CN10-6 ทิ้งแล้วอุดรูที่ตรงกันบนซ็อกเก็ต** — กลไกกันเสียบกลับด้านใน §1 |
+| CN6 | 1×8 pin header, 2.54 mm (`HDR1X8-P254`) | 3.3 V ไปยัง Nucleo **CN6-4/6/7** — **J8 ถูกลบไปแล้วในรีวิชัน 2.0** ตัวนี้มาแทน กันเสียบผิดด้วยการ**หนีบขา CN6-1 ทิ้งแล้วอุดรูที่ตรงกัน** ดู §2 |
 | J13 | 1×3 pin header, 2.54 mm | Debug UART for a USB-serial adapter |
 | J14 | Phoenix **MC 1,5/2-G-3,5** (**1844210**) + ปลั๊ก MC 1,5/2-ST-3,5 | 24 V solar input. **ตระกูลเดียวกับ J1–J12** — พิทช์ 3.5, รู 1.2, แบบเจาะเดียวกัน, 8 A เกินข้อกำหนด ≥5 A. **J8 จงใจใช้คนละตระกูล** เพื่อให้เสียบสลับกับ 24 V ไม่ได้ในทางกายภาพ |
 
