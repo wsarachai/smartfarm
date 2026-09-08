@@ -415,9 +415,5 @@ Everything between those is bench work and does not need me.
 
 ---
 
-## Not yet written
-
-- `pcb-home-etch.th.md` — the Thai mirror.
-- [`build-sheet-proto.md`](build-sheet-proto.md) — the 1:1 assembly drawing, the
-  polarity table, and the TCA9548A module pre-fit audit. Stages 11, 12 and 14 all
-  depend on it.
+Thai mirror: [`pcb-home-etch.th.md`](pcb-home-etch.th.md) — that is the copy to
+print for the bench.
