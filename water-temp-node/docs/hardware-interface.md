@@ -1950,6 +1950,28 @@ Read as a netlist, since polarity is where this node gets destroyed:
 | | `−` | `GND`, at U7's pin 2 |
 | **U7** V_in (pin 1) | — | `24V_PROT` |
 | **R24** 300 kΩ | — | `24V_PROT` (top of the `VBAT_SENSE` divider) |
+| **D10** 12 V Zener | **cathode — the banded end** | `24V_PROT`, because **Q2's source *is* this node** |
+| | anode | Q2's **gate**, with R38 |
+
+> **D10 was missing from this table until 2026-09-09**, and the omission is worth
+> keeping a note about rather than quietly fixing. It is easy to miss because D10
+> belongs to *Q2's* story — it is the gate clamp, and it is written up in
+> **Q2 — the reverse-polarity FET is wired backwards on purpose** — so it never
+> got listed among the things hanging off this node. But a P-FET wired
+> drain-to-supply has its **source on the load side**, and the load side is
+> `24V_PROT`, so D10's cathode sits here with the rest of them.
+>
+> It matters because this table's own stated purpose is polarity, and **D10
+> reversed is a documented destruction mode** (§1 of
+> [`pcb-altium.md`](pcb-altium.md): cathode at the gate instead of the source
+> turns a 12 V clamp into a 0.7 V one, and the board looks dead). The table that
+> exists to catch exactly that was the one place the part was not listed.
+>
+> **Count the node: seven things.** Q2 source, D10 cathode, D9 cathode, C11 `+`,
+> R24, and — on `STM32WL_PT` only — Q3's drain and R41. On `STM32WL_FE` it is
+> six: no Q3 or R41, but C19 and U7's pin 1 are here instead of on `24V_PRE`.
+> A net that comes back with the wrong count has something in the wrong place,
+> and that check is faster than reading the drawing.
 
 **One module taps this node, and the layout rules below still matter.** With a
 single converter there is no question of rails sharing an input — but D9's surge
