@@ -1,0 +1,21 @@
+﻿Field=#~Integer~#~50|Field=Comment~String~Comment~100|Field=Description~String~Description~100|Field=Designator~String~Designator~100|Field=Footprint~String~Footprint~100|Field=LibRef~String~LibRef~100|Field=Quantity~Integer~Quantity~100|ReportField=Currency~<none>|ReportField=ProductionQuantity~1|ReportField=ProjectFileName~STM32WL_FE.PrjPcb|ReportField=ProjectFullPath~C:\Users\ASUS\workspaces\projects\smartfarm\water-temp-node\hardware\STM32WL_FE\STM32WL_FE.PrjPcb|ReportField=Title~Bill of Materials For Project [STM32WL_FE.PrjPcb] (No PCB Document Selected)|ReportField=TotalQuantity~45|ReportField=ReportTime~18:39:04|ReportField=ReportDate~28/8/2026|ReportField=ReportDateTime~28/8/2026 18:39:04|ReportField=OutputName~Bill of Materials|ReportField=OutputType~BOM_PartType|ReportField=GeneratorName~BOM|ReportField=GeneratorDescription~Bill of Materials|ReportField=VariantName~None|ReportField=Address1~|ReportField=Address2~|ReportField=Address3~|ReportField=Address4~|ReportField=Application_BuildNumber~|ReportField=ApprovedBy~|ReportField=Author~|ReportField=CheckedBy~|ReportField=CompanyName~|ReportField=CurrentDate~28/8/2026|ReportField=CurrentTime~18:39:01|ReportField=Date~|ReportField=DocumentFullPathAndName~C:\Users\ASUS\workspaces\projects\smartfarm\water-temp-node\hardware\STM32WL_FE\FrontEnd.SchDoc|ReportField=DocumentName~FrontEnd.SchDoc|ReportField=DocumentNumber~|ReportField=DrawnBy~|ReportField=Engineer~|ReportField=ImagePath~|ReportField=ModifiedDate~28/8/2026|ReportField=Organization~|ReportField=ProjectName~STM32WL_FE.PrjPcb|ReportField=Revision~|ReportField=Rule~|ReportField=SheetNumber~|ReportField=SheetTotal~|ReportField=Time~|ReportField=Title~|ReportField=DataSourceFileName~STM32WL_FE.PrjPcb|ReportField=DataSourceFullPath~C:\Users\ASUS\workspaces\projects\smartfarm\water-temp-node\hardware\STM32WL_FE\STM32WL_FE.PrjPcb|ReportField=PCBConfigurationName~Sources|ReportField=Item~|ReportField=ItemRevision~|ReportField=ItemAndRevision~|ReportField=ItemRevisionBase~|ReportField=ItemRevisionLevel1~|ReportField=ItemRevisionLevel2~|ReportField=ItemRevisionLevel1AndBase~|ReportField=ItemRevisionLevel2AndLevel1~
+1|Ceramic|Capacitor|C1, C2|RAD-0.3|Cap|2
+2|100nF|Capacitor|C3, C4, C5, C6, C7, C8|RAD-0.3|Cap|6
+3|Header 8|Header, 8-Pin|CN6|HDR1X8|Header 8|1
+4|TVS|SOT23 Silicon Planar Variable Capacitance Diode|D1, D2, D3, D4, D5, D6|SOT23_N|Diode BBY40|6
+5|HOT_PROBE_1|Header, 3-Pin|J1|HDR1X3|Header 3|1
+6|COLD_PROBE_1|Header, 3-Pin|J2|HDR1X3|Header 3|1
+7|HOT_PROBE_2|Header, 3-Pin|J3|HDR1X3|Header 3|1
+8|COLD_PROBE_2|Header, 3-Pin|J4|HDR1X3|Header 3|1
+9|HOT_PROBE_3|Header, 3-Pin|J5|HDR1X3|Header 3|1
+10|COLD_PROBE_3|Header, 3-Pin|J6|HDR1X3|Header 3|1
+11|CN10|Header, 19-Pin, Dual row|J7|HDR2X19|Header 19X2|1
+12|BATTERY|Header, 2-Pin|J8|HDR1X2|Header 2|1
+13|AO3401A|P-Channel MOSFET|Q1|E3|MOSFET-P|1
+14|100K|Resistor|R1|AXIAL-0.3|Res1|1
+15|220R|Resistor|R2|AXIAL-0.3|Res1|1
+16|pullup|Resistor|R3, R4, R5, R6, R7, R8, R15, R16|AXIAL-0.3|Res1|8
+17|100R|Resistor|R9, R10, R11, R12, R13, R14|AXIAL-0.3|Res1|6
+18|SHT45|Header, 4-Pin|U1a, U1b, U1c|HDR1X4|Header 4|3
+19|SCD41|Header, 4-Pin|U2|HDR1X4|Header 4|1
+20|TCA9548APWR|8-channel 1.65- to 5.5-V I2C/SMBus switch with reset & voltage translation|U3|SOP65P640X120-24N|TCA9548APWR|1

@@ -1,4 +1,4 @@
-# water-temp-node — `STM32WL_Proto`, the self-etched board
+# water-temp-node — `STM32WL_PT`, the self-etched board
 
 **This board replaces `STM32WL_FE` as the deployed node.** It is not a bench rig and
 not a stepping stone. It hangs in the same IP65 box outside the mushroom house, on
@@ -64,7 +64,7 @@ Three consequences worth stating up front, because each one is a thing that does
 
 What did change:
 
-| | `STM32WL_FE` | `STM32WL_Proto` |
+| | `STM32WL_FE` | `STM32WL_PT` |
 |---|---|---|
 | Fabrication | 2-layer fab house, soldermask, silkscreen, plated holes | **self-etched 2-layer**, no mask, no silkscreen, wire vias |
 | Passives | 0805 | through-hole axial / radial |
@@ -118,7 +118,7 @@ the **package** column is this document's own, plus the seven new references.
 | D9 | SMBJ33A, DO-214AA | **P6KE33A**, DO-15 | The through-hole member of the same family: 600 W, unidirectional, 33 V standoff, **53.3 V clamp** — the number §5's "≥63 V" rule on C11/C19 is derived from is unchanged |
 | D10 | BZX84C12, SOT-23 | **1N4742A**, DO-41 | 12 V 1 W Zener, same function. **DO-41 has two leads, so the SOT-23 pin trap of §1 cannot recur** — but the band is still the cathode and it still goes to the source |
 | U3 | TCA9548APWR, TSSOP-24 | **TCA9548A breakout module** | §3 below |
-| U7 | Traco TSR 1-2433 | **DFRobot DFR0570 + pre-regulator** | §4 below |
+| U7 | Traco TSR 1-2433 | **DFRobot DFR0570 + pre-regulator** | §4 below. 22.5 × 17 mm, 8 holes on a 0.1 in grid, measured 2026-09-08 — DFRobot publish no pin drawing |
 
 ### Kept as SMD — see §5 for why
 
@@ -157,8 +157,8 @@ them is not automatic.
 | What is likely on the module | Effect here | Verdict |
 |---|---|---|
 | ~10 kΩ upstream SDA/SCL pull-ups | parallel with R15/R16 4.7 kΩ → 3.2 kΩ over 30 mm of trace | **fine** |
-| 10 kΩ downstream pull-ups, if fitted | parallel with 2.2 kΩ → 1.8 kΩ | **fine** — §3 puts the stiffest usable pull-up at ~1.5 kΩ, set by the SHT45 having to sink 3 mA at 0.4 V |
-| Pull-up on `RESET` | parallel with R23 10 kΩ → 5 kΩ | **fine** |
+| Downstream channel pull-ups | **none fitted** on this layout — Adafruit's document for the board SKU-0260-1 clones says so explicitly | **what we want** — R17–R22 and R39/R40 are then the only pull-ups on those lines, at §3's 2.2 kΩ, with nothing in parallel |
+| Pull-up on `RESET` | **fitted** — parallel with R23 10 kΩ → about 5 kΩ | **fine**, and still fit R23: a clone that omits it would leave an active-low pin with no internal pull-up floating |
 | Decoupling capacitor | adds to the `VSENS` rail | **check it** — see below |
 
 **Two things are not optional.**
@@ -193,8 +193,13 @@ DFR0570/0571, MP1584 and LM2596 boards are all rated 28 V maximum input. A 24 V
 lead-acid bank sits at 28.8 V on absorb; an 8S LiFePO4 bank reaches 29.2 V full.
 That is not a fault case, it is every sunny afternoon."*
 
-**That objection is correct and it is not withdrawn.** The DFR0570 is
-5.5–28 V in, 3.3 V fixed, 3 A. What changes is that on this board the module never
+**That objection is correct and it is not withdrawn.** The DFR0570 is 5.5–28 V in, 3.3 V fixed.
+
+> **DFRobot's two documents disagree about the current rating** — the datasheet
+> (`DFR0570_Web.pdf`) says *"The Maximum Output Peak Current: 3A"*, their product
+> page says 2.4 A. Neither matters at our 214 mA; the datasheet is the better
+> source and it is the one cited here. Recorded because a spec that contradicts
+> itself is worth knowing about before it matters for something that does. What changes is that on this board the module never
 sees the bank. A linear pre-regulator sits between `24V_PROT` and the module and
 holds its input at roughly 21–23 V regardless of what the bank does, including
 during a TVS event.
@@ -272,6 +277,27 @@ output stay between 5.5 V and 28 V, and it does across a 3:1 input range.
   damping the input cable's resonance and sitting inside D9's clamp, and §5's
   reasoning for it is untouched.
 
+### 4.2a What else the DFR0570 datasheet settles
+
+Four numbers from `DFR0570_Web.pdf` that bear on arguments made elsewhere in the
+shared spec, all of them favourable except the last:
+
+- **Output ripple `Vpp < 50 mV` at full load**, against the TSR's 75 mV p-p typ.
+  §5's *30 mV question* — the SCD41's supply-ripple request, met at the sensor
+  rather than at the regulator because the cable and head capacitor attenuate
+  roughly 1:40 — starts from a smaller number here, so its margin grows.
+- **Efficiency ~85.4 % at 24 V in**, which is the 85 % this document already
+  assumed when converting the SCD41's 0.71 W burst into 46 mA of input current.
+  The assumption was right; it is now cited.
+- **Operating range −20…+85 °C, 20–90 %RH non-condensing**, against the TSR's
+  −40…+85 °C. The front-end box is IP65 and outside the greenhouse (§6), so the
+  humidity limit is met — but note it *is* a limit now, where the TSR had none.
+  This part must never be the one that ends up inside the mushroom house.
+- **Output accuracy ±0.1 V**, so worst case is **3.40 V** against the TSR's
+  3.37 V. Both clear the **3.6 V** ceiling that protects CN6-4 and the STM32WL,
+  but the margin shrinks from 230 mV to 200 mV. Still a factory-fixed output with
+  no trim pot, which is the property §5 actually requires.
+
 ### 4.3 Three costs, stated plainly
 
 **1. Low-bank cutoff moves up by about 5 V.** The TSR ran down to 4.75 V in. The
@@ -281,12 +307,24 @@ near **9.5 V** instead of near 5 V. §5 says the node reports `VBAT_SENSE` down 
 already destroyed, so this is a reporting loss, not an operating one — but it is a
 loss and it belongs in the field notes.
 
-**2. The idle budget is no longer known.** §5's table is dominated by one line —
-*72 % of the budget is a regulator doing nothing*, the TSR's **1 mA typ** no-load
-current. **The DFR0570's no-load current is not published**, and a 3 A module is
-not likely to beat a 1 A one at idle. Add R41's ~0.1 mA and the honest position is
-that this board's standby draw is unmeasured. It is still almost certainly a small
-fraction of 80 Wh/day — but §7 step 1 now measures it rather than assuming it.
+**2. The idle budget improves, which was not the expected answer.** §5's table is
+dominated by one line — *72 % of the budget is a regulator doing nothing*, the
+TSR's **1 mA typ** no-load current. The DFR0570's datasheet publishes
+**`No-Load Current: IQ 0.5 mA`**, half that, and a 3 A module beating a 1 A one at
+idle is genuinely surprising.
+
+| | `STM32WL_FE` | `STM32WL_PT` |
+|---|---|---|
+| regulator no-load | 1.0 mA | **0.5 mA** |
+| R41 Zener bias | — | 0.1 mA |
+| total idle, at a 25 V bank | 25 mW → **0.60 Wh/day** | 15 mW → **0.36 Wh/day** |
+| everything else, unchanged | 0.22 Wh/day | 0.22 Wh/day |
+| **whole node** | **0.80 Wh/day** | **0.58 Wh/day** |
+
+**The pre-regulator costs less than it saves.** That is the opposite of what an
+extra linear stage usually does, and it happens only because R41 was sized at
+22 kΩ — a 2.2 kΩ bias would have burnt 0.58 Wh/day by itself and wiped the gain
+out. §7 still measures it, but now as a confirmation rather than a discovery.
 
 **3. A sustained short on `24V_PRE` is survivable, not free.** The limiter holds it
 to ~130 mA and the heatsink carries the 3.3 W, indefinitely and without F1 opening
@@ -399,9 +437,9 @@ keep them clear. And Q3's heatsink is at `24V_PRE` unless it is isolated.
 **At step 1, in place of "measure the module's no-load current":**
 
 4. **Measure the whole board's standby current** at `24V_PROT`, gate closed, radio
-   idle. §5's 1 mA figure was the TSR's; the DFR0570's is unpublished. Record what
-   you actually get — it is the number the energy budget rests on, and it is now
-   the only unmeasured line in that table.
+   idle. **Expect ~0.6 mA** — 0.5 mA of module plus 0.1 mA of R41 bias (§4.3).
+   Much above that and something is leaking; much below and the module is not
+   running. This is now a confirmation of a published figure, not a discovery.
 
 **After the rail is up:**
 
@@ -425,5 +463,4 @@ keep them clear. And Q3's heatsink is at `24V_PRE` unless it is isolated.
 - **Q3 part number** is IRF740 or IRF640N pending local stock; anything N-channel
   with V_DS ≥ 100 V and V_GS(th) under 4 V works, and the 400 V rating of the
   IRF740 is incidental, not a requirement.
-- **The DFR0570's no-load current** is unpublished and becomes known at §7 step 4.
 - **`hardware-interface-proto.th.md`** — the Thai mirror is not written yet.

@@ -96,8 +96,8 @@ you find out about after paying for it.
 > reference: 88 components, every footprint one of the specified ones and exactly
 > one model per part, no orphaned wires, no floating power ports, J7 carrying 14
 > nets / 5 grounds / 21 no-connect flags, the test points fitted as pads, and seven
-> vendor libraries under `hardware/STM32WL_FE/Lib/` attached by relative path. The
-> netlist is on the PCB.
+> vendor libraries under `hardware/Lib/` attached by relative path. The netlist is
+> on the PCB.
 >
 > **Three of the nine items turned out to be defects in the spec, not the
 > drawing**, and all three were invisible to ERC. They are worth remembering,
@@ -133,7 +133,7 @@ where nothing in it was versioned and nothing cross-checked against §4a.
 What was done, and what it means if something looks wrong:
 
 1. **Renamed `WaterTempNode_FE` → `STM32WL_FE`**, after the MCU rather than after
-   the measurement, because a second board now exists — `STM32WL_Proto`, the
+   the measurement, because a second board now exists — `STM32WL_PT`, the
    self-etched board of [`hardware-interface-proto.md`](hardware-interface-proto.md)
    — and "water temp node" no longer distinguishes them. Every file, both output
    folders and all 18 name references inside `.PrjPcb`, `.OutJob` and `.Dat` were
@@ -156,22 +156,40 @@ What was done, and what it means if something looks wrong:
    from here — but it is now the *only* copy of everything that predates the first
    commit of these binaries, so it stays until that commit exists.
 
-**The vendor libraries did not move to `hardware/lib/`.** They live where the
-project already had them, `hardware/STM32WL_FE/Lib/`, attached by relative path
-(`DocumentPath=Lib\CDSOD323-T05LC\CDSOD323-T05LC.PcbLib`) and resolving correctly.
-Six are attached to the project — `AO3401A`, `BZX84C12`, `CDSOD323-T05LC`,
-`DMP6023LE-13`, `SMBJ33A`, `TCA9548APWR` — and two more sit beside them
-unattached: `TSR_1_2433` (U7 draws `CONV_TSR_1-2433` from the installed `.IntLib`,
-not from here) and `mb1389_bdp`, ST's 35 MB Nucleo reference design, which nothing
-builds but §2 of the spec cites as the authority on CN6 and CN10.
+### 2.1a The shared library folder, and the trap that came with it — 8 September
 
-> **Open question, and it belongs to `STM32WL_Proto`, not to this board.** The
-> proto reuses `AO3401A` and `CDSOD323-T05LC` unchanged. Two projects sharing one
-> library folder is what `hardware/lib/` was for. Promoting `Lib/` to
-> `hardware/lib/` means rewriting six `DocumentPath` entries from `Lib\…` to
-> `..\lib\…`; leaving it means the proto either duplicates those libraries or
-> reaches sideways into a sibling project's folder. Decide before the proto's
-> `.PrjPcb` is created, because that is the cheap moment.
+**The vendor libraries were promoted to `hardware/Lib/`** so that both boards use
+one copy. Six library pairs are attached to each project by relative path
+(`DocumentPath=..\Lib\CDSOD323-T05LC\CDSOD323-T05LC.PcbLib`): `AO3401A`,
+`BZX84C12`, `CDSOD323-T05LC`, `DMP6023LE-13`, `SMBJ33A`, `TCA9548APWR`. Two more
+sit beside them unattached — `TSR_1_2433` (U7 draws `CONV_TSR_1-2433` from the
+installed `.IntLib`, not from here) and `mb1389_bdp`, ST's 35 MB Nucleo reference
+design, which nothing builds but §2 of the spec cites as the authority on CN6 and
+CN10.
+
+`STM32WL_PT` keeps all six attached even though the proto replaces four of those
+parts (`DMP6023LE-13`, `SMBJ33A`, `BZX84C12` and `TCA9548APWR` all become
+through-hole parts or modules). They stay because the proto's sheets *start* as
+copies of the FE sheets and still carry those symbols. They come off when the parts
+do, not before.
+
+> **`Save Project As` does not copy the documents, and that is a data-loss trap.**
+> When `STM32WL_PT` was first created this way, its `.PrjPcb` came out pointing at
+> `..\STM32WL_FE\FrontEnd-signals.SchDoc`, `..\STM32WL_FE\STM32WL_FE.PcbDoc` and
+> the rest — **the same files the FE project opens**. Every path resolved, nothing
+> warned, and the first edit to "the proto schematic" would have edited the
+> released board. There is no undo for that beyond `History\`.
+>
+> The fix, and the shape to check for next time a project is branched: each sheet
+> was **copied** into `STM32WL_PT/`, the `.PrjPcb` was repointed at its own local
+> copies, the library entries were moved to `..\Lib\`, and **seventeen sections
+> were deleted** — FE's `.PcbDoc`, `.PcbLib`, both `.Cam` files and all thirteen
+> `GeneratedDocument` entries, which were FE's build outputs. `STM32WL_PT.PrjPcb`
+> now contains the string `STM32WL_FE` exactly zero times, and that is the test
+> worth running: **grep the new project file for the old project's name.**
+>
+> The proto has no `.PcbDoc` and no `.PcbLib` yet, on purpose. It needs its own,
+> with through-hole footprints — see [`pcb-home-etch.md`](pcb-home-etch.md).
 
 ### 2.2 `.gitignore`
 
@@ -205,12 +223,12 @@ instead of trusting them:
   `Buck-regulator.SchDoc.broken-1826`. They are local recovery state, not sources.
 
 Commit the sources — `.PrjPcb`, `.SchDoc`, `.PcbDoc`, `.SchLib`, `.PcbLib`,
-`.OutJob` — **and commit the vendor libraries in `hardware/STM32WL_FE/Lib/`**,
+`.OutJob` — **and commit the vendor libraries in `hardware/Lib/`**,
 STEP models included. They are the difference between a repo that builds a board
 and a repo that describes one. Commit the released fabrication zip only when you
 actually order a board, so the tag and the gerbers travel together.
 
-> **`Lib/mb1389_bdp/` is 35 MB of that, and nothing builds it.** It is ST's own
+> **`hardware/Lib/mb1389_bdp/` is 35 MB of that, and nothing builds it.** It is ST's own
 > Altium source for the NUCLEO-WL55JC1, kept because §2 of the spec treats it as a
 > better authority than UM2592 on CN6 and CN10 — and it is re-downloadable from
 > ST. Committing it makes the repo self-contained at a one-time 35 MB; ignoring it
@@ -249,7 +267,8 @@ files move, the schematic keeps working, because the symbol is cached in the
 changes to the PCB: the moment you are least able to notice one missing part among
 sixty.
 
-They sit in `hardware/STM32WL_FE/Lib/` (§2.1). That solves *where the files are*.
+They sit in `hardware/Lib/`, shared by both boards (§2.1a). That solves *where the
+files are*.
 The second half is *how the project finds them*, and it is the part that is easy to
 get wrong.
 
@@ -740,7 +759,7 @@ soldering, and HASL is cheaper).
 - [ ] `FrontEnd.SchDoc` recovered from `History\` and archived as
       `hardware/FrontEnd-rev1-superseded.SchDoc` **before** `History\` was deleted
 - [ ] The stale `[Document1] FrontEnd.SchDoc` entry removed from the `.PrjPcb`
-- [x] Vendor libraries in `hardware/STM32WL_FE/Lib/`, attached with
+- [x] Vendor libraries in `hardware/Lib/`, attached with
       `Project » Add Existing to Project...` — **not** installed globally
 - [x] `LM5164DDAR` not copied in. `mb1389_bdp` **was** copied in (35 MB, unattached,
       reference only) — see §2.2 for whether it should be committed

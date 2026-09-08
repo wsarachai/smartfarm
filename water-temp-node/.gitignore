@@ -15,3 +15,7 @@ hardware/**/*.SchDocPreview
 hardware/**/*.PcbDocPreview
 # manual recovery copies kept beside the live documents
 hardware/**/*.broken-*
+# ST's NUCLEO-WL55JC1 reference design: 35 MB, nothing builds it, and it is
+# re-downloadable from ST. docs/pcb-altium.md section 2 cites it as the authority
+# on CN6/CN10. Delete this line to commit it.
+hardware/Lib/mb1389_bdp/

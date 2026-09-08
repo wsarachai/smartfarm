@@ -1,4 +1,4 @@
-# Etching `STM32WL_Proto` at home — double-sided, toner transfer
+# Etching `STM32WL_PT` at home — double-sided, toner transfer
 
 The process document for the board specified in
 [`hardware-interface-proto.md`](hardware-interface-proto.md). That file says *what*
@@ -361,8 +361,8 @@ The three that are specific to this process:
 
 - **`24V_PRE` under 28 V with the bank at its highest.** The whole reason the
   pre-regulator exists.
-- **Whole-board standby current** at `24V_PROT`, gate closed. The DFR0570's no-load
-  figure is unpublished and this is where it becomes known.
+- **Whole-board standby current** at `24V_PROT`, gate closed. **Expect ~0.6 mA** —
+  0.5 mA of module (its datasheet) plus 0.1 mA of R41 bias.
 - **Q3 barely warm** during an SCD41 burst. Hot means the current limiter is
   engaging.
 
