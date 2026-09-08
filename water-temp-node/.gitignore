@@ -19,3 +19,16 @@ hardware/**/*.broken-*
 # re-downloadable from ST. docs/pcb-altium.md section 2 cites it as the authority
 # on CN6/CN10. Delete this line to commit it.
 hardware/Lib/mb1389_bdp/
+# Altium binary documents and libraries -- text sources only in this repo.
+# .PrjPcb / .OutJob / .Dat / .PrjScr / .pas are INI or plain text and stay.
+hardware/Lib/
+hardware/**/*.SchDoc
+hardware/**/*.PcbDoc
+hardware/**/*.SchLib
+hardware/**/*.PcbLib
+hardware/**/*.IntLib
+hardware/**/*.LibPkg
+hardware/**/*.Cam
+hardware/**/*.pdf
+hardware/**/*.step
+hardware/**/*.STEP
