@@ -32,7 +32,7 @@ not that someone remembers doing it.
 | §3 test points | decided — none this revision |
 | §4 compile, and the three libraries | **done** — zero errors, zero warnings |
 | §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
-| §6 import to the PCB | not started — `STM32WL_PT.PcbDoc` is still empty |
+| §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
 
 What the netlist confirms on the buck sheet, because it is the sheet that changed:
 Q2 drain on `24V_RAW` and source on `24V_PROT` (the reverse-polarity hookup, not
@@ -278,7 +278,9 @@ up as a part that will not fit, after the board is etched.
 `HDR1X8-P254-PT`, `HDR1X3-P254-PT`, `FUSEHOLDER-5X20-P226`, both module lands, and
 the six `CDSOD323_BRN-M` plus `SOT23-3-M` left deliberately SMD. In every case the
 `-PT` land is the **current** model, not merely an attached one.
-☐ `Tools » Footprint Manager` shows **no component with a missing model**
+☑ `Tools » Footprint Manager` shows **no component with a missing model** — and
+§6's import is the stronger form of the same check, since it resolves each land
+rather than only naming it. It found three this did not; see the note there.
 
 ---
 
@@ -419,9 +421,37 @@ a hand-drilled board puts 24 V on an output pin.
 
 ## 6. Across to the PCB
 
-☐ `Design » Import Changes From STM32WL_PT.PrjPcb`
-☐ Every component arrives with a `-PT` footprint or one of the two module
-footprints. Nothing arrives with an FE-board land.
+☑ `Design » Import Changes From STM32WL_PT.PrjPcb` — 2026-09-09, **69 of 69**.
+☑ Every component arrived with a `-PT` footprint or one of the two module
+footprints, and nothing arrived with an FE-board land. Counted off the `.PcbDoc`:
+30 axial resistors, 5 `CERAMIC-P508`, 2 `RADIAL-D8-P35`, 1 `RADIAL-D5-P20`, 3
+`DO41-P762`, 1 `DO15-P1270`, 2 `TO220-VERT-STAG`, 1 `TO92-INLINE-P254`, 6+4+1
+Phoenix, both module lands, and the seven parts left deliberately SMD.
+
+> **The three that fail here, and why a footprint audit misses them.**
+> **C11, C19 and F1** report *Footprint Not Found* on the first import
+> (`RADIAL-D8-P35` twice, `FUSEHOLDER-5X20-P226` once). The footprints are present
+> in `STM32WL_Pt.PcbLib`; what is wrong is that those three models carry an explicit
+> `MODELDATAFILE0` binding them to `C:\Users\Public\Documents\Altium\Projects\WaterTempNode_FE\WaterTempNode_FE.PcbLib` — a library from before the projects moved
+> into the repo, and no longer on disk. Every other model on the board carries no
+> library binding at all and is searched as *Any*, which is why the other 67
+> components import clean.
+>
+> **They are exactly the three whose footprint name did not change.** C11, C19 and
+> F1 were already through-hole on the FE board, so §1's table asks them for a name
+> they already had — nothing was edited, and not editing them is what preserved the
+> old binding. A check that every component's *current* model is the right **name**
+> passes on all three, because the name was never the problem. The question a
+> footprint audit has to ask as well is **where that name is told to look**.
+>
+> Fix each in `Buck-regulator.SchDoc`: double-click the part, `Models` →
+> `RADIAL-D8-P35` (or `FUSEHOLDER-5X20-P226`) → **Edit...** → in the **PCB Library**
+> group choose **`Any`**. The preview fills in as soon as it resolves.
+>
+> **Do not fix it by attaching `WaterTempNode_FE.PcbLib`**, even if a copy turns up.
+> §2.1a is why the PT project carries no FE-era reference at all, and that library
+> predates `MakeFootprintsPT.pas` — its lands have fab-house pads, which is the one
+> thing a hand-drilled hole cannot use.
 ☐ Then [`pcb-home-etch.md`](pcb-home-etch.md) Stage 1 for the layout rules —
 bottom layer is the real board, GND poured on both faces, nothing routed between
 2.54 mm pins, and vias counted as you go.
