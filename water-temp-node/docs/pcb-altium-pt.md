@@ -29,9 +29,9 @@ not that someone remembers doing it.
 | §1 footprints, all three sheets | **done** — 69 components, every one carrying a `-PT` land as its *current* model |
 | §2 the buck sheet's circuit | **done** — the netlist matches §2.2 pin for pin, and `24V_PRE` exists exactly once |
 | §3 C1's package | decided — `CERAMIC-P508`, 10 µF, still subject to the §5 audit |
-| §3 test points | **undecided** |
-| §4 compile, and the three libraries | not started |
-| §5 the module pre-fit audit | not started — bench work |
+| §3 test points | decided — none this revision |
+| §4 compile, and the three libraries | **done** — zero errors, zero warnings |
+| §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
 | §6 import to the PCB | not started — `STM32WL_PT.PcbDoc` is still empty |
 
 What the netlist confirms on the buck sheet, because it is the sheet that changed:
@@ -64,8 +64,9 @@ but fix both, or the next board copied from either one inherits it again.
 The GND port at the end of that wire was replaced by a `VSENS` port of the same
 **Bar** style as the sheet's other three, so the fix carries the right net name and
 the right symbol; the sheet is down to three GND ports from four.
-☐ The same fix in `STM32WL_FE` — **not done**, that file is untouched since
-2026-09-06 and still has the GND port at the same coordinate.
+☑ The same fix in `STM32WL_FE`, 2026-09-09 — a `VSENS` port of the same Bar
+style, one grid step in from where the PT board put its own. **Both boards are
+now right**, so nothing copied from either one inherits the pull-down again.
 
 ### Three fields that would have reached the BOM wrong — fixed 2026-09-09
 
@@ -368,24 +369,26 @@ R23 went to GND.
 It is also the reason this is the **only** warning: A0/A1/A2 are Input pins too,
 but they sit on GND, and a power port counts as a driver.
 
-☐ Suppress it at the pin — `Place » Directives » Generic No ERC` on `U3` pin 3 —
-rather than by lowering *Nets with no driving source* in `Project » Project
-Options » Error Reporting`, which is global and would hide a genuinely undriven
-input somewhere else. `FrontEnd-signals.SchDoc` already carries 26 No-ERC
-directives; `I2C-sensors.SchDoc` carries none, and this would be its first.
+☑ Suppressed at the pin, 2026-09-09 — a `Place » Directives » Generic No ERC` on
+`U3` pin 3, on **both** boards, rather than by lowering *Nets with no driving
+source* in `Project » Project Options » Error Reporting`, which is global and
+would hide a genuinely undriven input somewhere else. `FrontEnd-signals.SchDoc`
+already carried 26 No-ERC directives; this is `I2C-sensors.SchDoc`'s first.
 ☐ Check the compile output for **floating power ports**. This project carries all
 connectivity on power ports, so a mistyped `24V_PRE` does not error — it silently
 creates a second, unconnected net with a similar name. Look at the Net list and
 confirm there is exactly one `24V_PRE`.
-◪ **Remove the three libraries the proto no longer uses** — `DMP6023LE-13`,
+☑ **Remove the three libraries the proto no longer uses** — `DMP6023LE-13`,
 `SMBJ33A`, `BZX84C12`. They were kept attached deliberately until now, because the
 copied sheets still carried those symbols. They come off *after* the parts are
 swapped, not before (`pcb-altium.md` §2.1a). **2026-09-09: two of the three are
 gone** (`DMP6023LE-13` and `SMBJ33A`, both halves each), and `TESTPOINT.SchLib`
 went with them, settling §3's second question in the spec's favour. **`BZX84C12`
 is still attached** — it is two files under one folder name,
-`diode-nc_pin.SchLib` and `SOT-23.PcbLib`, which is what makes it the easy one to
-miss.
+`diode-nc_pin.SchLib` and `SOT-23.PcbLib`, which is what made it the easy one to
+miss. **Gone too, later the same day.** What is left attached is exactly what is
+still used: `CDSOD323-T05LC` for D1–D6, `AO3401A` for Q1, `TCA9548APWR` for U3's
+symbol, plus the project's own `STM32WL_PT.SchLib` and `STM32WL_Pt.PcbLib`.
 ☐ **`TCA9548APWR` stays**, against the earlier plan: the module reuses its symbol
 (§0). Only the footprint changes, and the footprint is the part that is still
 missing.
