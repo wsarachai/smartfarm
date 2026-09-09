@@ -258,6 +258,10 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=AWYMFGMB
 
+[GeneratedDocument1]
+DocumentPath=Project Outputs for STM32WL_PT\Design Rule Check - STM32WL_PT.html
+DItemRevisionGUID=
+
 [Configuration1]
 Name=Sources
 ParameterCount=0

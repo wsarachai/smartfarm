@@ -17,7 +17,7 @@ the FE board.
 
 ---
 
-## Where this stands — 2026-09-09
+## Where this stands — 2026-09-10
 
 **The schematic is drawn and it verifies**, with one wiring bug and three BOM
 fields left. Nothing below is ticked from memory: the three `.SchDoc` files were
@@ -33,6 +33,7 @@ not that someone remembers doing it.
 | §4 compile, and the three libraries | **done** — zero errors, zero warnings |
 | §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
 | §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
+| Layout, `pcb-home-etch.md` Stage 1 | **in progress** — rules set, rooms deleted, placement next |
 
 What the netlist confirms on the buck sheet, because it is the sheet that changed:
 Q2 drain on `24V_RAW` and source on `24V_PROT` (the reverse-polarity hookup, not
@@ -41,6 +42,60 @@ and its source on D12-A / R42 / Q4-B, Q4's emitter on `24V_PRE`, and U7 with 1+2
 `24V_PRE`, 5+6 on `V3V3_MCU`, 3/4/7/8 on GND. On the I2C sheet, U3's `VIN` is on
 `VSENS` and A0/A1/A2 are all on GND — the two things §3 of the spec delta calls not
 optional.
+
+### Picking this up again
+
+The schematic is finished and committed. The board is open work, and it lives in
+files git does not track — see the warning at the end of this section.
+
+**Done, and verified by reading `STM32WL_PT.PcbDoc` back:**
+
+- All 69 components imported with the right land.
+- The board artwork is placed (outline, origin, three fiducials, `100.0 mm` scale
+  bar, `TOP`/`BOT` copper markers) — `DrawArtworkPT` has already run. Running it a
+  second time would duplicate all of it; `CheckBoardPT` is the safe way to ask.
+- **Six design rules set**, values confirmed out of the file (Altium stores them in
+  mil): `Width` 0.5/1.0 mm at priority 2 scoped `All`; **`W_POWER` 3.0/6.0 mm at
+  priority 1** scoped `InNet('24V_PROT') or InNet('24V_PRE') or InNet('GND')` —
+  the priority is what makes the 3 mm rule win, and a `W_POWER` sitting below
+  `Width` silently does nothing; `Clearance` 0.5 mm; `RoutingVias` 2.0 mm pad /
+  0.8 mm hole; `HoleSize` 0.8–1.3 mm; `MinimumAnnularRing` **0.45 mm**.
+- The three sheet rooms Altium added at import have been deleted, because §6's
+  floorplan is edge-driven and crosses every sheet boundary.
+
+**`MinimumAnnularRing` = 0.45 mm is derived, not quoted.** It is the narrowest ring
+on the board — the 1.9 mm pad on a 1.0 mm hole that Stage 1 sizes for 2.54 mm
+pitch, so (1.9 − 1.0) / 2. Everything else is wider (Phoenix 0.55, general 0.70,
+via 0.60). Altium's own default is 0.05 mm, which catches nothing.
+
+**Next action: placement**, in the order §6 of
+[`hardware-interface-proto.md`](hardware-interface-proto.md) fixes — edge
+connectors first, then the 24 V corner in the physical sequence
+J14 → F1 → Q2 → D9 → C11, then the modules, then the rest. Three things to carry
+into it that are not obvious from the floorplan sketch:
+
+- **C19 belongs beside U7, not in the 24 V corner.** The ASCII sketch groups it
+  with C11 out of history — it moved to `24V_PRE` and is now the module's input
+  bulk, which §5 wants within 5 mm of the module pins. The prose is right and the
+  picture is stale.
+- **J1–J6 run P0→P5 along the bottom edge and the order is load-bearing** — it is
+  `DS_PROBE_BUSES` and the dashboard metric names. Swapping two silently relabels
+  which end of the greenhouse a reading came from.
+- **J13 is not in the sketch at all.** It goes on the left edge near J7, whose pins
+  35/37 carry its `DBG_TX`/`DBG_RX`.
+
+Edge budget, checked against the real footprints: bottom needs ~84 mm of 160
+(J1–J6 + J14), right ~64 of 120 (J9–J12), left ~77 of 120 (J7's 57 mm shroud plus
+CN6). Every edge fits with room to spare, which is what §6's "~256 mm of edge"
+was counting.
+
+> ⚠ **The board and the sheets are not in git and cannot be.** `.PcbDoc`,
+> `.SchDoc`, `.PcbLib` and `.SchLib` are all ignored, so what is committed is the
+> *account* of this work, never the work. Everything since 2026-09-08 — the whole
+> pre-regulator, the R23 fix, the rules, the import — exists in exactly one place
+> on one disk. **Copy `hardware/STM32WL_PT/` somewhere else before closing.**
+
+---
 
 ### The one bug — R23 pulls `RESET` **down**, and it is on both boards
 
