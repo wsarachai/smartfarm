@@ -136,16 +136,31 @@ Begin
 End;
 
 
-{ 100.0 mm between the OUTSIDE of the two end ticks.  Measure it on a
+{ 100.0 mm CENTRE TO CENTRE of the two end ticks.  Measure it on a
   plain-paper proof with calipers before transferring anything: a printer set
   to shrink-to-fit produces a board where every 2.54 mm header refuses to seat
-  by the fourth pin (pcb-home-etch.md Stage 2, GATE 2). }
+  by the fourth pin (pcb-home-etch.md Stage 2, GATE 2).
+
+  MEASURE CENTRE TO CENTRE, NOT OUTSIDE TO OUTSIDE.  The ticks are drawn AT
+  x and x+100, so their outer edges are half a line width beyond that on each
+  side: outside-to-outside reads 100.5 and inside-to-inside 99.5.  GATE 2's
+  tolerance is +-0.3 mm, so measuring the outside of a perfectly printed bar
+  fails the gate and invites rescaling artwork that was already correct.
+  Centre to centre is 100.0 whatever the line width is, which is the whole
+  reason to measure it that way.
+
+  THE WIDTH IS 0.5 mm BECAUSE THE DESIGN RULE SAYS SO.  These tracks sit on
+  copper, so the Width rule (min 0.5 mm) polices them like any other track.
+  At the 0.4 mm they were first drawn at, the bar and its three ticks raise
+  eight MinWidthStubTrack violations on both layers -- and GATE 1 asks for a
+  clean DRC, which a board carrying eight known-harmless violations can never
+  honestly pass. }
 Procedure PutScaleBar(Board : IPCB_Board; Layer : TLayer; X, Y : Real);
 Begin
-    PutTrack(Board, Layer, X,         Y, X + 100.0, Y, 0.4);
-    PutTrack(Board, Layer, X,         Y - 1.5, X,         Y + 1.5, 0.4);
-    PutTrack(Board, Layer, X + 50.0,  Y - 1.0, X + 50.0,  Y + 1.0, 0.4);
-    PutTrack(Board, Layer, X + 100.0, Y - 1.5, X + 100.0, Y + 1.5, 0.4);
+    PutTrack(Board, Layer, X,         Y, X + 100.0, Y, 0.5);
+    PutTrack(Board, Layer, X,         Y - 1.5, X,         Y + 1.5, 0.5);
+    PutTrack(Board, Layer, X + 50.0,  Y - 1.0, X + 50.0,  Y + 1.0, 0.5);
+    PutTrack(Board, Layer, X + 100.0, Y - 1.5, X + 100.0, Y + 1.5, 0.5);
 End;
 
 

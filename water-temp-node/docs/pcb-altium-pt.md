@@ -44,7 +44,8 @@ picked up a new bug**, below.
 | §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
 | **Q1's symbol — Bug 2** | **closed** 2026-09-10 14:56 — pins on `AO3401A`'s numbering, land back to `SOT23-3-M`, verified out of the saved board |
 | §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
-| Layout, `pcb-home-etch.md` Stage 1 | **in progress** — rules set, rooms deleted, placement next |
+| Layout, `pcb-home-etch.md` Stage 1 | **placed** 2026-09-10 20:36 — all 69 at their §6 positions, 16 locked, three keep-outs drawn. Routing next |
+| DRC on the placed board | **two findings, both handled** — see *What the first DRC found* |
 
 What the netlist confirms on the buck sheet, because it is the sheet that changed:
 Q2 drain on `24V_RAW` and source on `24V_PROT` (the reverse-polarity hookup, not
@@ -121,6 +122,53 @@ Edge budget, checked against the real footprints: bottom needs ~84 mm of 160
 (J1–J6 + J14), right ~64 of 120 (J9–J12), left ~77 of 120 (J7's 57 mm shroud plus
 CN6). Every edge fits with room to spare, which is what §6's "~256 mm of edge"
 was counting.
+
+### What the first DRC found — 2026-09-10
+
+`PlaceFloorplanPT` and `DrawKeepoutsPT` both ran clean, and the saved board
+checks out: **all 69 components at exactly the scripted coordinates and
+rotations**, exactly the **16 intended locks**, and **12 keep-out tracks** forming
+three closed rectangles with no duplicates. Read back out of `Components6` and
+`Tracks6`, not from the dialogs that reported it.
+
+The DRC then found two things worth writing down.
+
+**1. Two ComponentClearance violations — Q2 against R38, and Q2 against D9.**
+Fixed by moving `R38` to (112, 33) and `D9` to (104, 18); the tightest pair on
+the board is now D10–Q2 at 0.69 mm against a 10 mil rule.
+
+The cause is worth more than the fix. `TO220-VERT-STAG`'s silk body runs from
+**+1.60 to +6.30 above the pad row**, so a TO-220 placed at y=18 reaches y=24.4
+and is **10.4 × 9.6 mm**, not the 7.5 × 4.4 its three pads suggest. The geometric
+check that cleared this floorplan before it was ever run carried a **hand-typed**
+table of footprint boxes, and its TO-220 entry was wrong in exactly that way. It
+passed, and Altium disagreed.
+
+That is the same failure as Bug 2 one level up: a model of a part, typed out by
+hand, that looks right and that nothing contradicts. So the check no longer types
+anything — `hardware/scripts/check_floorplan.py` **derives every extent by reading
+the actual `AddPadPT` / `AddRowPT` / `AddSilkBoxPT` calls out of
+`MakeFootprintsPT.pas`**. Against the saved board it reproduces Altium's DRC
+exactly: the same two violations, no false positives and no misses. Run it after
+moving anything in `PlacePartsPT.pas`.
+
+**2. Eight MinWidthStubTrack violations, all `Actual Width = 0.4mm, Target Width
+= 0.5mm`** — the scale bar and its three ticks, on both copper layers. They are
+artwork, not net copper, but they sit on copper and the `Width` rule polices them
+like anything else. **GATE 1 asks for a clean DRC, and a board carrying eight
+known-harmless violations cannot honestly pass it** — that is how the ninth,
+which is not harmless, gets waved through. `SetupBoardPT.pas` now draws them at
+0.5 mm. On *this* board, select the eight tracks and set their width to 0.5 mm.
+
+**And the scale bar was being measured wrong in the process document.** Its
+comment said *100.0 mm between the OUTSIDE of the two end ticks*, but the ticks
+are drawn **at** 0 and 100 mm, so outside-to-outside is 100.0 plus one line
+width. At 0.5 mm tracks that reads **100.5** on a perfectly printed proof — which
+fails GATE 2's ±0.3 mm on its own, and the natural response to failing it is to
+rescale artwork that was already correct, which is the precise disaster the bar
+exists to prevent. **Centre to centre is 100.0 whatever the line width is.**
+Corrected in `SetupBoardPT.pas`, `pcb-home-etch.md` and `pcb-home-etch.th.md` —
+the Thai one being the copy that is actually printed and taken to the bench.
 
 > ⚠ **The board and the sheets are not in git and cannot be.** `.PcbDoc`,
 > `.SchDoc`, `.PcbLib` and `.SchLib` are all ignored, so what is committed is the

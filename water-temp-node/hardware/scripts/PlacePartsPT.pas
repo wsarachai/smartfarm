@@ -359,12 +359,20 @@ Begin
       "ground is just ground" is wrong. }
     PlaceOne(Board, 'F1',  138.0,  18.0,  0.0, FREE);
     PlaceOne(Board, 'Q2',  118.0,  18.0,  0.0, FREE);   { tab = 24V_PROT, LIVE }
-    PlaceOne(Board, 'D9',  105.0,  18.0,  0.0, FREE);
+    PlaceOne(Board, 'D9',  104.0,  18.0,  0.0, FREE);
     PlaceOne(Board, 'C11', 104.0,  30.0,  0.0, FREE);
 
     { Q2's gate clamp. R38 and D10 are a pair and both belong AT the FET --
-      without D10 V_GS reaches -32 V against a +-20 V limit. }
-    PlaceOne(Board, 'R38', 112.0,  30.0, 90.0, FREE);
+      without D10 V_GS reaches -32 V against a +-20 V limit.
+
+      R38 SITS HIGHER THAN IT LOOKS IT SHOULD, and so does the gap to D9.
+      TO220-VERT-STAG's body box runs from +1.60 to +6.30 ABOVE the pad row,
+      so a TO-220 placed at y=18 reaches y=24.4 and is 10.4 mm wide, not the
+      7.5 mm the pads suggest. Both were first placed against a hand-guessed
+      extent and Altium's ComponentClearance caught them at 10 mil.
+      check_floorplan.py now derives every extent from MakeFootprintsPT.pas
+      instead; run it after moving anything here. }
+    PlaceOne(Board, 'R38', 112.0,  33.0, 90.0, FREE);
     PlaceOne(Board, 'D10', 118.0,  30.0, 90.0, FREE);
 
     { VBAT_SENSE divider. Section 6 wants it LAST along the 24V_PROT node and

@@ -157,8 +157,15 @@ size"**. Print on plain paper first and check the scale bar with calipers — a
 printer set to shrink-to-fit will produce a board that is 3 % small and every
 2.54 mm header will refuse to seat by the fourth pin.
 
-**GATE 2** — the scale bar measures **100.0 ± 0.3 mm** on a plain-paper proof, and
-`TOP`/`BOT` are the right way round on their respective sheets.
+**GATE 2** — the scale bar measures **100.0 ± 0.3 mm** on a plain-paper proof,
+**measured centre to centre of the two end ticks**, and `TOP`/`BOT` are the right
+way round on their respective sheets.
+
+> **Centre to centre, not outside to outside.** The ticks are drawn *at* the
+> 0 and 100 mm marks, so their outer edges sit half a line width further out —
+> outside-to-outside reads 100.5 on a correct print, which fails this gate's
+> ±0.3 mm by itself and invites rescaling artwork that was already right.
+> Centre to centre is 100.0 whatever the line width is.
 
 ---
 
