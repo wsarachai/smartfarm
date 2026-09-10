@@ -525,6 +525,28 @@ right edge, each pair picking up its own 2.2 k.
 **G. Pour GND on both layers, then stitch.** 8–12 stitching vias spread across the
 board, most densely in the 24 V corner where the surge return matters.
 
+> **You never route a GND track on this board, and the ratsnest will not tell you
+> that.** GND is 47 pads — the biggest net here — and Altium draws a connection
+> line for every one of them, which reads like 47 tracks waiting to be drawn. They
+> are not. Rule 4 is that GND arrives as **copper poured on both faces**; the pour
+> satisfies those connections and the ratsnest lines disappear when it is placed.
+>
+> This is the point at which someone tries to draw a track from C11's negative to
+> U3 and finds a keep-out rectangle in the way. **Those two share GND and nothing
+> else** — C11 is on `24V_PROT`, U3 runs on `VSENS` — so there was never a track
+> to draw. The rectangle is doing its job.
+>
+> **The pour reaches every GND pad**, checked against the placed board: all 47 sit
+> **outside** the three keep-outs, none within half a pad of an edge. The module
+> rectangles are inset between the pad columns precisely so the modules' own eight
+> GND pads stay reachable from outside.
+
+**How to place the pours.** `Place › Polygon Pour`, one per copper layer, net
+**GND**, **Pour Over All Same Net Objects**, **Remove Dead Copper** on. Draw each
+to the board outline. Then the stitching vias, then repour (`Tools › Polygon
+Pours › Repour All`) and re-run the DRC — `DisconnectedSubnets` should fall by
+roughly the GND count in one step.
+
 ### The via budget, counted off the placed board
 
 **135 of the 217 through-holes — 62 % — sit under a component body**, so they can
