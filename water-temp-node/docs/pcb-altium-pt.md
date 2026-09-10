@@ -19,10 +19,20 @@ the FE board.
 
 ## Where this stands — 2026-09-10
 
-**The schematic is drawn and it verifies**, with one wiring bug and three BOM
-fields left. Nothing below is ticked from memory: the three `.SchDoc` files were
-read back and a netlist derived from them, so a tick here means the file says so,
-not that someone remembers doing it.
+**The schematic is drawn and it verifies**, and the board has rules, artwork and
+all 69 parts on it. Nothing below is ticked from memory: the three `.SchDoc`
+files, `STM32WL_PT.PcbDoc` and both PCB ECO logs were read back and the netlist
+derived from them, so a tick here means the file says so, not that someone
+remembers doing it.
+
+**Re-audited 2026-09-10, after the afternoon's schematic edits.** Everything the
+morning's entry claimed still holds — the six design rules carry the right values
+in the file, the origin is at 20/20 mm, FID1–3 and both scale bars are there, no
+rooms survive, and Bug 1's fix reads back as three GND ports and four Bar ports on
+the I2C sheet. Two things changed since: the three Zener `Comment` fields now
+carry their voltage as well as their part number (`1N4742A 12V`, `1N4744A 15V`,
+`1N4750A 27V`), which is worth having on a board with no silkscreen — and **Q1
+picked up a new bug**, below.
 
 | Section | State |
 |---|---|
@@ -32,6 +42,7 @@ not that someone remembers doing it.
 | §3 test points | decided — none this revision |
 | §4 compile, and the three libraries | **done** — zero errors, zero warnings |
 | §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
+| **Q1's symbol — Bug 2** | **open, and it blocks routing** — the nets sit one pad round from where the part's own pins are |
 | §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
 | Layout, `pcb-home-etch.md` Stage 1 | **in progress** — rules set, rooms deleted, placement next |
 
@@ -68,6 +79,10 @@ on the board — the 1.9 mm pad on a 1.0 mm hole that Stage 1 sizes for 2.54 mm
 pitch, so (1.9 − 1.0) / 2. Everything else is wider (Phoenix 0.55, general 0.70,
 via 0.60). Altium's own default is 0.05 mm, which catches nothing.
 
+**Fix Bug 2 first.** Placement itself does not care which pad a net is on, so the
+floorplan below can go ahead — but nothing should be *routed* until Q1's symbol is
+back, because the ratsnest around it is currently pointing at the wrong three pads.
+
 **Next action: placement**, in the order §6 of
 [`hardware-interface-proto.md`](hardware-interface-proto.md) fixes — edge
 connectors first, then the 24 V corner in the physical sequence
@@ -97,7 +112,7 @@ was counting.
 
 ---
 
-### The one bug — R23 pulls `RESET` **down**, and it is on both boards
+### Bug 1 — R23 pulls `RESET` **down**, and it is on both boards
 
 `I2C-sensors.SchDoc` wires **R23 pin 1 to a GND port** and pin 2 to `U3.RESET`. The
 spec wants the other rail: `hardware-interface.md` §4a lists R23 as the `RESET`
@@ -135,6 +150,75 @@ said P6KE33A all along; only the field the BOM prints had been missed.
 was placed, against a `Comment` that was already right (`1N4744A`). A 27 V part in
 D12's place is not a gate–source clamp at all.
 ☑ **R23** `Comment` `220R` → `10K`, matching its `Value`.
+
+---
+
+### Bug 2 — Q1's symbol was swapped, and its pads no longer match the part
+
+**Found 2026-09-10**, reading `FrontEnd-signals.SchDoc` and the 12:26 ECO log back
+after the afternoon's edits. **Not yet fixed.**
+
+`Q1`'s schematic symbol is no longer the vendor one. It is now **`MOSFET-P` from
+`Miscellaneous Devices.IntLib`**, and the two symbols number their pins
+differently — read out of the `.SchDoc` pin records, not from memory:
+
+| Symbol | Gate | Source | Drain |
+|---|---|---|---|
+| **`AO3401A.SchLib`** — AOS PO-00001, and what `SOT23-3-M` was drawn from | **1** | **2** | **3** |
+| **`MOSFET-P`**, Miscellaneous Devices | **2** | **3** | **1** |
+
+The schematic still *reads* right — source on `V3V3_MCU`, drain on `VSENS`, gate on
+the `R1`/`R2` junction, exactly the diagram under *The rail gate* in `hardware-interface-s88.md`.
+What changed is which **pad** each of those lands on, and the two ECO logs say it
+plainly:
+
+| | 2026-09-09, `AO3401A` | 2026-09-10 12:26, `MOSFET-P` |
+|---|---|---|
+| gate node, `R1-1` + `R2-2` | `NetQ1_1` on **Q1-1** | `NetQ1_2` on **Q1-2** |
+| `V3V3_MCU` | **Q1-2** | **Q1-3** |
+| `VSENS` | **Q1-3** | **Q1-1** |
+
+`SOT23-3-M`'s pads carry the AOS drawing's numbers — 1 gate, 2 source, 3 drain —
+and that footprint has not been touched since 2026-09-08. So on copper the three
+nets are now **rotated one place around the part**: pad 1, the **gate**, carries
+`VSENS`; pad 2, the **source**, carries the gate-drive node; pad 3, the **drain**,
+carries `V3V3_MCU`.
+
+**What the board would do.** `VSENS` has no path to a supply at all, so the rail
+never comes up and everything behind it — six probes, three SHT45s, the mux — is
+dead. The body diode (drain→source on a P-FET) instead feeds 3V3 into the
+`R1`/`R2` node and parks it near 2.6 V, so pulling `SENS_GATE` low sinks
+(3.3 − 0.7) / `R2` back into PA8 — **26 mA at `R2` = 100 Ω**, against the STM32's
+20 mA per-pin limit. And the gate now sits on `VSENS`, which is to say on its own
+output. That is not a switch.
+
+**Why every audit in this document passes it.** §1 asks whether each component
+carries the right footprint *name*: Q1 still says `SOT23-3-M`, and that is still
+the right land for the right part. §4 compiles clean, because a symbol numbered
+1–2–3 wired to a footprint numbered 1–2–3 has no error to report. §6 counted 69 of
+69, every one with a `-PT` or module land, Q1 among them. **The netlist is
+consistent; it is just wrong** — which is the sentence `MakeFootprintsPT.pas`
+already carries in its `Make_ModTCA9548A` comment, for exactly this failure on the
+mux. Same class of bug, second occurrence, and the reason that comment is in the
+script.
+
+**The fix is to put the vendor symbol back**, not to renumber anything.
+`..\Lib\AO3401A\AO3401A.SchLib` is still attached to the project
+(`STM32WL_PT.PrjPcb`, `[Document11]`), so nothing was ever missing:
+
+☐ Replace Q1's symbol with `AO3401A`, keeping footprint `SOT23-3-M`.
+☐ Confirm `R1-2` is still on `V3V3_MCU` and `R2-1` still on `SENS_GATE` — neither
+moved in the 12:26 ECO, but both are part of the same node.
+☐ Re-import, and check the ECO says gate node on **Q1-1**, `V3V3_MCU` on **Q1-2**,
+`VSENS` on **Q1-3**.
+
+> **Renumbering `SOT23-3-M` would fix this board and break the part.** The land is
+> named for the AOS drawing and `MakeFootprintsPT.pas` documents it that way; a
+> footprint whose pad numbers no longer match its datasheet is the next person's
+> version of this same bug.
+
+**`STM32WL_FE` is not affected.** Its `FrontEnd-signals.SchDoc` still carries the
+`AO3401A` symbol — unlike Bug 1, this one was introduced here and is not inherited.
 
 ---
 
