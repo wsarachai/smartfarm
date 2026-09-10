@@ -485,9 +485,28 @@ longer exists, so it will import as *Footprint Not Found*. Double-click C21 →
 **5. Re-import.** `Design › Update PCB Document STM32WL_PT.PcbDoc` → **Validate
 Changes** → **untick `Add Rooms`** → **Execute Changes**.
 
-> ✓ **Check:** the ECO changes **C21**'s footprint and updates **Q2**/**Q3**, and
-> touches **no pins and no nets**. A `Change Footprint` line on anything else, or
-> any `Added Pin To Net`, means something moved that should not have.
+> ✓ **Check:** the ECO changes **C21**'s footprint and touches **no pins and no
+> nets**. Any `Added Pin To Net` means something moved that should not have.
+
+**5b. `Tools › Update From PCB Libraries...` — and this is not optional.**
+
+> **The ECO in step 5 will NOT update Q2 and Q3, and it will not tell you so.**
+> `Design › Update PCB Document` compares the schematic to the board: the
+> netlist, and footprint **names**. It does not compare the board's footprint
+> **geometry** against the library. C21 came across because its name changed
+> — `RADIAL-D5-P20` → `RADIAL-D5-P508`. **`TO220-VERT-STAG` kept its name and only
+> its pads moved, so nothing looked different and the old 2.0 mm stagger stayed
+> on the board.** Verified by reading the pads back: C21 landed on ±2.54 mm, Q2
+> and Q3 were still at −2.00.
+>
+> Same shape as every other bug in this document — a check that asks after a
+> **name** passing while the thing behind the name has changed.
+
+On the PCB document run **`Tools › Update From PCB Libraries...`**, select **Q2**
+and **Q3** (or all components — it only lists what actually differs), and execute.
+
+> ✓ **Check:** the dialog lists Q2 and Q3 and nothing surprising. Afterwards
+> their outer pads sit **2.5 mm** below the centre pad, not 2.0.
 
 **6. Re-place.** If `PlacePartsPT.pas` is open, **close and reopen its tab** —
 Altium runs the compiled copy it already has. Then `CheckPlacementPT` (expect 69
