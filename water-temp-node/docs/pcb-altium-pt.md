@@ -221,15 +221,62 @@ already carries in its `Make_ModTCA9548A` comment, for exactly this failure on t
 mux. Same class of bug, second occurrence, and the reason that comment is in the
 script.
 
-**The fix is to put the vendor symbol back**, not to renumber anything.
-`..\Lib\AO3401A\AO3401A.SchLib` is still attached to the project
-(`STM32WL_PT.PrjPcb`, `[Document11]`), so nothing was ever missing:
+#### What the fix actually has to touch — read before doing it
 
-☐ Replace Q1's symbol with `AO3401A`, keeping footprint `SOT23-3-M`.
+Three things read out of `FrontEnd-signals.SchDoc` on 2026-09-10 narrow the job
+and change how it should be done:
+
+**1. The footprint is already right, and already current.** Q1 carries three
+models: `E3` (`PCBLIB`), `PMOS` (`SIM`), and `SOT23-3-M` (`PCBLIB`, `ISCURRENT=T`).
+So the land was set back correctly after the symbol was swapped, the PCB has the
+right pads, and **only the pin numbering is wrong**. The fix is narrower than
+re-doing the part.
+
+**2. Delete the `E3` model while you are in there.** It came in with `MOSFET-P`
+and it is a **TO-92** land — `TO, Flat Index; 3 In-Line, Axial Leads; Body Dia.
+4.6mm`. It is not current, so it does nothing today; it is one click in the
+Models list from becoming Q1's footprint, on a board where Q1 is the only SOT-23
+and the only part that needs magnification to solder.
+
+**3. Swapping the symbol will break all three wires, because the two symbols are
+not the same shape.** Pin positions relative to the component origin:
+
+| | Gate | Source | Drain |
+|---|---|---|---|
+| `AO3401A` — a plain box, all three pins on the **right edge** | (+30, −10) | (+30, −20) | (+30, 0) |
+| `MOSFET-P` — the classic glyph, **gate on the left** | (0, −10) | (+20, −20) | (+20, 0) |
+
+Only the drain lands in a comparable place. This is very likely *why* the swap
+happened — the vendor symbol is a featureless box and the stock one reads like a
+MOSFET — so it is worth deciding on purpose rather than reverting on reflex.
+
+#### Two ways to fix it, and which one this board should take
+
+**Restore `AO3401A`. This is the one to do.** `..\Lib\AO3401A\AO3401A.SchLib`
+is still attached to the project (`STM32WL_PT.PrjPcb`, `[Document11]`), so nothing
+was ever missing. Its pin numbers are the AOS drawing's, which is what
+`SOT23-3-M` was built from, and it is what `STM32WL_FE` carries — so both boards
+match again and neither can seed this bug into a third. Cost: a box symbol, and
+three wires to redraw.
+
+**If the glyph is worth keeping**, the safe version is *not* to renumber the
+placed part — `Tools › Update From Libraries` reverts that silently and without a
+warning, which makes it a worse bug than the one it fixes. It is to copy the
+symbol into `STM32WL_PT.SchLib` (which already exists and already holds
+`MOD-DFR0570`), renumber its pins to G=1 S=2 D=3 **there**, and — the part that
+matters — **give it a different name**, e.g. `AO3401A-GLYPH`. A project-local
+symbol still called `MOSFET-P` that disagrees with the stock `MOSFET-P` about pin
+numbers is the next person's version of this same bug.
+
+☐ Replace Q1's symbol with `AO3401A`, keeping `SOT23-3-M` as the current model.
+☐ Redraw the three wires — gate to the `R1`/`R2` junction, source to `V3V3_MCU`,
+drain to `VSENS`.
+☐ Delete the `E3` model from Q1.
 ☐ Confirm `R1-2` is still on `V3V3_MCU` and `R2-1` still on `SENS_GATE` — neither
 moved in the 12:26 ECO, but both are part of the same node.
 ☐ Re-import, and check the ECO says gate node on **Q1-1**, `V3V3_MCU` on **Q1-2**,
-`VSENS` on **Q1-3**.
+`VSENS` on **Q1-3**. That line in the log is the proof, not the schematic looking
+right — the schematic looked right the whole time this bug existed.
 
 > **Renumbering `SOT23-3-M` would fix this board and break the part.** The land is
 > named for the AOS drawing and `MakeFootprintsPT.pas` documents it that way; a
