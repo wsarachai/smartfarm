@@ -442,6 +442,91 @@ numbers are the ones its datasheet uses.
 
 ---
 
+## The footprint rebuild — do these in order
+
+Two footprints changed (`RADIAL-D5-P20` → `RADIAL-D5-P508`, and
+`TO220-VERT-STAG`'s stagger), which means the library is rebuilt and the board
+re-imported. Everything below has a check at the end of it; do not carry on past
+one that fails.
+
+**0. Back up `hardware/STM32WL_PT/` first.** It is not in git and cannot be. This
+is the step that is skipped because it is not interesting.
+
+**1. Empty `STM32WL_Pt.PcbLib`.** Open it, select all 18 footprints in the **PCB
+Library** panel, delete, save.
+
+> **Why empty it rather than edit the two by hand.** `MakeFootprintsPT.pas` says
+> in its own completion message: *re-run only into an empty library, or you get
+> duplicates*. And hand-editing two footprints is four pad moves and a rename
+> that nothing checks — which is the shape of every bug in this document. The
+> script is the source of truth; let it be the source.
+
+**2. Rebuild.** Click the `STM32WL_Pt.PcbLib` tab so it is the **active
+document**, then `DXP › Run Script...` → **`CheckEnvironmentPT`** (it names the
+library in front — read it) → then **`MakeFootprintsPT`**. Save.
+
+> ✓ **Check:** the panel lists **18** footprints, **`RADIAL-D5-P20` is gone**, and
+> **`RADIAL-D5-P508`** is there. The script's message says `RADIAL-D5-P508 C21
+> LEADS BENT`.
+
+**3. Point C21 at the new land — the step that is easy to miss.** C21 is on
+**`Buck-regulator.SchDoc`**. Its model still names `RADIAL-D5-P20`, which no
+longer exists, so it will import as *Footprint Not Found*. Double-click C21 →
+**Models** → change the footprint to **`RADIAL-D5-P508`** → **Edit...** → set the
+**PCB Library** group to **`Any`**. Save.
+
+> `Any` is §6's rule and it is not decoration: a model bound to a named library
+> is how C11, C19 and F1 broke, and how Bug 2's land silently swapped itself.
+
+**4. Compile.** `Project › Compile PCB Project STM32WL_PT.PrjPcb`.
+
+> ✓ **Check:** zero errors, zero warnings, as in §4.
+
+**5. Re-import.** `Design › Update PCB Document STM32WL_PT.PcbDoc` → **Validate
+Changes** → **untick `Add Rooms`** → **Execute Changes**.
+
+> ✓ **Check:** the ECO changes **C21**'s footprint and updates **Q2**/**Q3**, and
+> touches **no pins and no nets**. A `Change Footprint` line on anything else, or
+> any `Added Pin To Net`, means something moved that should not have.
+
+**6. Re-place.** If `PlacePartsPT.pas` is open, **close and reopen its tab** —
+Altium runs the compiled copy it already has. Then `CheckPlacementPT` (expect 69
+components, origin 20/20), then **`PlaceFloorplanPT`**.
+
+> **Do NOT run `DrawKeepoutsPT` again.** The twelve tracks are already on the
+> board and it has no duplicate check; two coincident keep-outs look exactly
+> like one.
+
+**7. Widen the scale bar to 0.5 mm.** Click one of the eight artwork tracks, then
+`Edit › Find Similar Objects` → match on **layer** and **width 0.4 mm** → select
+all → set **Width = 0.5 mm** in the Properties panel. They are the 100 mm bar and
+its three ticks, on Top and Bottom.
+
+**8. Switch off the two rules that do not apply.** `Tools › Design Rule Check`,
+and in the **Rules To Check** list untick **`SilkToSilkClearance`** and
+**`MinSolderMaskSliver`**. This board has neither silkscreen nor soldermask, by
+decision — those 131 violations are not findings, and leaving them on is how the
+one real finding gets lost.
+
+**9. Run the DRC and read the report, not the Messages panel.** The report opens
+in a browser; the Messages panel can look empty while the report is not.
+
+> ✓ **Check:** the only categories left are **DisconnectedSubnets** (the board is
+> unrouted — these disappear as you route) and **MaxMinPadRndHoleSize × 2** (F1's
+> 1.5 mm holes, reamed from 1.3 mm, documented in `MakeFootprintsPT.pas`).
+> **Anything else is new.** In particular there must be **no ShortCircuit** and
+> **no Clearance** rows.
+
+**10. `File › Save All`, and back up `hardware/STM32WL_PT/` again.**
+
+**11. Routing** — [`pcb-home-etch.md`](pcb-home-etch.md) Stage 1.
+
+**Any time you move something in `PlacePartsPT.pas`**, run
+`python hardware/scripts/check_floorplan.py` before Altium. It currently says
+PASS, and it checks the things a DRC can only tell you after the fact.
+
+---
+
 ## 0. There is no blocker any more
 
 Both modules were measured on **2026-09-08** and nothing in this document waits on
