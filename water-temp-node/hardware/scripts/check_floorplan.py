@@ -30,6 +30,7 @@ WHY THIS EXISTS, WHICH IS THE PART WORTH READING
 """
 
 import itertools
+import math
 import os
 import re
 import sys
@@ -104,8 +105,10 @@ def _pads(body, consts):
     out = []
     for m in re.finditer(r"AddPadPT\(Comp,\s*([^,]+),\s*([^;]+?)\);", body):
         name = m.group(1).strip().strip("'")
-        a = [_num(p, consts) for p in m.group(2).split(',')[:5]]
-        out.append((name, a[0], a[1], a[2], a[3], a[4]))
+        args = m.group(2).split(',')
+        a = [_num(p, consts) for p in args[:5]]
+        is_rect = len(args) > 5 and args[5].strip().lower().startswith('true')
+        out.append((name, a[0], a[1], a[2], a[3], a[4], is_rect))
     for m in re.finditer(r"AddRowPT\(Comp,\s*([^;]+?)\);", body):
         a = m.group(1).split(',')
         n = int(_num(a[0], consts))
@@ -113,7 +116,9 @@ def _pads(body, consts):
         pitch, dia, hole = (_num(a[3], consts), _num(a[4], consts), _num(a[5], consts))
         start = int(_num(a[6], consts)) if len(a) > 6 else 1
         for i in range(n):
-            out.append((str(start + i), x0 + i * pitch, y0, dia, dia, hole))
+            # AddRowPT makes pad number 1 square, the rest round.
+            out.append((str(start + i), x0 + i * pitch, y0, dia, dia, hole,
+                        (start + i) == 1))
     return out
 
 
@@ -121,6 +126,30 @@ def _resolved(pad):
     """False when a pad came out of a Pascal For loop and its name/geometry
     still holds an unevaluated expression."""
     return pad[0].isdigit()
+
+
+def _pad_gap(p1, p2):
+    """Copper-to-copper distance between two pads, honouring shape.
+
+    A rectangle-only model is wrong here and wrong in the direction that
+    matters: it reduces to max(gap_x, gap_y), so a DIAGONAL offset buys it
+    nothing.  That is exactly how TO220-VERT-STAG's stagger works -- pads 1
+    and 3 are dropped below pad 2 rather than pushed sideways -- and a
+    rectangle model reports the stagger as useless when it is not.
+    """
+    _, x1, y1, w1, h1, _, r1 = p1
+    _, x2, y2, w2, h2, _, r2 = p2
+    if r1 and r2:                                    # rect vs rect
+        return max(abs(x1 - x2) - (w1 + w2) / 2, abs(y1 - y2) - (h1 + h2) / 2)
+    if not r1 and not r2:                            # circle vs circle
+        d = math.hypot(x1 - x2, y1 - y2)
+        return d - min(w1, h1) / 2 - min(w2, h2) / 2
+    if r2:                                           # make p1 the rectangle
+        (x1, y1, w1, h1), (x2, y2, w2, h2) = (x2, y2, w2, h2), (x1, y1, w1, h1)
+    # rectangle (x1,y1,w1,h1) vs circle centred (x2,y2)
+    dx = max(abs(x2 - x1) - w1 / 2, 0.0)
+    dy = max(abs(y2 - y1) - h1 / 2, 0.0)
+    return math.hypot(dx, dy) - min(w2, h2) / 2
 
 
 def _locals(body, extra=None):
@@ -198,7 +227,7 @@ def des_to_pattern():
         m[d] = 'PHX-MC15-3-G-35-PT'
     for d in ('J9', 'J10', 'J11', 'J12'):
         m[d] = 'PHX-MC15-4-G-35-PT'
-    m.update({'D9': 'DO15-P1270', 'C21': 'RADIAL-D5-P20', 'Q4': 'TO92-INLINE-P254',
+    m.update({'D9': 'DO15-P1270', 'C21': 'RADIAL-D5-P508', 'Q4': 'TO92-INLINE-P254',
               'Q1': 'SOT23-3-M', 'F1': 'FUSEHOLDER-5X20-P226', 'U3': 'MOD-TCA9548A',
               'U7': 'MOD-DFR0570', 'J7': 'HDR2X20-BOX-PT', 'CN6': 'HDR1X8-P254-PT',
               'J13': 'HDR1X3-P254-PT', 'J14': 'PHX-MC15-2-G-35-PT'})
@@ -253,8 +282,8 @@ def main():
     used = sorted({dmap[d] for d, _, _, _ in parts})
     allpads = footprints(want_pads=True)
     for pat in used:
-        for name, x, y, xs, ys, hole in allpads.get(pat, []):
-            if not _resolved((name, x, y, xs, ys, hole)):
+        for name, x, y, xs, ys, hole, _rect in allpads.get(pat, []):
+            if not name.isdigit():
                 continue
             if hole > 0 and not (HOLE_MIN <= hole <= HOLE_MAX) and pat not in HOLE_WAIVERS:
                 print('  %-22s pad %-3s hole %.2f mm outside %.1f-%.1f'
@@ -272,17 +301,13 @@ def main():
             continue
         for i in range(len(pl)):
             for j in range(i + 1, len(pl)):
-                n1, x1, y1, w1, h1, _ = pl[i]
-                n2, x2, y2, w2, h2, _ = pl[j]
-                g = max(abs(x1 - x2) - (w1 + w2) / 2, abs(y1 - y2) - (h1 + h2) / 2)
+                n1, n2 = pl[i][0], pl[j][0]
+                g = _pad_gap(pl[i], pl[j])
                 if g < 0:
                     print('  %-22s pads %s and %s OVERLAP by %.2f mm  '
                           '<-- SHORT CIRCUIT in the land' % (pat, n1, n2, -g))
                     pad_bad += 1
                 elif g < CLEARANCE:
-                    # Rectangle approximation: for a round pad diagonally
-                    # offset from another this reads tighter than Altium's
-                    # true geometry does. Conservative in the safe direction.
                     print('  %-22s pads %s to %s gap %.2f mm < %.2f clearance'
                           % (pat, n1, n2, g, CLEARANCE))
                     pad_bad += 1

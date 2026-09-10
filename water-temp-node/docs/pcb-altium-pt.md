@@ -160,6 +160,55 @@ known-harmless violations cannot honestly pass it** — that is how the ninth,
 which is not harmless, gets waved through. `SetupBoardPT.pas` now draws them at
 0.5 mm. On *this* board, select the eight tracks and set their width to 0.5 mm.
 
+### The second DRC — and the one that would have cost the board
+
+The clearance fix and the re-run landed: `TComponentClearanceViolation` is gone
+from the saved file and R38/D9 read back at their new positions. **The DRC was
+not clear, though** — the 20:56 file carries **305 violation records**. Most are
+noise for a board of this kind, but one is not.
+
+**`RADIAL-D5-P20` is a short circuit.** `Make_RadialCan` takes the pitch as a
+parameter and hard-codes the pad at **2.2 mm**, so C21's **2.0 mm** land puts two
+2.2 mm pads 2.0 mm apart — **0.20 mm of overlap**. C21 is the 22 µF on the 3.3 V
+rail and its two pads are the rail and ground, so the land itself **shorts 3.3 V
+to GND, etched into the board before a single part is fitted**. `RADIAL-D8-P35`
+gets away with the same hard-coded pad because 3.5 mm pitch leaves 1.3 mm.
+
+The pitch cannot simply be trimmed: at 2.0 mm there is no pad that is both wide
+enough for a 0.45 mm annular ring and far enough for 0.5 mm clearance. **C21 is
+now on a 5.08 mm land with its leads bent out** — the trick `CERAMIC-P508`
+already uses — so no part changes and no rule is waived. The build sheet and the
+Thai one say to bend them; `Make_RadialCan` now carries the minimum safe pitch
+(2.7 mm) in its header.
+
+**`TO220-VERT-STAG`'s stagger was not enough either.** `Make_TO220` drops pins 1
+and 3 below pin 2 specifically to solve the 0.14 mm gap that 2.4 mm pads on
+2.54 mm pitch would otherwise have — and at 2.0 mm of stagger Altium still found
+pads 1–2 and 2–3 under the 0.5 mm rule. **Because pad 1 is square:** its corner
+reaches further than a round pad's edge, so a diagonal offset buys less than it
+looks like it should. True clearance was **0.361 mm**. Clearing 0.5 from the
+square corner needs 2.25 mm; **the stagger is now 2.5 mm**, which measures 0.667.
+
+Both fixes need `MakeFootprintsPT.pas` re-run **into an empty library** and the
+board re-imported. Do them together.
+
+**The check missed both, and now does not.** `check_floorplan.py` reads every
+`AddPadPT` / `AddRowPT` out of the footprint source and tests pads against
+Clearance, HoleSize and MinimumAnnularRing — **shape-aware**, because a
+rectangle-only model reduces to `max(gap_x, gap_y)` and therefore reports a
+diagonal stagger as worthless when it is not. Checked against the three known-bad
+states it reproduces each one: old TO-220 0.361 mm, old radial −0.20 mm, and both
+new versions clear.
+
+**The rest of the 305 are rules that do not apply to this board**, and the answer
+is to switch them off in `Tools › Design Rule Check` rather than to read past
+them: **SilkToSilkClearance (129)** and **MinSolderMaskSliver (2)** — there is no
+silkscreen and no soldermask here, by decision. **DisconnectedSubnets (157)** is
+just the unrouted board. **MaxMinPadRndHoleSize (2)** is F1's 1.5 mm holes, which
+`MakeFootprintsPT.pas` already documents as reamed out from 1.3 mm. GATE 1 asks
+for a clean DRC, and it can only mean anything once the rules that do not apply
+are off rather than tolerated.
+
 **And the scale bar was being measured wrong in the process document.** Its
 comment said *100.0 mm between the OUTSIDE of the two end ticks*, but the ticks
 are drawn **at** 0 and 100 mm, so outside-to-outside is 100.0 plus one line

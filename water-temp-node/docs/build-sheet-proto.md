@@ -67,7 +67,7 @@ backwards once, on the FE board.
 |---|---|---|---|---|
 | ☐ | **C11** | 100 µF **63 V** | **+** | `24V_PROT` |
 | ☐ | **C19** | 100 µF **35 V** | **+** | `24V_PRE` |
-| ☐ | C21 | 22 µF 16 V | **+** | 3.3 V rail |
+| ☐ | **C21** | 22 µF 16 V | **+** | 3.3 V rail — **bend the leads out to 5.08 mm** |
 | ☐ | **D9** | P6KE33A, DO-15 | **band = cathode** | `24V_PROT` |
 | ☐ | **D10** | 1N4742A 12 V, DO-41 | **band = cathode** | Q2 **source** |
 | ☐ | **D11** | 1N4750A 27 V, DO-41 | **band = cathode** | Q3 **gate** |

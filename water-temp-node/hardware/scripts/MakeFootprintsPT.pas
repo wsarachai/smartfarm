@@ -266,6 +266,14 @@ End;
   one of the three ways hardware-interface.md section 5 says this node gets
   destroyed, and there is no silkscreen here to prevent it. }
 
+{ PITCHMM IS THE LAND'S PITCH, NOT ALWAYS THE PART'S.
+  The pad is 2.2 mm, so a land whose pitch is under 2.7 mm has pads that touch
+  -- and two touching pads on a polarised cap are a short across whatever it
+  decouples, etched into the board before a single component is fitted.  C21's
+  5 mm can really is a 2.0 mm pitch part and was given a 2.0 mm land, which put
+  0.20 mm of overlap on the 3.3 V rail; it is now on a 5.08 mm land with its
+  leads bent out, the same trick CERAMIC-P508 already uses.
+  Minimum safe pitch here = 2.2 pad + 0.5 clearance = 2.7 mm. }
 Procedure Make_RadialCan(Lib : IPCB_Library; DiaMM, PitchMM : Real; AName, ADesc : String);
 Var
     Comp : IPCB_LibComponent;
@@ -287,7 +295,13 @@ End;
   Lead pitch 2.54 mm is the package standard.  Hole 1.3 mm CHOSEN -- a TO-220
   lead is ~0.9 x 0.5 mm and 1.1 is tight for a hand-drilled hole.
   Pad 2.4 mm CHOSEN.  At 2.54 pitch that leaves only a 0.14 mm gap, so the
-  pads are STAGGERED: pins 1 and 3 sit 2.0 mm below pin 2.  The leads bend.
+  pads are STAGGERED: pins 1 and 3 sit 2.5 mm below pin 2.  The leads bend.
+
+  THE STAGGER WAS 2.0 mm AND THAT WAS NOT ENOUGH.  Altium's DRC found pads
+  1-2 and 2-3 still under the 0.5 mm Clearance rule, because PAD 1 IS SQUARE:
+  its corner reaches further than a round pad's edge does, so the diagonal
+  offset buys less than it looks like it should.  Clearing 0.5 mm from the
+  square pad's corner needs 2.25 mm of stagger; 2.5 is that with margin.
   Mounting hole omitted -- see the header. }
 
 Procedure Make_TO220(Lib : IPCB_Library);
@@ -296,9 +310,9 @@ Var
 Begin
     Comp := NewCompPT(Lib, 'TO220-VERT-STAG',
         'TO-220 vertical, 2.54 mm leads staggered 2.0 mm for etch clearance. TAB = PIN 2 = DRAIN, LIVE');
-    AddPadPT(Comp, '1', -2.54, -2.0, 2.4, 2.4, 1.3, True);
+    AddPadPT(Comp, '1', -2.54, -2.5, 2.4, 2.4, 1.3, True);
     AddPadPT(Comp, '2',  0.00,  0.0, 2.4, 2.4, 1.3, False);
-    AddPadPT(Comp, '3',  2.54, -2.0, 2.4, 2.4, 1.3, False);
+    AddPadPT(Comp, '3',  2.54, -2.5, 2.4, 2.4, 1.3, False);
     AddSilkBoxPT(Comp, -5.10, 1.60, 5.10, 6.30);        { body, 10.2 x 4.7 }
 End;
 
@@ -626,8 +640,8 @@ Begin
     Make_CeramicC(Lib);
     Make_RadialCan(Lib, 8.0, 3.5, 'RADIAL-D8-P35',
         'Radial electrolytic, 8 mm can, 3.5 mm pitch. C11, C19. PAD 1 = POSITIVE');
-    Make_RadialCan(Lib, 5.0, 2.0, 'RADIAL-D5-P20',
-        'Radial electrolytic, 5 mm can, 2.0 mm pitch. C21. PAD 1 = POSITIVE');
+    Make_RadialCan(Lib, 5.0, 5.08, 'RADIAL-D5-P508',
+        'Radial electrolytic, 5 mm can, LEADS BENT OUT to 5.08 mm. C21. PAD 1 = POSITIVE');
     Make_TO220(Lib);
     Make_TO92(Lib);
     Make_Header1xN(Lib, 8, 'HDR1X8-P254-PT',
@@ -655,7 +669,7 @@ Begin
                 'DO15-P1270        D9  (P6KE33A)' + Chr(13) +
                 'CERAMIC-P508      C2, C8, C10, C22' + Chr(13) +
                 'RADIAL-D8-P35     C11, C19' + Chr(13) +
-                'RADIAL-D5-P20     C21' + Chr(13) +
+                'RADIAL-D5-P508    C21  LEADS BENT' + Chr(13) +
                 'TO220-VERT-STAG   Q2, Q3   TAB IS LIVE' + Chr(13) +
                 'TO92-INLINE-P254  Q4' + Chr(13) +
                 'HDR1X8-P254-PT    CN6' + Chr(13) +
