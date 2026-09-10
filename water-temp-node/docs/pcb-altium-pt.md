@@ -42,7 +42,7 @@ picked up a new bug**, below.
 | §3 test points | decided — none this revision |
 | §4 compile, and the three libraries | **done** — zero errors, zero warnings |
 | §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
-| **Q1's symbol — Bug 2** | **open, and it blocks routing** — the nets sit one pad round from where the part's own pins are |
+| **Q1's symbol — Bug 2** | **pin numbering fixed** 2026-09-10 14:49, proven in the ECO. Still open: the vendor symbol brought the vendor *footprint* with it, and the board was not saved |
 | §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
 | Layout, `pcb-home-etch.md` Stage 1 | **in progress** — rules set, rooms deleted, placement next |
 
@@ -268,15 +268,53 @@ matters — **give it a different name**, e.g. `AO3401A-GLYPH`. A project-local
 symbol still called `MOSFET-P` that disagrees with the stock `MOSFET-P` about pin
 numbers is the next person's version of this same bug.
 
-☐ Replace Q1's symbol with `AO3401A`, keeping `SOT23-3-M` as the current model.
-☐ Redraw the three wires — gate to the `R1`/`R2` junction, source to `V3V3_MCU`,
+☑ Replace Q1's symbol with `AO3401A` — **done 2026-09-10 14:48**.
+☑ Redraw the three wires — gate to the `R1`/`R2` junction, source to `V3V3_MCU`,
 drain to `VSENS`.
-☐ Delete the `E3` model from Q1.
-☐ Confirm `R1-2` is still on `V3V3_MCU` and `R2-1` still on `SENS_GATE` — neither
-moved in the 12:26 ECO, but both are part of the same node.
-☐ Re-import, and check the ECO says gate node on **Q1-1**, `V3V3_MCU` on **Q1-2**,
-`VSENS` on **Q1-3**. That line in the log is the proof, not the schematic looking
-right — the schematic looked right the whole time this bug existed.
+☑ The `E3` model is gone — the whole model set was replaced with the vendor
+symbol's own, which took `E3` with it. See the new problem below.
+☑ **The pin numbering is fixed and the 14:49 ECO proves it**: `NetQ1_1` on
+**Q1-1** with `R1-1` and `R2-2`, `V3V3_MCU` on **Q1-2**, `VSENS` on **Q1-3**.
+`R1-2` and `R2-1` never moved. This is the line that was asked for and it reads
+correctly.
+
+#### But restoring the symbol dragged the vendor's footprint in with it
+
+The same ECO also says:
+
+```
+Change Component Footprint: Designator=Q1
+    Old Footprint=SOT23-3-M  New Footprint=SOT-23-3L_AOS
+```
+
+`AO3401A.SchLib` carries its own PCB model, so replacing the symbol **replaced
+the land as well** — it did not merely add one. `SOT-23-3L_AOS` lives in
+`..\Lib\AO3401A\AO3401A.PcbLib` alongside `-L` and `-M` variants: the Ultra
+Librarian density set, Least / Nominal / Most, of which the unsuffixed one is the
+**nominal** IPC land.
+
+`SOT23-3-M` is not that. `MakeFootprintsPT.pas` describes it as *SOT-23
+hand-solder land (AOS PO-00001 rev N **+ 0.25 mm**)* — pads deliberately grown,
+because §5 of the spec delta already calls Q1 **the one real exception** on this
+board: 0.95 mm pitch needing ~0.6 mm pads with ~0.35 mm gaps, below the 0.5 mm
+design rule and at the edge of what toner transfer resolves. A nominal land is
+smaller than a hand-solder land by construction, on the one footprint that had no
+margin to give.
+
+**This is the second time a library binding has silently swapped a land on this
+board.** §6's `MODELDATAFILE0` trap did it to C11, C19 and F1 by pointing at a
+library that no longer exists; this one did it by pointing at a library that
+does. Both pass a check that asks whether the footprint *name* is right, because
+in both cases the name is the thing that changed.
+
+☐ Set Q1's footprint back to **`SOT23-3-M`** from `STM32WL_Pt.PcbLib`, with the
+**PCB Library** group set to **`Any`** — the same fix, and the same reason, as §6's.
+☐ Re-import, **with `Add Rooms` unticked** — the 14:49 ECO added all three back
+again.
+☐ **Save the PCB document.** As of the 14:49 ECO it had not been: the ECO
+executed into memory, and `STM32WL_PT.PcbDoc` on disk was still the 14:04 file,
+carrying `NetQ1_2` and the old pad mapping. An ECO log is a record of what
+Altium *did*, not of what reached the disk.
 
 > **Renumbering `SOT23-3-M` would fix this board and break the part.** The land is
 > named for the AOS drawing and `MakeFootprintsPT.pas` documents it that way; a
