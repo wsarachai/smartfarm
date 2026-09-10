@@ -42,7 +42,7 @@ picked up a new bug**, below.
 | §3 test points | decided — none this revision |
 | §4 compile, and the three libraries | **done** — zero errors, zero warnings |
 | §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
-| **Q1's symbol — Bug 2** | **pin numbering fixed** 2026-09-10 14:49, proven in the ECO. Still open: the vendor symbol brought the vendor *footprint* with it, and the board was not saved |
+| **Q1's symbol — Bug 2** | **closed** 2026-09-10 14:56 — pins on `AO3401A`'s numbering, land back to `SOT23-3-M`, verified out of the saved board |
 | §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
 | Layout, `pcb-home-etch.md` Stage 1 | **in progress** — rules set, rooms deleted, placement next |
 
@@ -79,9 +79,8 @@ on the board — the 1.9 mm pad on a 1.0 mm hole that Stage 1 sizes for 2.54 mm
 pitch, so (1.9 − 1.0) / 2. Everything else is wider (Phoenix 0.55, general 0.70,
 via 0.60). Altium's own default is 0.05 mm, which catches nothing.
 
-**Fix Bug 2 first.** Placement itself does not care which pad a net is on, so the
-floorplan below can go ahead — but nothing should be *routed* until Q1's symbol is
-back, because the ratsnest around it is currently pointing at the wrong three pads.
+**Bug 2 is closed**, so routing is unblocked — the ratsnest at Q1 points at the
+part's own pads again.
 
 **Next action: placement**, in the order §6 of
 [`hardware-interface-proto.md`](hardware-interface-proto.md) fixes — edge
@@ -307,14 +306,34 @@ library that no longer exists; this one did it by pointing at a library that
 does. Both pass a check that asks whether the footprint *name* is right, because
 in both cases the name is the thing that changed.
 
-☐ Set Q1's footprint back to **`SOT23-3-M`** from `STM32WL_Pt.PcbLib`, with the
-**PCB Library** group set to **`Any`** — the same fix, and the same reason, as §6's.
-☐ Re-import, **with `Add Rooms` unticked** — the 14:49 ECO added all three back
-again.
-☐ **Save the PCB document.** As of the 14:49 ECO it had not been: the ECO
-executed into memory, and `STM32WL_PT.PcbDoc` on disk was still the 14:04 file,
-carrying `NetQ1_2` and the old pad mapping. An ECO log is a record of what
-Altium *did*, not of what reached the disk.
+☑ Q1's footprint set back to **`SOT23-3-M`** — the 14:55 ECO says
+`Old Footprint=SOT-23-3L_AOS  New Footprint=SOT23-3-M`, and the sheet now carries
+exactly one PCB model, current, **with no `MODELDATAFILE0`** — so it resolves as
+`Any`, which is §6's rule and the thing that stops this recurring.
+☑ **Saved.** `STM32WL_PT.PcbDoc` is the 14:56 file, after the 14:55 ECO.
+
+#### Closed — verified out of the saved board, 2026-09-10
+
+Read back from `STM32WL_PT.PcbDoc` itself rather than from the ECO that claimed
+it, because the 14:49 round is precisely the case where those two disagreed:
+
+| | |
+|---|---|
+| Q1's land | **`SOT23-3-M`** — the hand-solder land, back |
+| Q1's gate net | **`NetQ1_1`** — `NetQ1_2` is gone from the file |
+| Components | **69**, and the footprint tally is unchanged across all 19 lands |
+| Rooms | **none** in the saved board, whatever the ECO logged |
+| Design rules | all six still set; `MinimumAnnularRing` still 17.7165 mil = 0.45 mm |
+
+**`STM32WL_FE` never diverged** — it kept the `AO3401A` symbol throughout, so both
+boards agree again and neither can seed this into a third.
+
+**The lesson worth keeping is not "check the footprint name".** Both times a land
+changed under this board, the name was the thing that changed and a name check
+would have caught it. What neither would have caught is the *first* version of
+this bug, where the name stayed right and the pin numbers moved. The question to
+ask a component is where its model is told to look, and whether its symbol's pin
+numbers are the ones its datasheet uses.
 
 > **Renumbering `SOT23-3-M` would fix this board and break the part.** The land is
 > named for the AOS drawing and `MakeFootprintsPT.pas` documents it that way; a

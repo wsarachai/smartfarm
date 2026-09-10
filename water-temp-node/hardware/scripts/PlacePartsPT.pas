@@ -42,15 +42,15 @@
     IT ALSO DOES NOT ROUTE, and it must not be run as though it did -- see the
     Q1 warning below.
 
-  ! DO NOT ROUTE UNTIL BUG 2 IS FIXED !
-    docs/pcb-altium-pt.md, Bug 2: Q1's schematic symbol is currently MOSFET-P
-    from Miscellaneous Devices (D=1 G=2 S=3) instead of the vendor AO3401A
-    symbol (G=1 S=2 D=3), while its footprint is still SOT23-3-M, whose pads
-    carry the AOS drawing's numbers.  The three nets around Q1 therefore land
-    one pad round from the part's own pins.  Placement does not care -- the
-    part goes in the same place either way, which is why this script runs now
-    -- but the ratsnest at Q1 is pointing at the wrong three pads and anything
-    routed to it would have to come up again.
+  BUG 2 IS CLOSED -- 2026-09-10, and this note is kept as history
+    Q1 spent a day carrying the MOSFET-P symbol from Miscellaneous Devices
+    (D=1 G=2 S=3) against the SOT23-3-M land, whose pads carry the AOS
+    drawing's numbers (G=1 S=2 D=3), so its three nets sat one pad round from
+    the part's own pins.  Restoring the AO3401A symbol fixed the numbering and
+    dragged the vendor's own nominal land in with it, which then had to be set
+    back to SOT23-3-M by hand.  Both halves are verified out of the saved
+    board.  Routing is unblocked.  docs/pcb-altium-pt.md, Bug 2, has the whole
+    account -- worth reading before touching any component's model.
 
   THE COORDINATE SCHEME
     Same as SetupBoardPT.pas and for the same reason: absolute (20,20) is the
