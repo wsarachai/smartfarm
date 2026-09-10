@@ -44,8 +44,8 @@ picked up a new bug**, below.
 | §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
 | **Q1's symbol — Bug 2** | **closed** 2026-09-10 14:56 — pins on `AO3401A`'s numbering, land back to `SOT23-3-M`, verified out of the saved board |
 | §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
-| Layout, `pcb-home-etch.md` Stage 1 | **placed** 2026-09-10 20:36 — all 69 at their §6 positions, 16 locked, three keep-outs drawn. Routing next |
-| DRC on the placed board | **two findings, both handled** — see *What the first DRC found* |
+| Layout, `pcb-home-etch.md` Stage 1 | **placed and DRC-clean** 2026-09-10 22:10. Routing next |
+| DRC on the placed board | **clean** — only unrouted nets and F1's documented reamed holes remain |
 
 What the netlist confirms on the buck sheet, because it is the sheet that changed:
 Q2 drain on `24V_RAW` and source on `24V_PROT` (the reverse-polarity hookup, not
@@ -439,6 +439,46 @@ numbers are the ones its datasheet uses.
 
 **`STM32WL_FE` is not affected.** Its `FrontEnd-signals.SchDoc` still carries the
 `AO3401A` symbol — unlike Bug 1, this one was introduced here and is not inherited.
+
+---
+
+## Where the board stands — 2026-09-10 22:10, verified
+
+Read back out of `STM32WL_PT.PcbDoc` itself, not from the dialogs that reported
+it:
+
+| | |
+|---|---|
+| Components | **69**, every one at the scripted position, rotation and lock state |
+| Locked | **16** — J1–J7, J9–J14, CN6, U3, U7 |
+| C21 | on **`RADIAL-D5-P508`**, pads at ±2.54 mm |
+| Q2 / Q3 | pad stagger **−2.5 mm**, the library geometry actually on the board |
+| Keep-outs | **12 tracks at 0.25 mm**, three closed inset rectangles, no duplicates |
+| Scale bar | **8 copper tracks at 0.50 mm** |
+| Design rules | all six, `MinimumAnnularRing` still 0.45 mm |
+| DRC | **`TDisconnectedSubnets` and `TMaxMinPadRndHoleSize` only** |
+
+**Both survivors are expected and neither is a defect.** `DisconnectedSubnets` is
+the board being unrouted — it empties as you route. `MaxMinPadRndHoleSize × 2`
+is F1's two 1.5 mm holes, which `MakeFootprintsPT.pas` documents as reamed out
+from 1.3 mm because 1.5 is not in the four-bit drill set. **`ShortCircuit`,
+`Clearance`, `ComponentClearance`, `MinWidthStubTrack`, `SilkToSilk` and
+`MinSolderMaskSliver` are all gone from the file.** That is GATE 1.
+
+`check_floorplan.py` says **PASS**. Run it before Altium any time
+`PlacePartsPT.pas` changes.
+
+**Five defects were found and fixed between placement and this line**, and four
+of the five were the same mistake wearing different clothes — something checked
+by **name** while the thing behind the name had changed:
+
+| | |
+|---|---|
+| Q1's symbol | pin numbers moved; footprint name unchanged |
+| Q1's footprint | vendor symbol brought its own land; the name is what changed |
+| C21's land | `Make_RadialCan` hard-codes a pad the pitch parameter does not police |
+| TO-220 stagger | a footprint edited in place, so the ECO saw no name change and shipped nothing |
+| The keep-outs | drawn on the module body, so a module's own pads violated them |
 
 ---
 
