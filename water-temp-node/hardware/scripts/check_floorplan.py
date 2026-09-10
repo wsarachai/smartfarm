@@ -3,9 +3,11 @@
 
     python hardware/scripts/check_floorplan.py
 
-Answers two questions before Altium is opened: does anything fall off the
-160 x 120 board, and does any pair of components sit closer than the
-ComponentClearance rule allows.
+Answers, before Altium is opened: does anything fall off the 160 x 120 board,
+does any pair of components sit closer than ComponentClearance allows, and --
+added after Altium found a short circuit this check had not been looking for --
+does any footprint's own pads touch each other or break the hole and clearance
+rules.
 
 WHY THIS EXISTS, WHICH IS THE PART WORTH READING
     The first version of this check carried a hand-typed table of footprint
@@ -42,6 +44,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BOARD_W, BOARD_H = 160.0, 120.0
 SILK_W = 0.20      # AddSilkPT track width, from MakeFootprintsPT.pas
 GAP = 0.254        # ComponentClearance = 10 mil, read out of the board's Rules6
+CLEARANCE = 0.5    # Clearance rule, mm
+HOLE_MIN, HOLE_MAX = 0.8, 1.3          # HoleSize rule, mm
+RING_MIN = 0.45                        # MinimumAnnularRing rule, mm
+EPS = 1e-6         # MinimumAnnularRing is DERIVED from the 1.9 mm pad on the
+                   # 1.0 mm hole, so the common case sits exactly ON 0.45 and
+                   # must not be reported by a float comparison.
+
+# Deliberate, documented exceptions - see MakeFootprintsPT.pas for each.
+HOLE_WAIVERS = {'FUSEHOLDER-5X20-P226'}    # 1.5 mm, opened with a reamer
 
 # The only footprint not built by MakeFootprintsPT.pas: vendor SMD land.
 EXTRA_FP = {'CDSOD323_BRN-M': (-1.60, -0.90, 1.60, 0.90)}
@@ -88,6 +99,30 @@ def _extents(body, consts):
     return (min(xs), min(ys), max(xs), max(ys)) if xs else None
 
 
+def _pads(body, consts):
+    """[(name, x, y, xsize, ysize, hole)] for one footprint."""
+    out = []
+    for m in re.finditer(r"AddPadPT\(Comp,\s*([^,]+),\s*([^;]+?)\);", body):
+        name = m.group(1).strip().strip("'")
+        a = [_num(p, consts) for p in m.group(2).split(',')[:5]]
+        out.append((name, a[0], a[1], a[2], a[3], a[4]))
+    for m in re.finditer(r"AddRowPT\(Comp,\s*([^;]+?)\);", body):
+        a = m.group(1).split(',')
+        n = int(_num(a[0], consts))
+        x0, y0 = _num(a[1], consts), _num(a[2], consts)
+        pitch, dia, hole = (_num(a[3], consts), _num(a[4], consts), _num(a[5], consts))
+        start = int(_num(a[6], consts)) if len(a) > 6 else 1
+        for i in range(n):
+            out.append((str(start + i), x0 + i * pitch, y0, dia, dia, hole))
+    return out
+
+
+def _resolved(pad):
+    """False when a pad came out of a Pascal For loop and its name/geometry
+    still holds an unevaluated expression."""
+    return pad[0].isdigit()
+
+
 def _locals(body, extra=None):
     c = dict(extra or {})
     for m in re.finditer(r"^\s*(\w+)\s*:=\s*([^;]+);", body, re.M):
@@ -98,15 +133,16 @@ def _locals(body, extra=None):
     return c
 
 
-def footprints():
-    """Return {pattern: (x1, y1, x2, y2)} derived from MakeFootprintsPT.pas."""
+def footprints(want_pads=False):
+    """Return {pattern: extents}, or {pattern: pad list} if want_pads."""
     src = open(os.path.join(HERE, 'MakeFootprintsPT.pas'), encoding='utf-8').read()
-    out = dict(EXTRA_FP)
+    out = {} if want_pads else dict(EXTRA_FP)
     for m in re.finditer(r"Procedure (Make_\w+)\(([^)]*)\)(.*?)\nEnd;", src, re.S):
         name, params, body = m.group(1), m.group(2), m.group(3)
         named = re.findall(r"NewCompPT\(Lib,\s*'([^']+)'", body)
         if named:
-            e = _extents(body, _locals(body))
+            e = (_pads(body, _locals(body)) if want_pads
+                 else _extents(body, _locals(body)))
             if e:
                 out[named[0]] = e
             continue
@@ -128,7 +164,8 @@ def footprints():
                     except ValueError:
                         pass
             if pattern:
-                e = _extents(body, _locals(body, bind))
+                e = (_pads(body, _locals(body, bind)) if want_pads
+                     else _extents(body, _locals(body, bind)))
                 if e:
                     out[pattern] = e
     return out
@@ -209,6 +246,49 @@ def main():
     if not hits:
         print('  none')
     problems += len(hits)
+
+    print()
+    print('inside each footprint - pads touching, and hole / ring rules:')
+    pad_bad = 0
+    used = sorted({dmap[d] for d, _, _, _ in parts})
+    allpads = footprints(want_pads=True)
+    for pat in used:
+        for name, x, y, xs, ys, hole in allpads.get(pat, []):
+            if not _resolved((name, x, y, xs, ys, hole)):
+                continue
+            if hole > 0 and not (HOLE_MIN <= hole <= HOLE_MAX) and pat not in HOLE_WAIVERS:
+                print('  %-22s pad %-3s hole %.2f mm outside %.1f-%.1f'
+                      % (pat, name, hole, HOLE_MIN, HOLE_MAX))
+                pad_bad += 1
+            ring = (min(xs, ys) - hole) / 2
+            if hole > 0 and ring < RING_MIN - EPS:
+                print('  %-22s pad %-3s annular ring %.2f mm < %.2f'
+                      % (pat, name, ring, RING_MIN))
+                pad_bad += 1
+        pl = [q for q in allpads.get(pat, []) if _resolved(q)]
+        if len(pl) != len(allpads.get(pat, [])):
+            print('  %-22s built in a For loop - pads NOT analysed here; '
+                  'Altium DRC covers it' % pat)
+            continue
+        for i in range(len(pl)):
+            for j in range(i + 1, len(pl)):
+                n1, x1, y1, w1, h1, _ = pl[i]
+                n2, x2, y2, w2, h2, _ = pl[j]
+                g = max(abs(x1 - x2) - (w1 + w2) / 2, abs(y1 - y2) - (h1 + h2) / 2)
+                if g < 0:
+                    print('  %-22s pads %s and %s OVERLAP by %.2f mm  '
+                          '<-- SHORT CIRCUIT in the land' % (pat, n1, n2, -g))
+                    pad_bad += 1
+                elif g < CLEARANCE:
+                    # Rectangle approximation: for a round pad diagonally
+                    # offset from another this reads tighter than Altium's
+                    # true geometry does. Conservative in the safe direction.
+                    print('  %-22s pads %s to %s gap %.2f mm < %.2f clearance'
+                          % (pat, n1, n2, g, CLEARANCE))
+                    pad_bad += 1
+    if not pad_bad:
+        print('  none')
+    problems += pad_bad
 
     tight = sorted(
         (max(max(boxes[b][0] - boxes[a][2], boxes[a][0] - boxes[b][2]),
