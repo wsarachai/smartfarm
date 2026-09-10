@@ -78,10 +78,15 @@ those vias now; discovering them at Stage 11 means a redesign.
 2×20 field is a wall** — route around it, not through it.
 
 **4. Pour GND on BOTH layers.** This is not the obvious choice and it comes
-straight from counting pads. Of the board's **210 through-holes, 123 — 59 % —
-are on parts whose bodies cover them**, so they exist on the bottom only. **Twenty-five
-of those are GND**: one per probe connector, one per I2C branch, J14's, J7's five,
-CN6's two, J13's, the modules', and the three electrolytic negatives. A ground plane
+straight from counting pads. **Recounted off the placed board on 2026-09-10**, not
+estimated: of the board's **217 through-holes, 135 — 62 % — are on parts whose
+bodies cover them**, so they exist on the bottom only. **Thirty-six of those are
+GND**: **J7's seven**, **U3's four**, **U7's four**, **CN6's two**, one each for the
+six probe connectors, the four I2C branches, J13 and J14, and seven capacitor
+grounds — C11 and C19's negatives plus the five 5.08 mm ceramics, whose bodies sit
+over their own pads. (**C21 is no longer on this list**: bending its leads out to
+5.08 mm to clear the short in its land moved its pads out from under the can, so
+they can be soldered from the top.) A ground plane
 on the top layer alone would need a via beside each of them, spending the entire via
 budget on ground before a single signal crossed. With copper poured on both faces,
 every one of those pads reaches ground directly on the bottom, and the two pours are

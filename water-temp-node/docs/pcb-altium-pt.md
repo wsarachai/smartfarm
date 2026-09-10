@@ -482,6 +482,75 @@ by **name** while the thing behind the name had changed:
 
 ---
 
+## Routing — the order to do it in
+
+`pcb-home-etch.md` Stage 1 gives the five rules; this is the sequence they imply
+for **this** placement. The board has **38 nets and 217 through-holes**, and the
+via budget is **under 30** — so route in the order that spends copper where it is
+least negotiable first.
+
+**Everything below is on the BOTTOM layer** unless it says otherwise. That is
+rule 1, and it is not a preference: every through-hole part is soldered from the
+bottom.
+
+**A. The 24 V corner, and nothing else until it is done.** `24V_RAW` → `NetF1_1`
+→ `24V_PROT` → `24V_PRE`, following the physical chain J14 → F1 → Q2 → D9 → C11
+→ Q3 → U7. The `W_POWER` rule already forces **3 mm** on `24V_PROT` and `24V_PRE`,
+so these are the widest, least steerable tracks on the board and everything else
+routes around them. Give **D9's anode and C11's negative their own wide copper
+straight back to J14's ground pin**, and keep that return off the analog ground
+and off R25 — §5's one place where "ground is just ground" is wrong.
+
+**B. `V3V3_MCU`** — 6 pads: U7's two output pins, CN6-4, and Q1's source with R1.
+Short and in one corner.
+
+**C. `VSENS`, and treat it as a third power net.** **32 pads** — the second
+biggest net on the board after GND. It feeds all six DQ pull-ups, U3's `VIN`, R23,
+C1, C2, all four of J9–J12 pin 4 and all six of J1–J6 pin 2. It is a star that
+crosses the whole board, so it wants routing early, while there is still room.
+
+**D. The six probe channels.** Each one is `DQ_Pn` (J7 → the series resistor) then
+`NetDn_1` (series resistor → pull-up → TVS → the connector). They run as six
+parallel drops from J7's left-hand field down to J1–J6 along the bottom, and they
+never cross each other if they are done in order. **J7's 2×20 field is a wall**
+(rule 3) — route around it, not through it.
+
+**E. I2C.** `I2C_SDA` and `I2C_SCL` from J7 to U3, picking up R15/R16 on the way;
+then the four branch pairs `NetJ9_2/3` … `NetJ12_2/3` from U3 out to J9–J12 on the
+right edge, each pair picking up its own 2.2 k.
+
+**F. The leftovers**, in any order: `SENS_GATE`, `VBAT_SENSE`, `DBG_TX`, `DBG_RX`,
+`NetQ1_1`, `NetR23_2`, `NetD10_1`, `NetD12_1`, `NetC22_2`.
+
+**G. Pour GND on both layers, then stitch.** 8–12 stitching vias spread across the
+board, most densely in the 24 V corner where the surge return matters.
+
+### The via budget, counted off the placed board
+
+**135 of the 217 through-holes — 62 % — sit under a component body**, so they can
+only be soldered from the bottom. Rule 2 says no top-layer track may terminate on
+one of those, so each needs a via beside it *if* its net has to reach the top.
+
+- **36 are GND**, and rule 4 is what makes them free: with copper poured on both
+  faces they reach ground on the bottom directly. That is the whole argument for
+  pouring both layers rather than one — 36 vias would be most of the budget.
+- **65 are on signal nets.** These are the ones to watch, and they cluster:
+  **U3's 24 pads are all covered**, as are **J7's 40** and both modules'. If a
+  branch pair has to hop to the top to get past something, the hop happens at a
+  via *beside* the pad, never at the pad.
+- **34 carry no net at all** — J7's unused positions and U3's unused channels.
+  They are drill work and nothing else.
+
+**C21 came off this list** when its leads were bent out to 5.08 mm to fix the short
+in its land: its pads are now clear of the can, so they can be soldered from the
+top like any axial part.
+
+**Count vias as you go and stop at 30.** Two per signal crossing, and the board is
+160 × 120 mm for 38 nets — the answer to a crossing is almost always to route
+around it.
+
+---
+
 ## The footprint rebuild — do these in order
 
 Two footprints changed (`RADIAL-D5-P20` → `RADIAL-D5-P508`, and
