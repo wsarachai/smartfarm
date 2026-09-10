@@ -497,7 +497,37 @@ components, origin 20/20), then **`PlaceFloorplanPT`**.
 > board and it has no duplicate check; two coincident keep-outs look exactly
 > like one.
 
-**7. Widen the scale bar to 0.5 mm.** Click one of the eight artwork tracks, then
+**7. Widen the scale bar to 0.5 mm.** 0.4 mm exists nowhere else on the board, so
+selecting by width is safe — but **check the count says 8**: a selector matching
+on width alone also catches the twelve keep-out tracks at 0.25 mm if it is loosened,
+and that is what happened on the first pass. Step 7b puts them back.
+
+**7b. Redraw the keep-outs.** Reload the script tab, run **`ClearKeepoutsPT`**
+(expect *Removed 12*), then **`DrawKeepoutsPT`** once. This does two things: it
+restores the 0.25 mm width, and it lays down the **inset** rectangles — see below.
+
+**7c — what was wrong with the first rectangles.** They were drawn on each
+module's **body outline**, which passes **1.53 mm from U3's own outer pad
+centres**. A 0.95 mm pad radius and a 0.125 mm half-track leave **0.46 mm**
+against a 0.5 mm Clearance rule — so **the module's own pads violated the keep-out
+drawn to protect it**, from the moment it was drawn. Widening the tracks to 0.5 mm
+in step 7 made it 0.33 mm and more visible, but it was never the cause.
+
+What §6 actually asks is that no track crosses **under** the module, and a track
+cannot get in among the pad columns anyway. So the rectangles now span **between
+the pad columns**, inset to clear the pads by ~0.94 mm:
+
+| | was (body outline) | now (between the pad columns) |
+|---|---|---|
+| U3 | 101.0, 66.5 → 123.0, 97.5 | **105.0, 66.5 → 119.0, 97.5** |
+| U7 | 96.75, 43.5 → 119.25, 60.5 | **101.0, 43.5 → 115.0, 60.5** |
+| Q3 heatsink | 62.0, 40.0 → 78.0, 56.0 | unchanged |
+
+`check_floorplan.py` now measures every pad against every keep-out edge, which is
+the check that was missing. Against the old rectangles it reports the four U3 pads
+at 0.46 mm and 0.33 mm respectively; against the new ones, nothing.
+
+ Click one of the eight artwork tracks, then
 `Edit › Find Similar Objects` → match on **layer** and **width 0.4 mm** → select
 all → set **Width = 0.5 mm** in the Properties panel. They are the 100 mm bar and
 its three ticks, on Top and Bottom.

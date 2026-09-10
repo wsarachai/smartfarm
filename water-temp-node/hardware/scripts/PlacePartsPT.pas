@@ -14,6 +14,8 @@
                          the two modules; moves everything else unlocked.
       DrawKeepoutsPT     the real one, part two.  Three keep-out rectangles:
                          under U3, under U7, and under Q3's heatsink.
+      ClearKeepoutsPT    deletes every keep-out track, so the one above can
+                         be run again when the rectangles change.
 
   WHAT IS LOCKED AND WHAT IS NOT, WHICH IS THE POINT OF THE SCRIPT
     LOCKED: J1-J7, J9-J14, CN6, U3, U7.  These are the positions section 6
@@ -462,6 +464,54 @@ Begin
 End;
 
 
+{ ---------- runnable: undo, so the pair above can be re-run --------------- }
+
+{ Deletes every track on the keep-out layer, so DrawKeepoutsPT can be run
+  again after the rectangles change.  Without this the only way to redraw them
+  is to find twelve tracks by hand outside the board outline, and a keep-out
+  you missed looks exactly like one you meant to keep. }
+Procedure ClearKeepoutsPT;
+Var
+    Board : IPCB_Board;
+    Iter  : IPCB_BoardIterator;
+    T     : IPCB_Track;
+    Dead  : TInterfaceList;
+    i, N  : Integer;
+Begin
+    Board := PCBServer.GetCurrentPCBBoard;
+    If Board = Nil Then
+    Begin
+        ShowMessage('No PCB document is in front.');
+        Exit;
+    End;
+
+    Dead := TInterfaceList.Create;
+
+    Iter := Board.BoardIterator_Create;
+    Iter.AddFilter_ObjectSet(MkSet(eTrackObject));
+    Iter.AddFilter_LayerSet(MkSet(eKeepOutLayer));
+    Iter.AddFilter_Method(eProcessAll);
+    T := Iter.FirstPCBObject;
+    While T <> Nil Do
+    Begin
+        Dead.Add(T);                { collect first -- deleting inside the }
+        T := Iter.NextPCBObject;    { iteration invalidates it }
+    End;
+    Board.BoardIterator_Destroy(Iter);
+
+    N := Dead.Count;
+    PCBServer.PreProcess;
+    For i := 0 To N - 1 Do
+        Board.RemovePCBObject(Dead.Items[i]);
+    PCBServer.PostProcess;
+    Board.ViewManager_FullUpdate;
+
+    ShowMessage('Removed ' + IntToStr(N) + ' keep-out tracks.' + Chr(13) +
+                'Expect 12 if DrawKeepoutsPT had been run once.' + Chr(13) +
+                Chr(13) + 'DrawKeepoutsPT is safe to run again now.');
+End;
+
+
 { ---------- runnable: the real one, part two ------------------------------ }
 
 Procedure DrawKeepoutsPT;
@@ -478,11 +528,25 @@ Begin
 
     PCBServer.PreProcess;
 
-    { U3, 22 x 31 at (112, 82) }
-    PutKeepoutBox(Board, 101.0, 66.5, 123.0, 97.5);
+    { THE MODULE BOXES SIT BETWEEN THE PAD COLUMNS, NOT ON THE BODY OUTLINE.
 
-    { U7, 22.5 x 17 at (108, 52) }
-    PutKeepoutBox(Board,  96.75, 43.5, 119.25, 60.5);
+      Drawn on the body outline -- which is what the first version did -- the
+      rectangle passes 1.53 mm from the module's own outer pad centres, and a
+      0.95 mm pad radius leaves 0.33 mm against a 0.5 mm Clearance rule.  So
+      the module's OWN pads permanently violate the keep-out drawn to protect
+      it, and three rows of that are enough to make "DRC clean" meaningless.
+
+      What section 6 actually asks for is that no track crosses UNDER the
+      module, and a track cannot get in among the pad columns anyway.  So the
+      rectangle covers the span between the columns, inset to clear the pads
+      by ~0.94 mm, and the narrow strip outboard of each pad column is left to
+      the pads themselves. }
+
+    { U3, pad columns at x = 112 +- 8.89, so 105..119 clears them }
+    PutKeepoutBox(Board, 105.0, 66.5, 119.0, 97.5);
+
+    { U7, pad columns at x = 108 +- 8.89, so 101..115 clears them }
+    PutKeepoutBox(Board, 101.0, 43.5, 115.0, 60.5);
 
     { Q3's heatsink at (70, 48). 16 x 16 is a clip-on for a TO-220 plus a
       little; measure the real one and stretch this if it is bigger. The tab
@@ -494,12 +558,13 @@ Begin
 
     ShowMessage('Three keep-out rectangles drawn on ' + Board.FileName +
                 Chr(13) + Chr(13) +
-                'U3   101.0, 66.5  ->  123.0, 97.5' + Chr(13) +
-                'U7    96.8, 43.5  ->  119.3, 60.5' + Chr(13) +
+                'U3   105.0, 66.5  ->  119.0, 97.5' + Chr(13) +
+                'U7   101.0, 43.5  ->  115.0, 60.5' + Chr(13) +
                 'Q3hs  62.0, 40.0  ->   78.0, 56.0' + Chr(13) + Chr(13) +
                 'RUN THIS ONCE. There is no duplicate check -- a second run' +
                 Chr(13) + 'stacks a second set on the first, and two' +
                 Chr(13) + 'coincident keep-outs look exactly like one.' +
+                Chr(13) + 'Run ClearKeepoutsPT first if they are already there.' +
                 Chr(13) + Chr(13) +
                 'If you moved U3, U7 or Q3 first, delete these and edit the' +
                 Chr(13) + 'coordinates: the rectangles do not follow the part.');

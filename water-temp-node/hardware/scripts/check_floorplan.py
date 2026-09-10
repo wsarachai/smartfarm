@@ -55,6 +55,12 @@ EPS = 1e-6         # MinimumAnnularRing is DERIVED from the 1.9 mm pad on the
 # Deliberate, documented exceptions - see MakeFootprintsPT.pas for each.
 HOLE_WAIVERS = {'FUSEHOLDER-5X20-P226'}    # 1.5 mm, opened with a reamer
 
+KEEPOUT_W = 0.25   # width DrawKeepoutsPT draws the rectangles at. A keep-out
+                   # edge is copper-like to the Clearance rule, and a module's
+                   # OWN pads are what it runs closest to - which is how the
+                   # first version of these rectangles came to be permanently
+                   # in violation of themselves.
+
 # The only footprint not built by MakeFootprintsPT.pas: vendor SMD land.
 EXTRA_FP = {'CDSOD323_BRN-M': (-1.60, -0.90, 1.60, 0.90)}
 
@@ -200,6 +206,22 @@ def footprints(want_pads=False):
     return out
 
 
+def keepouts():
+    """[(x1, y1, x2, y2)] from PlacePartsPT.pas's PutKeepoutBox calls."""
+    src = open(os.path.join(HERE, 'PlacePartsPT.pas'), encoding='utf-8').read()
+    return [tuple(float(v) for v in m)
+            for m in re.findall(
+                r"PutKeepoutBox\(Board,\s*(-?[\d.]+),\s*(-?[\d.]+),"
+                r"\s*(-?[\d.]+),\s*(-?[\d.]+)\)", src)]
+
+
+def _seg_point(px, py, x1, y1, x2, y2):
+    dx, dy = x2 - x1, y2 - y1
+    L = dx * dx + dy * dy
+    t = 0.0 if L == 0 else max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / L))
+    return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+
+
 def placement():
     """Return [(designator, x, y, rotation)] from PlacePartsPT.pas."""
     src = open(os.path.join(HERE, 'PlacePartsPT.pas'), encoding='utf-8').read()
@@ -314,6 +336,31 @@ def main():
     if not pad_bad:
         print('  none')
     problems += pad_bad
+
+    print()
+    print('pads within %.2f mm of a keep-out edge:' % CLEARANCE)
+    ko_bad = 0
+    for x1, y1, x2, y2 in keepouts():
+        edges = [(x1, y1, x2, y1), (x2, y1, x2, y2),
+                 (x2, y2, x1, y2), (x1, y2, x1, y1)]
+        for d, x, y, rot in parts:
+            for pad in allpads.get(dmap[d], []):
+                if not pad[0].isdigit():
+                    continue
+                n, px, py, w, h, _hole, _rect = pad
+                if rot % 180 == 90:
+                    px, py = -py, px
+                ax, ay = x + px, y + py
+                rad = min(w, h) / 2
+                for e in edges:
+                    gap = _seg_point(ax, ay, *e) - rad - KEEPOUT_W / 2
+                    if gap < CLEARANCE:
+                        print('  %-4s pad %-3s at (%.2f, %.2f)  gap %+.2f mm'
+                              % (d, n, ax, ay, gap))
+                        ko_bad += 1
+    if not ko_bad:
+        print('  none')
+    problems += ko_bad
 
     tight = sorted(
         (max(max(boxes[b][0] - boxes[a][2], boxes[a][0] - boxes[b][2]),
