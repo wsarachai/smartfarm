@@ -57,6 +57,12 @@
     board's bottom-left corner, everything below is written in RELATIVE mm,
     and ToAbs does the conversion once.  Board is 160 x 120.
 
+  EVERY ROUTINE IN THIS FILE IS FLAT, AND HAS TO STAY THAT WAY
+    Altium's DelphiScript will not let a nested routine read the enclosing
+    one's parameters or locals; it fails at run time with "Can't access top
+    level variable", which reads like a complaint about globals and is not one.
+    Pass what you need as a parameter.  See PutKeepoutSeg.
+
   THE FLOORPLAN, IN ONE PICTURE   (relative mm, y up)
 
     120 +--------------------------------------------------------------+
@@ -156,35 +162,48 @@ Begin
 End;
 
 
+{ One edge of a keep-out rectangle.
+
+  THIS IS FLAT ON PURPOSE, AND THAT IS THE WHOLE NOTE.
+  It began as a nested procedure inside PutKeepoutBox, which is natural Pascal
+  and which Altium's DelphiScript cannot run: a nested routine may not read the
+  enclosing routine's parameters or locals, and reaching for `Board` from inside
+  it fails at run time with
+
+      Can't access top level variable
+
+  -- an error whose wording points at globals and whose cause is the nesting.
+  SetupBoardPT.pas never hit it because every routine in that file is flat.
+  Keep them flat here too: pass what you need as a parameter. }
+Procedure PutKeepoutSeg(Board : IPCB_Board; Ax, Ay, Bx, By : Real);
+Var
+    T : IPCB_Track;
+Begin
+    T := PCBServer.PCBObjectFactory(eTrackObject, eNoDimension,
+                                    eCreate_Default);
+    T.X1        := ToAbsX(Ax);
+    T.Y1        := ToAbsY(Ay);
+    T.X2        := ToAbsX(Bx);
+    T.Y2        := ToAbsY(By);
+    T.Width     := MMsToCoord(0.25);
+    T.Layer     := eKeepOutLayer;
+    T.IsKeepout := True;
+    Board.AddPCBObject(T);
+    PCBServer.SendMessageToRobots(Board.I_ObjectAddress, c_Broadcast,
+                                  PCBM_BoardRegisteration,
+                                  T.I_ObjectAddress);
+End;
+
+
 { A keep-out rectangle, drawn as four tracks on the keep-out layer.  The DRC
   reads these as "no copper here", which is what section 6's "no traces under
   the module footprints, and none under Q3's heatsink" asks for. }
 Procedure PutKeepoutBox(Board : IPCB_Board; X1, Y1, X2, Y2 : Real);
-
-    Procedure Seg(Ax, Ay, Bx, By : Real);
-    Var
-        T : IPCB_Track;
-    Begin
-        T := PCBServer.PCBObjectFactory(eTrackObject, eNoDimension,
-                                        eCreate_Default);
-        T.X1        := ToAbsX(Ax);
-        T.Y1        := ToAbsY(Ay);
-        T.X2        := ToAbsX(Bx);
-        T.Y2        := ToAbsY(By);
-        T.Width     := MMsToCoord(0.25);
-        T.Layer     := eKeepOutLayer;
-        T.IsKeepout := True;
-        Board.AddPCBObject(T);
-        PCBServer.SendMessageToRobots(Board.I_ObjectAddress, c_Broadcast,
-                                      PCBM_BoardRegisteration,
-                                      T.I_ObjectAddress);
-    End;
-
 Begin
-    Seg(X1, Y1, X2, Y1);
-    Seg(X2, Y1, X2, Y2);
-    Seg(X2, Y2, X1, Y2);
-    Seg(X1, Y2, X1, Y1);
+    PutKeepoutSeg(Board, X1, Y1, X2, Y1);
+    PutKeepoutSeg(Board, X2, Y1, X2, Y2);
+    PutKeepoutSeg(Board, X2, Y2, X1, Y2);
+    PutKeepoutSeg(Board, X1, Y2, X1, Y1);
 End;
 
 
