@@ -86,8 +86,27 @@ back, because the ratsnest around it is currently pointing at the wrong three pa
 **Next action: placement**, in the order §6 of
 [`hardware-interface-proto.md`](hardware-interface-proto.md) fixes — edge
 connectors first, then the 24 V corner in the physical sequence
-J14 → F1 → Q2 → D9 → C11, then the modules, then the rest. Three things to carry
-into it that are not obvious from the floorplan sketch:
+J14 → F1 → Q2 → D9 → C11, then the modules, then the rest.
+
+**`hardware/scripts/PlacePartsPT.pas` does the first pass.** `CheckPlacementPT`
+reports what it can see, `PlaceFloorplanPT` puts all 69 parts down and **locks
+the sixteen whose position is a specification** — J1–J7, J9–J14, CN6, U3, U7 —
+and `DrawKeepoutsPT` draws the three no-copper rectangles (U3, U7, Q3's
+heatsink). It sets absolute positions rather than nudging, so running it twice
+is harmless; `DrawKeepoutsPT` is the one that is not. **The other 53 land on a
+starting floorplan, not a specification** — they are grouped with what they
+belong to and cleared against the 0.5 mm rule, and they are meant to be dragged
+while routing. The script's own comments carry the three groups worth checking
+by eye first: the 24 V chain's order, C19's distance to U7 (**7.6 mm pad to pad,
+which is the geometric floor** — an 8 mm can beside a module whose outline
+reaches 2.36 mm past its pad column), and the `VBAT_SENSE` divider.
+
+**Rotation there is placement, not polarity.** Everything lands at 0° or 90°
+because that is what makes the ratsnest readable. D9, D10, D11, D12, C11 and C19
+are polarised and [`build-sheet-proto.md`](build-sheet-proto.md) §2 is what says
+which way round they go; expect to flip several while routing.
+
+Three things to carry into it that are not obvious from the floorplan sketch:
 
 - **C19 belongs beside U7, not in the 24 V corner.** The ASCII sketch groups it
   with C11 out of history — it moved to `24V_PRE` and is now the module's input
