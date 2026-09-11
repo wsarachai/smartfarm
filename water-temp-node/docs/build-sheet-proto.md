@@ -140,6 +140,7 @@ at the SCD41's 205 mA burst; doubled, 86 mV.
 
 Lowest first, because a tall part fitted early blocks the iron from a short one.
 
+☐ **0. The fifteen wire links — §4a. Before anything else.**
 ☐ 1. SMD on the copper side — D1–D6, Q1
 ☐ 2. Axial resistors, lying flat
 ☐ 3. Diodes D9, D10, D11, D12 — **polarised, §2**
@@ -153,9 +154,55 @@ Lowest first, because a tall part fitted early blocks the iron from a short one.
 
 ---
 
+## 4a. The fifteen wire links — fit these FIRST
+
+**This board has no plated through-holes.** Every hole is two separate pieces of
+copper, joined only by the solder you put there. Where a net has to change layer
+there is a **0.8 mm hole with a bare wire through it, soldered on both faces** —
+that is what a via is here.
+
+**Fit them before any component.** Once a part sits over a hole you cannot reach
+the top face of it, and thirteen of these are ground: an unsoldered ground link
+does not fail cleanly, it makes the board work **mostly**, which is the worst way
+for a fault to present.
+
+Cut 0.5 mm tinned copper wire, push it through, solder **top first**, then flip
+and solder the bottom, then clip both ends flush.
+
+**Thirteen ground stitching links** — these tie the top and bottom ground pours
+together:
+
+| | x | y | | | x | y |
+|---|---|---|---|---|---|---|
+| ☐ W1 | 6.00 | 6.00 | | ☐ W8 | 56.00 | 81.00 |
+| ☐ W2 | 137.00 | 6.50 | | ☐ W9 | 40.39 | 87.63 |
+| ☐ W3 | 56.00 | 10.00 | | ☐ W10 | 9.40 | 105.03 |
+| ☐ W4 | 100.00 | 21.00 | | ☐ W11 | 106.00 | 114.00 |
+| ☐ W5 | 140.00 | 26.50 | | ☐ W12 | 130.00 | 114.00 |
+| ☐ W6 | 118.00 | 36.00 | | ☐ W13 | 145.00 | 114.00 |
+| ☐ W7 | 43.00 | 52.00 | | | | |
+
+**Two signal links** — these carry a net across layers, so a missed one is an open
+circuit on that net alone:
+
+| | x | y | net |
+|---|---|---|---|
+| ☐ W14 | 59.56 | 34.54 | `DQ_P4` — probe P4 |
+| ☐ W15 | 19.81 | 48.13 | `V3V3_MCU` |
+
+**Coordinates are from the board's bottom-left corner**, the same origin the
+artwork uses. W4, W5, W6 and W2 sit in the 24 V corner and carry the surge
+return — solder those four properly rather than quickly.
+
+☐ **Count them: fifteen holes with wire in them, before step 1 of §4.**
+
+---
+
 ## 5. Before the first volt
 
 ☐ Every line of §2 checked, with the board in front of you
+☐ **All fifteen wire links of §4a fitted and soldered on BOTH faces** — count
+them; thirteen are ground and an open one hides
 ☐ `24V_PRE` → GND: **not a short.** A solder bridge at U7's input pins is
 invisible on unmasked copper, and it is what the current limiter exists to survive
 ☐ `24V_PROT` → GND: not a short

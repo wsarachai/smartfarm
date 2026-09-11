@@ -899,12 +899,16 @@ that actually binds at 30.
 
 ### The follow-up this leaves
 
-**Fifteen wire links exist on the board and none of them are on the build sheet.**
-Each is a 0.8 mm hole with a wire soldered on both faces, and
-[`build-sheet-proto.md`](build-sheet-proto.md) plus its Thai mirror are the only
-documents at the bench. **A missed link is a silent open circuit** — and thirteen
-of them are ground, where an open reads as *works, mostly*. They need a numbered
-section with coordinates before Stage 2.
+☑ **Done 2026-09-12.** The fifteen wire links are now §4a of
+[`build-sheet-proto.md`](build-sheet-proto.md) **and its Thai mirror**, which is
+the copy that gets printed — W1–W13 ground stitching, W14–W15 signal
+(`DQ_P4`, `V3V3_MCU`), each with coordinates from the board's bottom-left corner
+and its own tick box.
+
+They are **step 0 of the assembly order**, before the SMD parts, because a
+component sitting over a hole puts the top face out of reach of an iron. §5 gained
+a line as well: count all fifteen before the first volt. **Thirteen are ground**,
+where an open link does not fail cleanly — it makes the board work *mostly*.
 
 ---
 
