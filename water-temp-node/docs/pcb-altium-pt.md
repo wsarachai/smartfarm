@@ -712,6 +712,23 @@ right edge, each pair picking up its own 2.2 k.
 **F. The leftovers**, in any order: `SENS_GATE`, `VBAT_SENSE`, `DBG_TX`, `DBG_RX`,
 `NetQ1_1`, `NetR23_2`, `NetD10_1`, `NetD12_1`, `NetC22_2`.
 
+> **A keep-out must never enclose the pads of the part it protects.** Q3's
+> heatsink rectangle did — 16 × 16 mm centred on the part, swallowing all three
+> of its pads — and a pad inside a keep-out cannot be routed to at all. It was
+> found by trying to route `24V_PROT` from C11 to Q3 and being refused.
+>
+> Fixed 2026-09-11 to **(62, 36) → (78, 46)**, below the pads rather than around
+> them. **Q3 is placed at 180°**, and `TO220-VERT-STAG` puts its body 1.60–6.30 mm
+> *above* the pad row, so at 180° the body and the heatsink clipped to it sit
+> *below*: y 41.6–46.4 against pads at y 46.8–51.7. The rectangle stops at 46.0
+> and clears pad 2 by 0.68 mm. **Rotate Q3 back to 0° and this rectangle becomes
+> wrong** — keep-outs are drawn at absolute coordinates and do not follow parts.
+>
+> `check_floorplan.py` now tests **containment**, not only distance to the edges.
+> Measuring edges alone says nothing about a trapped pad: the further inside it
+> sits, the healthier it looks. Against the old rectangle the check reports all
+> three Q3 pads; against the new one, none.
+
 **G. Pour GND on both layers, then stitch.** 8–12 stitching vias spread across the
 board, most densely in the 24 V corner where the surge return matters.
 

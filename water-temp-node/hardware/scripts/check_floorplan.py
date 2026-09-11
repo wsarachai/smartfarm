@@ -355,7 +355,7 @@ def main():
     problems += pad_bad
 
     print()
-    print('pads within %.2f mm of a keep-out edge:' % CLEARANCE)
+    print('pads inside a keep-out, or within %.2f mm of an edge:' % CLEARANCE)
     ko_bad = 0
     for x1, y1, x2, y2 in keepouts():
         edges = [(x1, y1, x2, y1), (x2, y1, x2, y2),
@@ -368,6 +368,16 @@ def main():
                 px, py = rotate(px, py, rot)
                 ax, ay = x + px, y + py
                 rad = min(w, h) / 2
+                if x1 <= ax <= x2 and y1 <= ay <= y2:
+                    # A pad INSIDE a keep-out cannot be routed to at all, and
+                    # measuring its distance to the edges says nothing: the
+                    # further in it sits, the healthier it looks. The first
+                    # version of this check only measured edges, and passed a
+                    # rectangle that had swallowed all three of Q3's pads.
+                    print('  %-4s pad %-3s at (%.2f, %.2f)  INSIDE the keep-out'
+                          ' - unroutable' % (d, n, ax, ay))
+                    ko_bad += 1
+                    continue
                 for e in edges:
                     gap = _seg_point(ax, ay, *e) - rad - KEEPOUT_W / 2
                     if gap < CLEARANCE:

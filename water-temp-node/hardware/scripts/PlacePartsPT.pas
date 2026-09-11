@@ -17,6 +17,18 @@
       ClearKeepoutsPT    deletes every keep-out track, so the one above can
                          be run again when the rectangles change.
 
+  THE COORDINATES BELOW WERE RE-SYNCED FROM THE BOARD ON 2026-09-11
+    They started as a floorplan and are now a RECORD of the real placement:
+    23 of them were re-read out of STM32WL_PT.PcbDoc after the layout was
+    adjusted by hand.  That matters because DrawKeepoutsPT's rectangles are
+    drawn at absolute coordinates and do not follow the parts -- Q3's heatsink
+    rectangle in particular depends on Q3 being at 180 degrees.  Running
+    PlaceFloorplanPT against stale coordinates would rotate Q3 back and push
+    its own pads inside that rectangle.
+
+    From here the BOARD is the authority, not this file.  Re-sync before
+    re-running, or do not re-run.
+
   WHAT IS LOCKED AND WHAT IS NOT, WHICH IS THE POINT OF THE SCRIPT
     LOCKED: J1-J7, J9-J14, CN6, U3, U7.  These are the positions section 6
     calls not negotiable -- the edge assignment, and J1..J6 running P0->P5 in
@@ -328,29 +340,29 @@ Begin
       arrives on. Series resistor inboard-left, pull-up inboard-right, both
       vertical so a 10.16 mm axial part fits inside a 14 mm channel pitch. }
 
-    PlaceOne(Board, 'D1',   20.0,  13.5,  0.0, FREE);   { P0 }
+    PlaceOne(Board, 'D1', 20.00, 13.50, 180.0, FREE);   { P0 }
     PlaceOne(Board, 'R9',   17.0,  22.0, 90.0, FREE);
-    PlaceOne(Board, 'R3',   23.0,  22.0, 90.0, FREE);
+    PlaceOne(Board, 'R3', 23.00, 22.00, 270.0, FREE);
 
-    PlaceOne(Board, 'D2',   34.0,  13.5,  0.0, FREE);   { P1 }
+    PlaceOne(Board, 'D2', 34.00, 13.50, 180.0, FREE);   { P1 }
     PlaceOne(Board, 'R10',  31.0,  22.0, 90.0, FREE);
-    PlaceOne(Board, 'R4',   37.0,  22.0, 90.0, FREE);
+    PlaceOne(Board, 'R4', 37.00, 22.00, 270.0, FREE);
 
-    PlaceOne(Board, 'D3',   48.0,  13.5,  0.0, FREE);   { P2 }
+    PlaceOne(Board, 'D3', 48.00, 13.50, 180.0, FREE);   { P2 }
     PlaceOne(Board, 'R11',  45.0,  22.0, 90.0, FREE);
-    PlaceOne(Board, 'R5',   51.0,  22.0, 90.0, FREE);
+    PlaceOne(Board, 'R5', 51.00, 22.00, 270.0, FREE);
 
-    PlaceOne(Board, 'D4',   62.0,  13.5,  0.0, FREE);   { P3 }
+    PlaceOne(Board, 'D4', 62.00, 13.50, 180.0, FREE);   { P3 }
     PlaceOne(Board, 'R12',  59.0,  22.0, 90.0, FREE);
-    PlaceOne(Board, 'R6',   65.0,  22.0, 90.0, FREE);
+    PlaceOne(Board, 'R6', 65.00, 22.00, 270.0, FREE);
 
-    PlaceOne(Board, 'D5',   76.0,  13.5,  0.0, FREE);   { P4 }
-    PlaceOne(Board, 'R13',  73.0,  22.0, 90.0, FREE);
-    PlaceOne(Board, 'R7',   79.0,  22.0, 90.0, FREE);
+    PlaceOne(Board, 'D5', 76.00, 13.50, 180.0, FREE);   { P4 }
+    PlaceOne(Board, 'R13', 73.00, 22.00, 270.0, FREE);
+    PlaceOne(Board, 'R7', 79.00, 22.00, 270.0, FREE);
 
-    PlaceOne(Board, 'D6',   90.0,  13.5,  0.0, FREE);   { P5 }
-    PlaceOne(Board, 'R14',  87.0,  22.0, 90.0, FREE);
-    PlaceOne(Board, 'R8',   93.0,  22.0, 90.0, FREE);
+    PlaceOne(Board, 'D6', 90.00, 13.50, 180.0, FREE);   { P5 }
+    PlaceOne(Board, 'R14', 87.00, 22.00, 270.0, FREE);
+    PlaceOne(Board, 'R8', 93.00, 22.00, 270.0, FREE);
 
     { ===== 24 V input chain =============================================== }
     { THE ORDER ALONG THIS ROW IS THE SPECIFICATION, not a preference:
@@ -359,10 +371,10 @@ Begin
       inside it. Give D9's anode and C11's minus their own wide copper back to
       J14's ground pin -- section 6, and it is the one node on this board where
       "ground is just ground" is wrong. }
-    PlaceOne(Board, 'F1',  138.0,  18.0,  0.0, FREE);
-    PlaceOne(Board, 'Q2',  118.0,  18.0,  0.0, FREE);   { tab = 24V_PROT, LIVE }
+    PlaceOne(Board, 'F1', 138.00, 18.00, 180.0, FREE);
+    PlaceOne(Board, 'Q2', 117.86, 25.27, 180.0, FREE);   { tab = 24V_PROT, LIVE }
     PlaceOne(Board, 'D9',  104.0,  18.0,  0.0, FREE);
-    PlaceOne(Board, 'C11', 104.0,  30.0,  0.0, FREE);
+    PlaceOne(Board, 'C11', 104.00, 30.00, 180.0, FREE);
 
     { Q2's gate clamp. R38 and D10 are a pair and both belong AT the FET --
       without D10 V_GS reaches -32 V against a +-20 V limit.
@@ -374,23 +386,23 @@ Begin
       extent and Altium's ComponentClearance caught them at 10 mil.
       check_floorplan.py now derives every extent from MakeFootprintsPT.pas
       instead; run it after moving anything here. }
-    PlaceOne(Board, 'R38', 112.0,  33.0, 90.0, FREE);
-    PlaceOne(Board, 'D10', 118.0,  30.0, 90.0, FREE);
+    PlaceOne(Board, 'R38', 121.03, 10.72,  0.0, FREE);
+    PlaceOne(Board, 'D10', 107.44, 10.67, 180.0, FREE);
 
     { VBAT_SENSE divider. Section 6 wants it LAST along the 24V_PROT node and
       away from both modules: it is a 27 kOhm analog source and has no business
       near switching copper. This is the group most worth a second look once
       the ground pour is in. }
-    PlaceOne(Board, 'R24', 128.0,  34.0,  0.0, FREE);
-    PlaceOne(Board, 'R25', 128.0,  28.0,  0.0, FREE);
-    PlaceOne(Board, 'C10', 140.0,  28.0,  0.0, FREE);
+    PlaceOne(Board, 'R24', 134.49, 32.13, 180.0, FREE);
+    PlaceOne(Board, 'R25', 134.48, 26.86,  0.0, FREE);
+    PlaceOne(Board, 'C10', 147.96, 26.80, 180.0, FREE);
 
     { ===== linear pre-regulator, 24V_PROT -> 24V_PRE ====================== }
     { Q3 is a source follower; D11 pins its gate so U7's input can never climb
       past ~23 V whatever the bank does. Q3 needs a clip-on heatsink -- 3.3 W
       into a bare TO-220 on a sustained short -- and its tab is at 24V_PRE, so
       the heatsink is live unless it is isolated. Keep-out drawn separately. }
-    PlaceOne(Board, 'Q3',   70.0,  48.0,  0.0, FREE);
+    PlaceOne(Board, 'Q3', 70.00, 48.00, 180.0, FREE);
     PlaceOne(Board, 'R41',  52.0,  54.0, 90.0, FREE);
     PlaceOne(Board, 'D11',  52.0,  41.0, 90.0, FREE);
     PlaceOne(Board, 'C22',  58.0,  42.0, 90.0, FREE);
@@ -548,10 +560,27 @@ Begin
     { U7, pad columns at x = 108 +- 8.89, so 101..115 clears them }
     PutKeepoutBox(Board, 101.0, 43.5, 115.0, 60.5);
 
-    { Q3's heatsink at (70, 48). 16 x 16 is a clip-on for a TO-220 plus a
-      little; measure the real one and stretch this if it is bigger. The tab
-      is at 24V_PRE, so this rectangle is a live part as well as a hot one. }
-    PutKeepoutBox(Board,  62.0, 40.0,  78.0, 56.0);
+    { Q3's heatsink. BELOW the pads, not around them.
+
+      THIS RECTANGLE USED TO ENCLOSE Q3'S OWN THREE PADS and made the part
+      unroutable -- you cannot draw a track to a pad sitting inside a keep-out.
+      The module rectangles above had the same fault in a milder form and were
+      inset between their pad columns; this one was 16 x 16 mm centred on the
+      part, so it swallowed everything.
+
+      Q3 IS PLACED AT 180 DEGREES, which is what decides where this goes.
+      TO220-VERT-STAG puts its body box at +1.60..+6.30 ABOVE the pad row, so
+      at 180 degrees the body -- and the heatsink clipped to it -- sits BELOW:
+      y 41.6..46.4, while the pads run y 46.8..51.7.  The rectangle stops at
+      y = 46.0, which clears pad 2 by 0.68 mm against a 0.5 mm rule.
+
+      IF Q3 IS EVER ROTATED BACK TO 0, THIS RECTANGLE IS WRONG and must be
+      mirrored to the other side of the pads.  Keep-outs do not follow the part.
+
+      Width and depth are still a guess at a clip-on heatsink: measure the real
+      one and stretch this. The tab is at 24V_PROT, so it is a live part as
+      well as a hot one. }
+    PutKeepoutBox(Board,  62.0, 36.0,  78.0, 46.0);
 
     PCBServer.PostProcess;
     Board.ViewManager_FullUpdate;
@@ -560,7 +589,7 @@ Begin
                 Chr(13) + Chr(13) +
                 'U3   105.0, 66.5  ->  119.0, 97.5' + Chr(13) +
                 'U7   101.0, 43.5  ->  115.0, 60.5' + Chr(13) +
-                'Q3hs  62.0, 40.0  ->   78.0, 56.0' + Chr(13) + Chr(13) +
+                'Q3hs  62.0, 36.0  ->   78.0, 46.0' + Chr(13) + Chr(13) +
                 'RUN THIS ONCE. There is no duplicate check -- a second run' +
                 Chr(13) + 'stacks a second set on the first, and two' +
                 Chr(13) + 'coincident keep-outs look exactly like one.' +
