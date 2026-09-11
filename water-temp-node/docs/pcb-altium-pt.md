@@ -46,6 +46,7 @@ picked up a new bug**, below.
 | §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
 | Layout, `pcb-home-etch.md` Stage 1 | **placed and DRC-clean** 2026-09-10 22:10. Routing next |
 | DRC on the placed board | **clean** — only unrouted nets and F1's documented reamed holes remain |
+| Symbol pin numbering, all parts | **swept clean** 2026-09-11 — Bugs 2 and 3 were the only three occurrences |
 
 What the netlist confirms on the buck sheet, because it is the sheet that changed:
 Q2 drain on `24V_RAW` and source on `24V_PROT` (the reverse-polarity hookup, not
@@ -444,8 +445,8 @@ numbers are the ones its datasheet uses.
 
 ### Bug 3 — Q2 and Q3 are wired through their gates
 
-**Found 2026-09-11, starting to route the 24 V corner. Not yet fixed. Nothing in
-phase A should be routed until it is.**
+**Found 2026-09-11, starting to route the 24 V corner. ☑ FIXED and verified the
+same day — see *Closed* at the end of this section.**
 
 Same root cause as Bug 2, on two more parts. Both TO-220s carry a **generic
 Miscellaneous Devices symbol** — `MOSFET-P` for Q2, `MOSFET-N` for Q3 — and both
@@ -597,6 +598,37 @@ the sheet.
 ☐ **Confirm the pinout against the datasheets of the parts actually bought.**
 TO-220 pin order is per-part, not per-package; 1=G 2=D 3=S is right for the
 IRF series and is not a universal rule.
+
+#### Closed — verified out of the saved board, 2026-09-11 13:06
+
+The 13:06 ECO carries the four moves, both directions:
+
+```
+Removed Pin From Net: 24V_RAW  Q2-1     Added Pin To Net: NetD10_1 Q2-1
+Removed Pin From Net: NetD10_1 Q2-2     Added Pin To Net: 24V_RAW  Q2-2
+Removed Pin From Net: 24V_PROT Q3-1     Added Pin To Net: NetC22_2 Q3-1
+Removed Pin From Net: NetC22_2 Q3-2     Added Pin To Net: 24V_PROT Q3-2
+```
+
+And the board agrees, read back pad by pad:
+
+| | pad 1 = **gate** | pad 2 = **drain / tab** | pad 3 = **source** |
+|---|---|---|---|
+| **Q2** | `NetD10_1` — R38 + D10 | `24V_RAW` | `24V_PROT` |
+| **Q3** | `NetC22_2` — R41/D11/C22/Q4 | `24V_PROT` | `NetD12_1` → R42 → `24V_PRE` |
+
+**Q2 is now the reverse-polarity hookup and not the ideal-diode one**: drain to the
+supply side, source to the load, which is what §5's *Q2 — the reverse-polarity FET
+is wired backwards on purpose* requires. The gate clamp reaches the gate. Both tabs
+are back on their drains, so §6's warnings about Q2's tab at `24V_PROT` and Q3's
+live heatsink read true again.
+
+**The whole-board sweep of this bug class is clean.** Every symbol's pin names now
+agree with its footprint's pad convention: `IRF9540N`/`IRF740` G=1 D=2 S=3 against
+TO-220 1=G 2=D(tab) 3=S; `AO3401A` G=1 S=2 D=3 against the AOS drawing; `NPN`
+C=1 B=2 E=3 against `BC547: 1=C 2=B 3=E`; `Diode` and `D Zener` A=1 K=2 against
+`Pad 2 = CATHODE`. **Three occurrences of one mistake, on Q1, Q2 and Q3, and no
+fourth.**
 
 ---
 
