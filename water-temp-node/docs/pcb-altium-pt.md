@@ -56,58 +56,64 @@ and its source on D12-A / R42 / Q4-B, Q4's emitter on `24V_PRE`, and U7 with 1+2
 `VSENS` and A0/A1/A2 are all on GND — the two things §3 of the spec delta calls not
 optional.
 
-### Picking this up again
+### Picking this up again — last worked 2026-09-12
 
-The schematic is finished and committed. The board is open work, and it lives in
-files git does not track — see the warning at the end of this section.
+**The design is finished. GATE 1 is met.** Placed, routed, poured, stitched, and
+the DRC is down to `MaxMinPadRndHoleSize` ×2 — F1's reamed 1.5 mm pair, which
+`MakeFootprintsPT.pas` documents. `DisconnectedSubnets` is **zero**.
 
-**Done, and verified by reading `STM32WL_PT.PcbDoc` back:**
+Everything below was read back out of `STM32WL_PT.PcbDoc` itself, never from the
+dialog that reported it — which is the habit this board earned the hard way.
 
-- All 69 components imported with the right land.
-- The board artwork is placed (outline, origin, three fiducials, `100.0 mm` scale
-  bar, `TOP`/`BOT` copper markers) — `DrawArtworkPT` has already run. Running it a
-  second time would duplicate all of it; `CheckBoardPT` is the safe way to ask.
-- **Six design rules set**, values confirmed out of the file (Altium stores them in
-  mil): `Width` 0.5/1.0 mm at priority 2 scoped `All`; **`W_POWER` 3.0/6.0 mm at
-  priority 1** scoped `InNet('24V_PROT') or InNet('24V_PRE') or InNet('GND')` —
-  the priority is what makes the 3 mm rule win, and a `W_POWER` sitting below
-  `Width` silently does nothing; `Clearance` 0.5 mm; `RoutingVias` 2.0 mm pad /
-  0.8 mm hole; `HoleSize` 0.8–1.3 mm; `MinimumAnnularRing` **0.45 mm**.
-- The three sheet rooms Altium added at import have been deleted, because §6's
-  floorplan is edge-driven and crosses every sheet boundary.
+| | |
+|---|---|
+| Components / locked | 69 / 17 (the intended 16, plus F1) |
+| Schematic | three sheets, compiles clean; symbol pin numbers all agree with their footprints |
+| Board | 474 copper tracks, GND poured **both layers**, dead copper removed |
+| Wire links | **15** free pads, 2.0 mm / 0.8 mm / plated — 13 GND stitching, 2 signal |
+| 24 V surge path | **3.00 mm throughout** |
+| Keep-outs | 3 rectangles, no pads trapped |
+| Design rules | six, plus a second `PolygonConnect` at priority 1 for the surge return |
+
+**Three bugs were found and closed here, and four of the five defects in this
+document were one mistake wearing different clothes** — something checked by
+**name** while the thing behind the name had changed. Bug 1 (R23's pull-down),
+Bug 2 (Q1's symbol, then its footprint), Bug 3 (Q2 and Q3 wired through their
+gates). The sweep at the end of Bug 3 confirms there is no fourth.
+
+#### Next: `pcb-home-etch.md` Stage 2
+
+Print the artwork 1:1 on plain paper first and check the scale bar with calipers
+— **centre to centre of the end ticks, 100.0 ± 0.3 mm**. Measuring outside to
+outside reads 100.5 on a correct print and fails GATE 2 by itself; that trap is
+recorded in the process document and in `SetupBoardPT.pas`.
+
+Then: Bottom un-mirrored, Top **mirrored**, **Holes on** in both printouts.
+
+#### Two things that are still open, neither blocking
+
+- **§5's module pre-fit audit** — bench work, and the only item left from the
+  original work order. Measure the TCA9548A breakout's onboard SDA/SCL/RST
+  pull-ups and its decoupling capacitor **before anything is soldered**; if that
+  capacitor is over 1 µF it comes out of C1's budget.
+- **`check_floorplan.py` validates the script, not the board.** The two agreed
+  when last synced, but the board has been the authority since routing began.
+  Re-sync before ever running `PlaceFloorplanPT` again — or do not run it.
+
+> ⚠ **Back up `hardware/STM32WL_PT/` before closing.** The `.SchDoc`, `.PcbDoc`
+> and `.PcbLib` are not in git and cannot be. A finished, DRC-clean, fully routed
+> board exists **on one disk**. What is committed is the *account* of this work,
+> never the work.
 
 **`MinimumAnnularRing` = 0.45 mm is derived, not quoted.** It is the narrowest ring
 on the board — the 1.9 mm pad on a 1.0 mm hole that Stage 1 sizes for 2.54 mm
 pitch, so (1.9 − 1.0) / 2. Everything else is wider (Phoenix 0.55, general 0.70,
 via 0.60). Altium's own default is 0.05 mm, which catches nothing.
 
-**Bug 2 is closed**, so routing is unblocked — the ratsnest at Q1 points at the
-part's own pads again.
-
-**Next action: placement**, in the order §6 of
-[`hardware-interface-proto.md`](hardware-interface-proto.md) fixes — edge
-connectors first, then the 24 V corner in the physical sequence
-J14 → F1 → Q2 → D9 → C11, then the modules, then the rest.
-
-**`hardware/scripts/PlacePartsPT.pas` does the first pass.** `CheckPlacementPT`
-reports what it can see, `PlaceFloorplanPT` puts all 69 parts down and **locks
-the sixteen whose position is a specification** — J1–J7, J9–J14, CN6, U3, U7 —
-and `DrawKeepoutsPT` draws the three no-copper rectangles (U3, U7, Q3's
-heatsink). It sets absolute positions rather than nudging, so running it twice
-is harmless; `DrawKeepoutsPT` is the one that is not. **The other 53 land on a
-starting floorplan, not a specification** — they are grouped with what they
-belong to and cleared against the 0.5 mm rule, and they are meant to be dragged
-while routing. The script's own comments carry the three groups worth checking
-by eye first: the 24 V chain's order, C19's distance to U7 (**7.6 mm pad to pad,
-which is the geometric floor** — an 8 mm can beside a module whose outline
-reaches 2.36 mm past its pad column), and the `VBAT_SENSE` divider.
-
-**Rotation there is placement, not polarity.** Everything lands at 0° or 90°
-because that is what makes the ratsnest readable. D9, D10, D11, D12, C11 and C19
-are polarised and [`build-sheet-proto.md`](build-sheet-proto.md) §2 is what says
-which way round they go; expect to flip several while routing.
-
-Three things to carry into it that are not obvious from the floorplan sketch:
+**What follows in this section is history now**, kept because the reasoning still
+explains why things sit where they do: the §6 placement order, what
+`PlacePartsPT.pas` locks and why, and the note that its rotations were placement
+rather than polarity. Three things to carry into it that are not obvious from the floorplan sketch:
 
 - **C19 belongs beside U7, not in the 24 V corner.** The ASCII sketch groups it
   with C11 out of history — it moved to `24V_PRE` and is now the module's input
