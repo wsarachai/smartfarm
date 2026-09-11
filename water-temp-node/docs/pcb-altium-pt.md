@@ -555,6 +555,41 @@ S=3**, named after the parts so neither can be mistaken for the stock
 > **9.** Check the three wires at each part are still attached — a wire that only
 > *looks* connected is the failure here. `Project › Compile` must give **zero
 > errors and zero warnings**; a floating pin shows up there.
+>
+> **10. THE CHECK THAT MATTERS: the re-import ECO must contain net changes.**
+> It must say, for Q2, `24V_RAW` moving to **Q2-2** and `NetD10_1` to **Q2-1**;
+> for Q3, `24V_PROT` to **Q3-2** and `NetC22_2` to **Q3-1**.
+>
+> **An ECO with no `Added Pin To Net` lines at all means the fix did not take** —
+> and it will look like a success, because the symbol names and descriptions all
+> change and the dialog reports work done. That happened on the first attempt
+> here, 2026-09-11 12:53.
+
+#### The trap in step 4, which caught this fix on its first pass
+
+The stock `MOSFET-P` and `MOSFET-N` place their pins **1 = upper right, 2 = left,
+3 = lower right**, and the wires on the sheet run to those three *places*. Drawing
+the replacement by putting **pin 1 where pin 1 used to be** reproduces the old
+mapping exactly: the left wire still carries the gate node and still lands on pin
+2, the upper-right wire still carries the drain net and still lands on pin 1. The
+symbol now *says* G=1 D=2 S=3 while the netlist is byte-for-byte what it was, so
+Altium finds nothing to push and the ECO comes back with no net changes.
+
+**Place the pins by NAME, not by number.** The wire already at the left is the
+gate wire, so **`G` goes on the left** whatever number it carries. The wire at the
+upper right is the drain wire, so **`D` goes upper right**. Only then does the
+number under each wire actually change, which is the entire point of the fix.
+
+| | stock symbol | what step 4 asks for |
+|---|---|---|
+| left | G, numbered 2 | **G, numbered 1** |
+| upper right | D, numbered 1 | **D, numbered 2** |
+| lower right | S, numbered 3 | S, numbered 3 |
+
+**If the symbols are already drawn the wrong way round**, the repair is to swap
+where pin 1 and pin 2 sit inside `IRF9540N` and `IRF740` — two drags in the
+library, `Tools › Update Schematics`, re-import — rather than to move wires on
+the sheet.
 ☐ Point Q2 and Q3 at them, keeping `TO220-VERT-STAG` as the footprint with the
 **PCB Library** group set to **`Any`**.
 ☐ Re-import, and check the ECO: `24V_RAW` on **Q2-2**, `NetD10_1` on **Q2-1**,
