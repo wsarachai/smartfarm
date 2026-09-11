@@ -777,6 +777,28 @@ Two signatures give it away without opening the board:
 >
 > ✓ `TUnplatedPad` **0**, `TMaxMinPadRndHoleSize` **2**.
 
+☑ **Both done and verified, 2026-09-12 01:13.** F1 reads **3.00 mm pad / 1.50 mm
+hole** again; the hole set is back to **0.8 ×87, 1.0 ×92, 1.1 ×38, 1.3 ×6** plus F1's
+**1.5 ×2**; eleven pads sit at 2.0/0.8 — the eight vias and Q4's three legs — and
+**`TUnplatedPad` is gone**.
+
+☑ **Item 2 is closed too.** All three keep-out rectangles are back and **no track
+crosses U3's footprint** any more; the six branch segments were re-routed. GND
+also gained copper in the process: **87 segments at 3.00 mm**, up from 51.
+
+> **The rectangles were redrawn by hand, not by the script**, and sit a little
+> inside it — U7 at (101.98, 44.58)–(114.76, 59.44) and U3 at
+> (105.09, 68.07)–(119.29, 97.03) against `DrawKeepoutsPT`'s (101, 43.5)–(115, 60.5)
+> and (105, 66.5)–(119, 97.5). Both still clear their modules' pad columns, so
+> they do their job. But **running `DrawKeepoutsPT` again would now lay a second,
+> slightly different set on top** — run `ClearKeepoutsPT` first, or leave it alone.
+> (There are 13 tracks rather than 12 because U7's left edge is drawn in two
+> collinear pieces.)
+
+**The DRC is down to two categories: `DisconnectedSubnets` ×3 and
+`MaxMinPadRndHoleSize` ×2 — F1's documented reamed pair.** Everything else is
+clear.
+
 > **Then they have to reach the build sheet.** Eight wire links, drilled 0.8 mm
 > and soldered both faces, are eight assembly steps that nothing on site currently
 > describes — [`build-sheet-proto.md`](build-sheet-proto.md) and its Thai mirror
@@ -797,7 +819,7 @@ as **104 tracks**. It works, and it cost only 10 vias against a budget of 30. Bu
 and the board now disagree; whichever way this goes, one of them has to change
 before Stage 2, or the next person pours copper over a routed ground.
 
-**4. Six connections are still unrouted.**
+**4. Six connections are still unrouted.** — **three** as of 2026-09-12 01:13.
 
 ---
 
