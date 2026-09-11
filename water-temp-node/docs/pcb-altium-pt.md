@@ -632,6 +632,62 @@ fourth.**
 
 ---
 
+## Routing — first full check, 2026-09-11 23:35
+
+Read out of `STM32WL_PT.PcbDoc`: **474 copper tracks**, 260 top and 214 bottom,
+and **`DisconnectedSubnets` is down from 157 to 6**.
+
+**The surge path is right, which is the part that had to be.** Every segment in
+the 24 V corner is **3.00 mm**: `24V_IN` ×2, `24V_RAW` ×4, `24V_PROT` ×8 and
+**`GND` ×16**, with a single 1.5 mm GND segment left. §5's *give D9's anode and
+C11's negative their own wide copper back to J14's ground pin* is satisfied.
+
+**`NetF1_1` is now `24V_IN`** on the schematic and the board, and **the `W_POWER`
+scope was extended to `InNet('24V_IN') or InNet('24V_RAW')`** alongside
+`24V_PROT`/`24V_PRE`/`GND`. That closes a real gap: the surge from J14 reaches D9
+*through* F1 and Q2, so those two nets carry the same 11.3 A as `24V_PROT` and the
+original rule did not cover them.
+
+**`W_POWER`'s minimum was lowered 3.0 → 1.5 mm.** Recorded as a decision, not
+drift: the 3 mm figure comes from D9's surge and from keeping the clamp loop's
+inductance low, and **the corner where that applies is still 3 mm throughout**.
+What sits at 1.5 mm is `24V_PRE` (all 10 segments) and GND away from the corner —
+`24V_PRE` is behind Q3's ~130 mA limiter and never sees a surge, so 1.5 mm there
+is already two orders of margin.
+
+### Four things still open
+
+**1. The ten hand-made vias are the wrong size.** Free pads used as vias is the
+right idea on an unplated board. These are **1.52 mm pad with a 3.20 mm hole** —
+the hole is bigger than the pad, so there is **no annular ring at all** (−0.84 mm),
+and 3.2 mm is not one of the four drill sizes the process commits to. They are
+also `Plated = False`, which is what raises the ten `TUnplatedPad` violations;
+every footprint pad on this board is deliberately `Plated = True`
+(`MakeFootprintsPT.pas`: *a lie about this board, told on purpose*) because Altium
+needs it for connectivity.
+
+> Set all ten to **2.0 mm pad / 0.8 mm hole, plated** — Stage 1's via spec, and a
+> 0.6 mm ring. That also clears the ten `TUnplatedPad` and returns
+> `TMaxMinPadRndHoleSize` to F1's documented two.
+
+**2. U3's keep-out is gone and six tracks run under it.** Only 8 keep-out tracks
+remain — Q3's four and U7's four. `NetJ9_2` ×2 and `NetJ9_3` ×2 on the top layer
+and `NetJ10_2` ×2 on the bottom now cross U3's footprint, which §6 rules out.
+They are U3's own branch nets leaving its pads, so the path is the natural one —
+but **this board has no soldermask**, and the module's underside sits over them.
+Either re-route the six outside the pad columns, or record the decision that the
+header's standoff is clearance enough.
+
+**3. There is no GND pour** — `Polygons6` is empty. GND was hand-routed instead,
+as **104 tracks**. It works, and it cost only 10 vias against a budget of 30. But
+`pcb-home-etch.md` rule 4 still says to pour both layers, so the process document
+and the board now disagree; whichever way this goes, one of them has to change
+before Stage 2, or the next person pours copper over a routed ground.
+
+**4. Six connections are still unrouted.**
+
+---
+
 ## Where the board stands — 2026-09-10 22:10, verified
 
 Read back out of `STM32WL_PT.PcbDoc` itself, not from the dialogs that reported
