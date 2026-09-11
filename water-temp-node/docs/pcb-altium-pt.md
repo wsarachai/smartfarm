@@ -740,6 +740,43 @@ rule. Nothing needs moving first.
 > ✓ **Check:** `TUnplatedPad` **gone**, `TMaxMinPadRndHoleSize` back to **2**
 > (F1's reamed pair), and **no new `Clearance`**.
 
+#### What went wrong on the first attempt, 2026-09-12 00:59
+
+**The eight vias came out right** — 2.0 mm pad, 0.8 mm hole, +0.60 mm ring, and
+`DisconnectedSubnets` fell 5 → 3. But the selector caught **ten** objects, not
+eight, and the two extra were **F1's fuse clips**.
+
+The threshold used took in everything above about 1.4 mm, and F1's holes are
+**1.5 mm** — the one deliberate exception on this board, reamed up from 1.3
+because 1.5 is not in the four-bit drill set. So F1 went from **3.0 mm pad /
+1.5 mm hole** to **2.0 / 0.8**, and a 0.8 mm hole will not take a fuse clip's leg.
+
+Two signatures give it away without opening the board:
+
+- **`TMaxMinPadRndHoleSize` vanished entirely.** It should have fallen to 2, not 0
+  — those two *are* F1, and a rule going quiet is not always good news.
+- **`TUnplatedPad` went 8 → 10**, not 8 → 0. The `Plated` tick never got set, and
+  F1's two pads, which the footprint had set plated, were dragged unplated along
+  with the rest.
+
+**Nothing else was touched**, confirmed against the hole histogram: 1.0 mm ×92,
+1.1 mm ×38, 1.3 mm ×6 all unchanged.
+
+**The repair:**
+
+> **1. Put F1 back with `Tools › Update From PCB Libraries`**, selecting **F1**.
+> That restores its pads from `STM32WL_Pt.PcbLib` — 3.0 mm, 1.5 mm hole, plated —
+> in one operation with nothing typed. It is the same tool that finally pushed
+> Q2/Q3's stagger, and for the same reason: it is the only one that compares
+> footprint *geometry* rather than names.
+>
+> **2. Tick `Plated` on the eight vias.** Select them as before — they are now the
+> only 2.0 mm pads with a 0.8 mm hole that are not part of a component — and set
+> **Plated** in the Inspector. Their sizes are already correct; this is the one
+> field that did not take.
+>
+> ✓ `TUnplatedPad` **0**, `TMaxMinPadRndHoleSize` **2**.
+
 > **Then they have to reach the build sheet.** Eight wire links, drilled 0.8 mm
 > and soldered both faces, are eight assembly steps that nothing on site currently
 > describes — [`build-sheet-proto.md`](build-sheet-proto.md) and its Thai mirror
