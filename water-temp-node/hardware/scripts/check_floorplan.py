@@ -222,6 +222,28 @@ def _seg_point(px, py, x1, y1, x2, y2):
     return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 
 
+def rotate(px, py, deg):
+    """Rotate a footprint-local point by any angle.
+
+    The first version only understood 90 degrees (`if rot % 180 == 90`), which
+    silently treats 180 as 0.  That is harmless for a symmetric land and wrong
+    for an asymmetric one: TO220-VERT-STAG's body sits ABOVE its pads, so at
+    180 degrees it hangs BELOW them and the bounding box moves 9.6 mm.  Parts
+    on the board are at 0, 90, 180 and 270.
+    """
+    a = math.radians(deg)
+    ca, sa = math.cos(a), math.sin(a)
+    return (px * ca - py * sa, px * sa + py * ca)
+
+
+def rotated_box(extent, cx, cy, deg):
+    x1, y1, x2, y2 = extent
+    pts = [rotate(px, py, deg)
+           for px, py in ((x1, y1), (x2, y1), (x2, y2), (x1, y2))]
+    return (cx + min(p[0] for p in pts), cy + min(p[1] for p in pts),
+            cx + max(p[0] for p in pts), cy + max(p[1] for p in pts))
+
+
 def placement():
     """Return [(designator, x, y, rotation)] from PlacePartsPT.pas."""
     src = open(os.path.join(HERE, 'PlacePartsPT.pas'), encoding='utf-8').read()
@@ -265,12 +287,7 @@ def main():
         print('no footprint extent for:', unknown)
         problems += len(unknown)
 
-    boxes = {}
-    for d, x, y, rot in parts:
-        x1, y1, x2, y2 = fp[dmap[d]]
-        if rot % 180 == 90:
-            x1, y1, x2, y2 = -y2, x1, -y1, x2
-        boxes[d] = (x + x1, y + y1, x + x2, y + y2)
+    boxes = {d: rotated_box(fp[dmap[d]], x, y, rot) for d, x, y, rot in parts}
 
     print('components: %d   footprints derived: %d' % (len(parts), len(fp)))
 
@@ -348,8 +365,7 @@ def main():
                 if not pad[0].isdigit():
                     continue
                 n, px, py, w, h, _hole, _rect = pad
-                if rot % 180 == 90:
-                    px, py = -py, px
+                px, py = rotate(px, py, rot)
                 ax, ay = x + px, y + py
                 rad = min(w, h) / 2
                 for e in edges:

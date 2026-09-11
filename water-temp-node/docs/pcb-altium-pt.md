@@ -442,6 +442,79 @@ numbers are the ones its datasheet uses.
 
 ---
 
+### Bug 3 — Q2 and Q3 are wired through their gates
+
+**Found 2026-09-11, starting to route the 24 V corner. Not yet fixed. Nothing in
+phase A should be routed until it is.**
+
+Same root cause as Bug 2, on two more parts. Both TO-220s carry a **generic
+Miscellaneous Devices symbol** — `MOSFET-P` for Q2, `MOSFET-N` for Q3 — and both
+number their pins **D=1, G=2, S=3**. `TO220-VERT-STAG` numbers its pads the way
+the part does, and `MakeFootprintsPT.pas` says so in the footprint's own
+description: **`TAB = PIN 2 = DRAIN, LIVE`**. IRF9540N and IRF740 are both
+**1 = Gate, 2 = Drain (tab), 3 = Source**.
+
+So gate and drain are exchanged on copper. From the 2026-09-09 ECO, which is what
+the board was built from:
+
+| net | symbol pin | lands on pad | which is really… |
+|---|---|---|---|
+| `24V_RAW` | Q2 D = 1 | pad 1 | **the gate** |
+| `NetD10_1` (R38 + D10) | Q2 G = 2 | pad 2 | **the drain, and the tab** |
+| `24V_PROT` | Q2 S = 3 | pad 3 | the source — the only one right |
+
+**What the board would do.** `24V_RAW` drives Q2's **gate** at the full bank, 18–32 V,
+against a ±20 V V_GS maximum — the precise failure `R38` and `D10` exist to
+prevent, arriving through the pin those two are supposed to protect. There is no
+channel path from input to output at all: the only route to `24V_PROT` is the body
+diode from the gate-clamp node through a 470 kΩ resistor, so **the board never
+powers up**, and `Q2` dies the first time 24 V is connected. Q3 is the same shape:
+its gate sits on `24V_PROT`, which `D9` clamps at up to **53.3 V**, against the
+IRF740's ±20 V.
+
+**And both tabs move.** §6 warns that *the tab of a TO-220 is the drain — Q2's tab
+sits at `24V_PROT` and Q3's tab sits at `24V_PRE`, neither may touch the
+enclosure*, and that **Q3's heatsink is live at `24V_PRE`**. With gate and drain
+exchanged, both tabs sit on their **gate** nodes instead. Every isolation
+statement written about them is wrong until this is fixed.
+
+**Why the netlist audit passed it.** §2's check reads *Q2 drain on `24V_RAW` and
+source on `24V_PROT`* — and that is true of the **symbol**. `D` and `S` are pin
+*names*; the audit never compared them to the pad *numbers* the footprint uses.
+Exactly Bug 2's blind spot, one sheet over.
+
+**The sweep that found it, run over all three sheets**, comparing each symbol's
+pin names against its footprint's documented pad meaning:
+
+| part | symbol | footprint convention | |
+|---|---|---|---|
+| **Q2** | `MOSFET-P` D=1 G=2 S=3 | TO-220 1=G 2=D(tab) 3=S | **mismatch** |
+| **Q3** | `MOSFET-N` D=1 G=2 S=3 | TO-220 1=G 2=D(tab) 3=S | **mismatch** |
+| Q1 | `AO3401A` G=1 S=2 D=3 | SOT-23 per AOS drawing | ok — fixed as Bug 2 |
+| Q4 | `NPN` C=1 B=2 E=3 | `BC547: 1=C 2=B 3=E` | ok |
+| D9 | `Diode` A=1 K=2 | `Pad 2 = CATHODE` | ok |
+| D10–D12 | `D Zener` A=1 K=2 | `Pad 2 = CATHODE (band)` | ok |
+| U7 | `MOD-DFR0570` | pads named to match | ok |
+| U3 | `TCA9548APWR` | pads named by chip pin | ok |
+
+**The fix, and do not take the shortcut.** Renumbering `TO220-VERT-STAG` would fix
+this board and break the footprint for every TO-220 that follows — the same
+argument as Bug 2. Give Q2 and Q3 symbols that carry **their own** pin numbers,
+in `STM32WL_PT.SchLib`, which already holds `MOD-DFR0570`:
+
+☐ Draw **`IRF9540N`** (P-channel) and **`IRF740`** (N-channel) with **G=1, D=2,
+S=3**, named after the parts so neither can be mistaken for the stock
+`MOSFET-P`/`MOSFET-N`.
+☐ Point Q2 and Q3 at them, keeping `TO220-VERT-STAG` as the footprint with the
+**PCB Library** group set to **`Any`**.
+☐ Re-import, and check the ECO: `24V_RAW` on **Q2-2**, `NetD10_1` on **Q2-1**,
+`24V_PROT` on **Q2-3**.
+☐ **Confirm the pinout against the datasheets of the parts actually bought.**
+TO-220 pin order is per-part, not per-package; 1=G 2=D 3=S is right for the
+IRF series and is not a universal rule.
+
+---
+
 ## Where the board stands — 2026-09-10 22:10, verified
 
 Read back out of `STM32WL_PT.PcbDoc` itself, not from the dialogs that reported
