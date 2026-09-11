@@ -666,9 +666,73 @@ every footprint pad on this board is deliberately `Plated = True`
 (`MakeFootprintsPT.pas`: *a lie about this board, told on purpose*) because Altium
 needs it for connectivity.
 
-> Set all ten to **2.0 mm pad / 0.8 mm hole, plated** — Stage 1's via spec, and a
-> 0.6 mm ring. That also clears the ten `TUnplatedPad` and returns
+> Set all of them to **2.0 mm pad / 0.8 mm hole, plated** — Stage 1's via spec,
+> and a 0.6 mm ring. That also clears every `TUnplatedPad` and returns
 > `TMaxMinPadRndHoleSize` to F1's documented two.
+
+**Eight of them, as of 2026-09-12 00:42** (two VSENS ones were removed at 00:42,
+taking `DisconnectedSubnets` to 5):
+
+| | net | | net |
+|---|---|---|---|
+| (19.81, 48.13) | `V3V3_MCU` | (69.98, 64.52) | `NetD12_1` |
+| (43.69, 72.26) | `GND` | (73.03, 30.48) | `DQ_P4` |
+| (49.53, 78.49) | `GND` | (77.98, 54.99) | `NetD12_1` |
+| (59.56, 34.54) | `DQ_P4` | (96.90, 64.14) | `V3V3_MCU` |
+
+**All eight have room to grow**, checked against every track and pad of a
+different net: the tightest is 1.19 mm to an `I2C_SDA` track, against a 0.5 mm
+rule. Nothing needs moving first.
+
+**Step by step:**
+
+> **1.** Press **`Q`** so the editor is in mm.
+>
+> **2. Select them by hole size**, which is unambiguous here: the next largest
+> hole on the board is F1's 1.5 mm, so nothing else can be caught. `View › Panels
+> › PCB Filter` and run
+>
+> ```
+> IsPad And (HoleSize > 2mm)
+> ```
+>
+> — or click one, `Find Similar Objects`, **Hole Size = Same**, **Layer = Any**,
+> everything else `Any`.
+>
+> **3. Confirm the Inspector title says 8 object(s).** Do not skip this: the
+> scale-bar step earlier used a width-based selector that quietly caught 20
+> objects instead of 8, and nothing announced it.
+>
+> **4. In the PCB Inspector set all four fields**, while they are still selected:
+>
+> | field | to |
+> |---|---|
+> | X-Size | `2mm` |
+> | Y-Size | `2mm` |
+> | Hole Size | `0.8mm` |
+> | **Plated** | **ticked** |
+>
+> Change the hole **last**, or at least do not deselect first — once it is 0.8 mm
+> the `HoleSize > 2mm` query no longer finds them.
+>
+> **`Plated` is the deliberate lie.** There is no plating on this board and every
+> hole is a wire soldered on both faces — but Altium uses the flag for
+> connectivity, and `False` makes the pours and nets refuse to connect through
+> the pad. `MakeFootprintsPT.pas` sets it `True` on every footprint pad for
+> exactly this reason and says so; these eight were created outside that and
+> missed it.
+>
+> **5.** Clear the filter — **`Shift+C`**, or the **Clear** button at the bottom
+> right — then re-run the DRC.
+>
+> ✓ **Check:** `TUnplatedPad` **gone**, `TMaxMinPadRndHoleSize` back to **2**
+> (F1's reamed pair), and **no new `Clearance`**.
+
+> **Then they have to reach the build sheet.** Eight wire links, drilled 0.8 mm
+> and soldered both faces, are eight assembly steps that nothing on site currently
+> describes — [`build-sheet-proto.md`](build-sheet-proto.md) and its Thai mirror
+> are the only things at the bench, and a missed wire link is eight silent open
+> circuits. Add them once the positions are final.
 
 **2. U3's keep-out is gone and six tracks run under it.** Only 8 keep-out tracks
 remain — Q3's four and U7's four. `NetJ9_2` ×2 and `NetJ9_3` ×2 on the top layer
