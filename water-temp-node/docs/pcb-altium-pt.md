@@ -44,7 +44,7 @@ picked up a new bug**, below.
 | §5 the module pre-fit audit | **next** — bench work, and C1 depends on it |
 | **Q1's symbol — Bug 2** | **closed** 2026-09-10 14:56 — pins on `AO3401A`'s numbering, land back to `SOT23-3-M`, verified out of the saved board |
 | §6 import to the PCB | **done** — 69 of 69, board artwork already placed |
-| Layout, `pcb-home-etch.md` Stage 1 | **placed and DRC-clean** 2026-09-10 22:10. Routing next |
+| Layout, `pcb-home-etch.md` Stage 1 | **GATE 1 met** 2026-09-12 — routed, poured, stitched, DRC clean |
 | DRC on the placed board | **clean** — only unrouted nets and F1's documented reamed holes remain |
 | Symbol pin numbering, all parts | **swept clean** 2026-09-11 — Bugs 2 and 3 were the only three occurrences |
 
@@ -868,6 +868,43 @@ they can be dropped as they are and nudged later:
 > plating — copy one of those and change only the net.
 
 **4. Six connections are still unrouted.** — **three** as of 2026-09-12 01:13.
+
+---
+
+## GATE 1 met — 2026-09-12 02:27, verified out of the saved board
+
+**`DisconnectedSubnets` is zero.** The DRC reports one category and two records:
+`MaxMinPadRndHoleSize` ×2, which is F1's reamed 1.5 mm pair and is documented in
+`MakeFootprintsPT.pas`. Nothing else.
+
+| | |
+|---|---|
+| Components / locked | 69 / **17** — the intended 16 plus **F1**, locked after its pads were restored |
+| Keep-outs | 12 tracks, three rectangles, no pads trapped |
+| GND pour | **both layers**, net GND, dead copper removed |
+| `PolygonConnect_Direct` | priority 1, **Direct**, `InNet('GND') And (InComponent('D9') Or InComponent('C11') Or InComponent('J14'))` |
+| `PolygonConnect` | priority 2, Relief, **0.6 mm spokes**, 4 entries |
+| Wire links | **15 free pads** at 2.0 mm / 0.8 mm / plated — well under rule 5's 30 |
+| — of those on GND | **13 stitching links**, four of them in the 24 V corner |
+| 24 V surge path | **3.00 mm throughout** — `24V_IN`, `24V_RAW` and `24V_PROT` |
+
+**The three `24V_PROT` segments at 1.5 mm are not on the surge path.** They run
+x 62.6–79.6 at y 48, which is the branch feeding **Q3's drain**. The surge current
+goes J14 → F1 → Q2 → D9 → GND and never enters that branch; Q3 draws at most the
+130 mA its own limiter allows. Correct as built.
+
+**Thirteen stitching links against rule 4's 8–12** — one over, deliberately. More
+stitching on a ground pour is the safe direction, and rule 5's budget is the one
+that actually binds at 30.
+
+### The follow-up this leaves
+
+**Fifteen wire links exist on the board and none of them are on the build sheet.**
+Each is a 0.8 mm hole with a wire soldered on both faces, and
+[`build-sheet-proto.md`](build-sheet-proto.md) plus its Thai mirror are the only
+documents at the bench. **A missed link is a silent open circuit** — and thirteen
+of them are ground, where an open reads as *works, mostly*. They need a numbered
+section with coordinates before Stage 2.
 
 ---
 
