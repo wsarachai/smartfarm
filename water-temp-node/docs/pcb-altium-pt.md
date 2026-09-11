@@ -813,11 +813,36 @@ but **this board has no soldermask**, and the module's underside sits over them.
 Either re-route the six outside the pad columns, or record the decision that the
 header's standoff is clearance enough.
 
-**3. There is no GND pour** — `Polygons6` is empty. GND was hand-routed instead,
-as **104 tracks**. It works, and it cost only 10 vias against a budget of 30. But
-`pcb-home-etch.md` rule 4 still says to pour both layers, so the process document
-and the board now disagree; whichever way this goes, one of them has to change
-before Stage 2, or the next person pours copper over a routed ground.
+**3. There is no GND pour** — `Polygons6` is empty. GND was hand-routed instead.
+**Decided 2026-09-12: pour it**, over the tracks, as `pcb-home-etch.md` rule 4
+says. The routed ground stays and the pour merges with it.
+
+#### Two things to set before pouring, both of which bite on this board
+
+**The `PolygonConnect` relief spokes are 10 mil — 0.254 mm — and the board's
+minimum feature is 0.5 mm.** That is half the narrowest thing toner transfer
+resolves here, so every thermal spoke on every ground pad would come out thin,
+ragged or missing. Raise the relief conductor width to **0.6 mm**, above the
+0.5 mm `Width` minimum with margin for the etch, and set the air gap to
+**0.5 mm** to match `Clearance`.
+
+**And the surge-return pads must be Direct, not Relief.** §5 asks for D9's anode
+and C11's negative on wide copper straight back to J14's ground pin; four 0.6 mm
+spokes is not that, and it is exactly the inductance the clamp cannot afford.
+Add a second `PolygonConnect` rule at **priority 1**, connect style **Direct**,
+scoped
+
+```
+InNet('GND') And (InComponent('D9') Or InComponent('C11') Or InComponent('J14'))
+```
+
+and leave the relief rule as the lower-priority catch-all. Without this the one
+node the spec calls out as *the place where "ground is just ground" is wrong*
+reaches ground through twelve hair-thin spokes.
+
+**Then the stitching.** Rule 4 wants **8–12 vias** tying the two pours, densest in
+the 24 V corner. Only two of the eight existing hand-made vias are on GND, so
+most of these are new: **2.0 mm pad, 0.8 mm hole, plated**, same as the eight.
 
 **4. Six connections are still unrouted.** — **three** as of 2026-09-12 01:13.
 
