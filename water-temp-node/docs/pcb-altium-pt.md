@@ -504,7 +504,57 @@ in `STM32WL_PT.SchLib`, which already holds `MOD-DFR0570`:
 
 ☐ Draw **`IRF9540N`** (P-channel) and **`IRF740`** (N-channel) with **G=1, D=2,
 S=3**, named after the parts so neither can be mistaken for the stock
-`MOSFET-P`/`MOSFET-N`.
+`MOSFET-P`/`MOSFET-N`. Step by step:
+
+> **1.** Open **`STM32WL_PT.SchLib`** — the project's own library, the one that
+> already holds `MOD-DFR0570`. Not `..\Lib\`, which is shared with `STM32WL_FE`.
+>
+> **2.** `Tools › New Component`, name it **`IRF9540N`**. Do this in the **SCH
+> Library** panel so you can see the component list.
+>
+> **3. Draw the body.** `Place › Rectangle`, a few grid squares. A plain box with
+> the pin names showing is enough and is what the vendor `AO3401A` symbol is — the
+> picture is not what makes a symbol correct, the numbering is.
+>
+> **4. Place three pins** (`Place › Pin`). Press **Tab while the pin is on the
+> cursor** to set its properties before dropping it:
+>
+> | Designator | Name | Electrical Type | Where |
+> |---|---|---|---|
+> | **1** | `G` | Passive | **left** edge |
+> | **2** | `D` | Passive | **right** edge, upper |
+> | **3** | `S` | Passive | **right** edge, lower |
+>
+> The **hot end** — the end with no line into the body — must point **outward**.
+> Press **Space** while placing to rotate.
+>
+> **Lay them out in that arrangement on purpose.** It is the same geometry as the
+> stock `MOSFET-P`: gate on the left, drain upper-right, source lower-right. Q2's
+> wires on the sheet already run to those three places, so keeping the positions
+> means the wires stay connected when you swap the symbol — unlike Bug 2, where
+> restoring a box-shaped vendor symbol broke all three and they had to be redrawn.
+>
+> **5. Set the component's own properties** (`Tools › Component Properties`):
+> **Default Designator** `Q?`, **Comment** `IRF9540N`, and a Description worth
+> reading later, e.g. *P-channel TO-220, 1=G 2=D(tab) 3=S per datasheet*.
+>
+> **6. Attach the footprint.** In the same dialog, `Add › Footprint` → **Browse**
+> → `STM32WL_Pt.PcbLib` → **`TO220-VERT-STAG`** → and in the **PCB Library** group
+> choose **`Any`**. That last field is §6's rule and it is the one that stops a
+> land silently swapping itself later.
+>
+> **7. Repeat for `IRF740`** — identical pin numbering, N-channel, Comment
+> `IRF740`. `Tools › Copy Component` onto the first one and edit the copy is
+> quicker than drawing it twice.
+>
+> **8. Save the library**, then **`Tools › Update Schematics`** from inside it, or
+> repoint each part by hand: on `Buck-regulator.SchDoc`, double-click Q2 →
+> **Design Item ID** → `...` → pick `IRF9540N` from `STM32WL_PT.SchLib`. Same for
+> Q3 → `IRF740`.
+>
+> **9.** Check the three wires at each part are still attached — a wire that only
+> *looks* connected is the failure here. `Project › Compile` must give **zero
+> errors and zero warnings**; a floating pin shows up there.
 ☐ Point Q2 and Q3 at them, keeping `TO220-VERT-STAG` as the footprint with the
 **PCB Library** group set to **`Any`**.
 ☐ Re-import, and check the ECO: `24V_RAW` on **Q2-2**, `NetD10_1` on **Q2-1**,
