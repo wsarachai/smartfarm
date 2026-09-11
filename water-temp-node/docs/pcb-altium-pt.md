@@ -842,7 +842,30 @@ reaches ground through twelve hair-thin spokes.
 
 **Then the stitching.** Rule 4 wants **8–12 vias** tying the two pours, densest in
 the 24 V corner. Only two of the eight existing hand-made vias are on GND, so
-most of these are new: **2.0 mm pad, 0.8 mm hole, plated**, same as the eight.
+most of these are new: **2.0 mm pad, 0.8 mm hole, plated, net GND**, same as the
+eight — and on this board that is a **free pad**, not a via object, because a via
+here is a wire soldered on both faces.
+
+**Twelve positions, computed against the routed board** — every one clears the
+keep-outs and sits **≥1.5 mm** from any pad or track of a net other than GND, so
+they can be dropped as they are and nudged later:
+
+| # | x | y | clear | | # | x | y | clear |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 140.0 | 26.5 | 10.1 | **24 V corner** | 7 | 6.0 | 6.0 | 7.4 |
+| 2 | 100.0 | 21.0 | 6.0 | **24 V corner** | 8 | 106.0 | 114.0 | 13.3 |
+| 3 | 137.0 | 6.5 | 10.0 | **24 V corner** | 9 | 56.0 | 81.0 | 8.1 |
+| 4 | 118.5 | 36.0 | 6.2 | **24 V corner** | 10 | 130.0 | 114.0 | 13.3 |
+| 5 | 6.0 | 114.0 | 12.8 | | 11 | 56.5 | 10.0 | 4.0 |
+| 6 | 154.0 | 114.0 | 14.7 | | 12 | 43.5 | 52.0 | 6.9 |
+
+> **The one that goes wrong is the net.** A free pad placed with **No Net** inside
+> a GND pour is an *obstacle*: the pour clears around it and it ties nothing,
+> while looking exactly like a stitching via. **Set `Net` to `GND` on every one.**
+>
+> Fastest way to get all six fields right twelve times: place **one** correctly,
+> then copy-paste it. The existing eight already carry the right size, hole and
+> plating — copy one of those and change only the net.
 
 **4. Six connections are still unrouted.** — **three** as of 2026-09-12 01:13.
 
