@@ -689,15 +689,27 @@ rule. Nothing needs moving first.
 > **1.** Press **`Q`** so the editor is in mm.
 >
 > **2. Select them by hole size**, which is unambiguous here: the next largest
-> hole on the board is F1's 1.5 mm, so nothing else can be caught. `View › Panels
-> › PCB Filter` and run
+> hole on the board is F1's 1.5 mm, so nothing else can be caught.
+>
+> **Use Find Similar Objects — no query syntax to get wrong.** Click one of the
+> eight (there is one on GND at **(43.69, 72.26)**), right-click › **Find Similar
+> Objects**, then set **Object Kind = `Same`** and **Hole Size = `Same`**, and
+> leave **everything else `Any`** — in particular **Net** and **Layer**, which
+> default to `Same` and would cut the selection down to one net. Scope **Current
+> Document**, tick **Select Matching** and **Run Inspector**.
+>
+> **If you prefer the PCB Filter panel, mind the units.** `HoleSize > 2mm` is a
+> syntax error in this build — the parser reads the `2`, meets `mm` and reports
+> *expected )*. **Query dimensions are in mils**, whatever the editor is
+> displaying, so 2 mm is written **79**:
 >
 > ```
-> IsPad And (HoleSize > 2mm)
+> IsPad And (HoleSize > 79)
 > ```
 >
-> — or click one, `Find Similar Objects`, **Hole Size = Same**, **Layer = Any**,
-> everything else `Any`.
+> If that selects **0** objects rather than 8, this build is reading the number as
+> mm instead — use `IsPad And (HoleSize > 2)`. Either way the count tells you
+> which happened, which is why step 3 exists.
 >
 > **3. Confirm the Inspector title says 8 object(s).** Do not skip this: the
 > scale-bar step earlier used a width-based selector that quietly caught 20
